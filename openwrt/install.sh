@@ -209,6 +209,36 @@ installed() {
 	else opkg status "$1" 2>/dev/null | grep -q '^Status:.* installed'; fi
 }
 
+# Some firmware images keep a stale record in the opkg status database after a
+# package was removed (Status: install prefer,user not-installed). opkg then
+# prefers that missing version and never falls back to the version the feed
+# provides, so the dependency resolution fails with "not available from any
+# configured src" and the whole installation aborts. Drop only the shadowing
+# "not-installed" record of the named package; installed packages are never
+# touched and the original file is kept until the replacement is complete.
+purge_stale_opkg_record() {
+	name=$1
+	status=/usr/lib/opkg/status
+	[ -f "$status" ] && [ -w "$status" ] || return 0
+	awk -v name="$name" '
+	function flush(   i) {
+		if (!drop) { for (i = 1; i <= n; i++) print buf[i] }
+		n = 0; drop = 0; pkg = 0
+	}
+	$0 == "" { flush(); print ""; next }
+	{
+		buf[++n] = $0
+		if ($1 == "Package:" && $2 == name) pkg = 1
+		if (pkg && $1 == "Status:" && $0 ~ /not-installed/) drop = 1
+	}
+	END { flush() }
+	' "$status" > "$status.tmp" 2>/dev/null || return 0
+	[ -s "$status.tmp" ] || { rm -f "$status.tmp"; return 0; }
+	if cmp -s "$status.tmp" "$status"; then rm -f "$status.tmp"; return 0; fi
+	cat "$status.tmp" > "$status"
+	rm -f "$status.tmp"
+}
+
 uninstall_daed() {
 	# Only package names belonging to NaiLink are eligible; never recurse through
 	# reverse dependencies or force removal of another application's packages.
@@ -373,7 +403,7 @@ elif installed daed-router; then
 	[ -r /usr/share/daed-router/version ] || fail 'Managed runtime marker is missing; repair the existing installation first.'
 	managed=1
 elif [ -e /usr/bin/daed ] || [ -e /etc/config/daed ] || [ -e /etc/init.d/daed ] || [ -d /etc/daed ]; then
-	fail 'An existing unmanaged NaiLink installation was found. Back it up and migrate explicitly; it will not be overwritten.'
+	fail 'An existing unmanaged NaiLink installation was found. Run again with --reinstall to back it up and migrate; it will not be overwritten.'
 fi
 if [ "$action" != reinstall ] && { installed daed || installed luci-app-daed; }; then fail 'Another NaiLink package is installed; use --reinstall for a backed-up fresh installation.'; fi
 printf 'NaiLink: %s / %s / %s, release %s\n' "$machine" "$format" "$selected_arch" "$version"
@@ -418,14 +448,20 @@ if [ "$format" = apk ]; then
 	# Local release packages are unsigned; this flag is scoped to this transaction.
 	apk add --allow-untrusted "$stage/$runtime_file" "$stage/$plugin_file"
 else
-	opkg install "$stage/$runtime_file" "$stage/$plugin_file"
+	# Clear shadowing "not-installed" records before dependencies are resolved.
+	for dependency in v2ray-geoip v2ray-geosite; do
+		purge_stale_opkg_record "$dependency"
+	done
+	opkg install "$stage/$runtime_file" "$stage/$plugin_file" || fail 'Package installation failed. See the opkg error above; a stale "not-installed" record in /usr/lib/opkg/status can shadow the version the feed provides.'
 fi
 if ! installed daed-router || ! installed luci-app-daed-router; then fail 'Native packages were not both installed.'; fi
 if [ ! -x /usr/bin/daed ] || [ ! -x /usr/libexec/daed/check ] || \
 	[ ! -x /usr/libexec/daed/luci-proxy ] || [ ! -x /www/cgi-bin/daed-router ]; then fail 'Installed runtime or LuCI gateway is incomplete.'; fi
 for asset in geosite.dat geoip.dat; do
 	if [ ! -s "/etc/daed/$asset" ] && [ ! -s "/usr/local/share/daed/$asset" ] && [ ! -s "/usr/share/daed/$asset" ]; then
-		fail "Installed rule data is unavailable: $asset. Repair the firmware's v2ray-geosite/v2ray-geoip packages and daed-router search-path links."
+		# Missing rule data only disables geodata rules. Keep the installation
+		# usable instead of discarding an otherwise complete setup.
+		printf 'NaiLink: Warning: rule data is unavailable: %s. Geodata rules will not apply. Repair the firmware v2ray-geosite/v2ray-geoip packages and daed-router search-path links.\n' "$asset" >&2
 	fi
 done
 if [ "$managed" = 0 ]; then
