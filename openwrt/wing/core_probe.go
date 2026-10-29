@@ -3,6 +3,7 @@ package dae
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
 	"io"
 	"net"
@@ -15,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/daeuniverse/dae-wing/routercore"
@@ -631,15 +633,51 @@ func (p *routerProbeErrors) message(name, fallback string) string {
 }
 
 func routerCoreProbeFailure(err error) string {
-	var network net.Error
-	if errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &network) && network.Timeout()) {
-		return "timeout"
+	for {
+		var request *url.Error
+		if !errors.As(err, &request) || request.Err == nil {
+			break
+		}
+		err = request.Err
+	}
+	var dns *net.DNSError
+	if errors.As(err, &dns) {
+		return "dns_failed"
+	}
+	var authority x509.UnknownAuthorityError
+	var hostname x509.HostnameError
+	var certificate x509.CertificateInvalidError
+	if errors.As(err, &authority) || errors.As(err, &hostname) || errors.As(err, &certificate) {
+		return "tls_failed"
+	}
+	if errors.Is(err, syscall.ECONNREFUSED) {
+		return "connection_refused"
 	}
 	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, net.ErrClosed) {
 		return "connection_closed"
 	}
+	message := strings.ToLower(err.Error())
+	if code := routercore.ProbeProtocolFailure(message); code != "" {
+		return code
+	}
+	var network net.Error
+	if errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &network) && network.Timeout()) || strings.Contains(message, "timeout") {
+		return "timeout"
+	}
 	if errors.Is(err, context.Canceled) {
 		return "cancelled"
 	}
+	if strings.Contains(message, "certificate") || strings.Contains(message, "tls: ") {
+		return "tls_failed"
+	}
+	if strings.Contains(message, "authentication failed") || strings.Contains(message, "invalid password") || strings.Contains(message, "reality verification failed") {
+		return "authentication_failed"
+	}
+	if strings.Contains(message, "status code") {
+		return "check_target_failed"
+	}
 	return "unreachable"
 }
+
+// Shared by direct dae and native HTTP adapters; retain typed handshake errors.
+func RouterProbeFailure(err error) string { return routerCoreProbeFailure(err) }

@@ -142,3 +142,12 @@ func TestNativeProbeDoesNotInventReuseForClosingServer(t *testing.T) {
 		t.Fatal("invented reused latency", r)
 	}
 }
+
+func TestSharedHTTPProbeRejectsUntrustedCertificate(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) }))
+	defer srv.Close()
+	r := ProbeRouterHTTP(context.Background(), routerProbeDialFunc((&net.Dialer{}).DialContext), daeConfig.Global{TcpCheckUrl: []string{srv.URL + "/generate_204"}})
+	if r.Alive || r.Message != "tls_failed" || r.SteadyMs != nil {
+		t.Fatal("untrusted certificate classification or acceptance", r)
+	}
+}
