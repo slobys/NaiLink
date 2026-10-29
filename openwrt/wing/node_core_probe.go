@@ -43,12 +43,16 @@ func testSingBoxNodesProgress(ctx context.Context, nodes []db.Node, progress fun
 	}
 	parsed.Global.TcpCheckUrl = option.TcpCheckOptionRaw.Raw
 	parsed.Global.TcpCheckHttpMethod = option.TcpCheckOptionRaw.Method
+	parsed.Global.NailinkNodeDNS, err = db.NodeDNSForNodes(db.DB(ctx), nodes)
+	if err != nil {
+		return err
+	}
 	links := make([]string, len(nodes))
 	for i, n := range nodes {
 		links[i] = n.Link
 	}
 	_, err = dae.ProbeRouterCoreNodesProgress(ctx, links, parsed.Global, func(i int, result dae.RouterCoreProbe) {
-		r := &LatencyResolver{NodeID: nodes[i].ID, AliveVal: result.Alive, TestedAtV: result.Tested, NodeFingerprintV: latencyNodeFingerprint(&nodes[i])}
+		r := &LatencyResolver{NodeID: nodes[i].ID, AliveVal: result.Alive, TestedAtV: result.Tested, NodeFingerprintV: latencyNodeFingerprint(&nodes[i]), SteadyMsV: result.SteadyMs}
 		if result.Alive {
 			ms := result.Latency
 			r.LatencyMsV = &ms

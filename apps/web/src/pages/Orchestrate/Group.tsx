@@ -25,6 +25,7 @@ import {
 import { DroppableGroupCard } from '~/components/DroppableGroupCard'
 import { GroupFormModal } from '~/components/GroupFormModal'
 import { GroupAddNodesModal, GroupAddSubscriptionsModal } from '~/components/GroupResourcePickerModal'
+import { GroupRuntimeSummary } from '~/components/GroupRuntimeSummary'
 import { ResourceEmpty } from '~/components/ResourceEmpty'
 import { Section } from '~/components/Section'
 import { SortableGroupContent } from '~/components/SortableGroupContent'
@@ -277,6 +278,7 @@ export function GroupResource({
             </span>
             <span>{t('groupPicker.nodesCount', { count: groupNodes.length })}</span>
             <span>{t('groupPicker.subscriptionGroupsCount', { count: groupSubscriptions.length })}</span>
+            <GroupRuntimeSummary name={name} />
             {!!groupNodes.length && !expandedGroupIds.has(groupId) && (
               <span
                 className="max-w-full basis-full whitespace-normal [overflow-wrap:anywhere]"

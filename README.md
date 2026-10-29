@@ -15,21 +15,13 @@
 
 管理节点、订阅和群组，测试节点延迟，查看实时流量，配置 DNS 与路由。支持电脑、手机和多种主题，沿用路由器 LuCI 登录，无需另设账户。
 
-基于 [daed](https://github.com/daeuniverse/daed) 二次开发，独立维护。当前版本为 **[0.6.56 测试版](https://github.com/slobys/NaiLink/releases/tag/openwrt-v0.6.56)**，提供 IPK / APK v3 安装包。
+基于 [daed](https://github.com/daeuniverse/daed) 二次开发，独立维护。当前版本为 **[0.6.57 测试版](https://github.com/slobys/NaiLink/releases/tag/openwrt-v0.6.57)**，提供 IPK / APK v3 安装包。
 
 新增 **mihomo 内核切换**，与 dae、sing-box 共用节点、订阅和配置。按需下载，切换前检查兼容性和实际连接，失败自动尝试恢复原内核。支持 x86_64 / ARM64。[支持范围与限制 →](docs/core-switching.md)
 
-0.6.41 放宽大组件传输期限，避免慢速线路下载正常却被过早中断；校验及失败保留原程序不变。
+**0.6.57 连接与生效核验**：保留 Clash 订阅中仅针对节点服务器的 HTTPS DNS 策略；已有订阅需更新并应用后生效。群组可查看已生效节点。三个内核的手动测试统一口径，显示首连耗时，并在确认同一连接后提供复用耗时。
 
-**0.6.56 规则批次检查**：打开规则窗口即可查看是否有新批次、上游批次和检查时间；仅检查版本，点击“更新”才更换规则，失败不影响现有规则。
-
-**0.6.55 规则库窗口**：精简标题与批次信息，GeoIP、GeoSite 分块说明，来源和内核细节按需展开；手机操作栏固定，进度和错误始终可见。
-
-**0.6.54 规则更新入口**：顶部按“版本 → 更新规则 → 内核”排列。点击“更新规则”先查看批次和用途，再点窗口里的“更新”；高级设置恢复配置、DNS、路由三列。
-
-**0.6.52 四列布局**：高级设置桌面横排配置、DNS、路由和规则库四张卡片，平板两列、手机单列；详情按卡片宽度排版，保留原有更新和分流功能。
-
-**0.6.51 高级设置布局**：规则库改为紧凑工具条，用途与来源按需展开；精简方案卡片，改善手机操作。GeoIP / GeoSite 已用于路由和 DNS 分流，三个内核共用规则来源，更新保留现有分流策略。[规则库用途 →](https://slobys.github.io/NaiLink/maintenance.html#geodata)
+顶部“更新规则”可检查和更新 GeoIP / GeoSite；高级设置保留配置、DNS、路由三列。[规则库用途 →](https://slobys.github.io/NaiLink/maintenance.html#geodata)
 
 ## 安装前
 
@@ -46,7 +38,7 @@
 以 **root** 登录路由器 SSH，执行下面一行，打开中文菜单：
 
 ```sh
-uclient-fetch -O /tmp/nailink-install.sh https://github.com/slobys/NaiLink/releases/download/openwrt-v0.6.56/install.sh && sh /tmp/nailink-install.sh --menu --release openwrt-v0.6.56
+uclient-fetch -O /tmp/nailink-install.sh https://github.com/slobys/NaiLink/releases/download/openwrt-v0.6.57/install.sh && sh /tmp/nailink-install.sh --menu --release openwrt-v0.6.57
 ```
 
 选择 **1 安装 / 更新**。安装后运行 `nailink` 可再次打开菜单，也可选择 **2 卸载**、**3 检查环境** 或 **0 退出**。
@@ -61,7 +53,7 @@ uclient-fetch -O /tmp/nailink-install.sh https://github.com/slobys/NaiLink/relea
 
 保留 0.6.30 的代理就绪检查与有效 DNS 分流关联恢复，可用 `nailink --check-network` 查看诊断。[恢复机制与限制 →](https://slobys.github.io/NaiLink/maintenance.html#restart-recovery)
 
-旧版菜单遇到 Raw 下载失败时，可运行 `nailink --install --release openwrt-v0.6.56`。如果 GitHub 也无法解析，先检查路由器自身 DNS。[下载故障排查 →](https://slobys.github.io/NaiLink/troubleshooting.html#download)
+旧版菜单遇到 Raw 下载失败时，可运行 `nailink --install --release openwrt-v0.6.57`。如果 GitHub 也无法解析，先检查路由器自身 DNS。[下载故障排查 →](https://slobys.github.io/NaiLink/troubleshooting.html#download)
 
 **0.6.42 修复 Clash 订阅**：支持内嵌 `proxies` 的 YAML / JSON、SIP008 和普通 / Base64 节点列表；更新失败保留原节点，内容未变时保留节点 ID。仅提取节点，不导入订阅中的 DNS、路由或监听设置。[格式与限制 →](https://slobys.github.io/NaiLink/nodes.html#clash)
 
@@ -93,7 +85,7 @@ uclient-fetch -O /tmp/nailink-install.sh https://github.com/slobys/NaiLink/relea
 
 ## 源码与交流
 
-[完整源码包](https://github.com/slobys/NaiLink/releases/download/openwrt-v0.6.56/daed-openwrt-source.tar.gz) · [构建说明](openwrt/README.md#开发) · [验证记录](openwrt/VALIDATION.md) · [Logo](docs/site/assets/nailink-logo.png)
+[完整源码包](https://github.com/slobys/NaiLink/releases/download/openwrt-v0.6.57/daed-openwrt-source.tar.gz) · [构建说明](openwrt/README.md#开发) · [验证记录](openwrt/VALIDATION.md) · [Logo](docs/site/assets/nailink-logo.png)
 
 编译请使用完整源码包，或 `git clone --recurse-submodules https://github.com/slobys/NaiLink.git`。GitHub 的 Download ZIP 不包含后端子模块。
 

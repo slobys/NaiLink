@@ -20,7 +20,7 @@ describe('latency colors', () => {
   it.each([false, true])('queries the supported latency fields for router=%s', (router) => {
     const schema = buildSchema(`
       scalar Time
-      type NodeLatency { id: ID! latencyMs: Int alive: Boolean! testedAt: Time! message: String ${router ? 'source: String!' : ''} }
+      type NodeLatency { id: ID! latencyMs: Int alive: Boolean! testedAt: Time! message: String ${router ? 'source: String! steadyMs: Int' : ''} }
       type Query { nodeLatencies: [NodeLatency!]! }
       type Mutation { testNodeLatencies(ids: [ID!]): [NodeLatency!]! }
     `)
@@ -34,7 +34,7 @@ describe('latency colors', () => {
   it('distinguishes automatic and manual measurements without changing their numbers', () => {
     const translate = ((key: string) => key) as TFunction
     expect(formatLatencyDescription({ ...measured(180), source: 'manual' }, translate)).toBe(
-      'latency.manualDescription',
+      'latency.manualDescription · latency.coldMeasurement',
     )
     expect(formatLatencyDescription({ ...measured(30), source: 'automatic' }, translate)).toBe(
       'latency.automaticDescription',

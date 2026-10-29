@@ -286,7 +286,7 @@
     "unavailable": "Unavailable",
     "automaticShort": "Auto",
     "measurementDetails": "About test duration",
-    "measurementHint": "Manual tests include a fresh connection, not ICMP ping. Automatic health checks may reuse connections.",
+    "measurementHint": "Manual tests include initial proxy negotiation. A reused-connection value is shown only after confirming the second request uses the same connection. It never substitutes TCP entrance latency for a real request. Automatic tests are measured by the active core; different targets and methods are not directly comparable.",
     "manualDescription": "Manual HTTP test: includes a fresh connection and protocol handshake. Ordinary nodes allow up to 8 seconds; long-bootstrap protocols such as Tor retain their own limits. Queueing and core startup are excluded. Compare cores using the same target.",
     "automaticDescription": "Automatic health check: may reuse connections and is not directly comparable to a manual fresh-connection test.",
     "unknownDescription": "The server did not identify the measurement type. Manually test the same node and target before comparing cores.",
@@ -316,7 +316,10 @@
       "session": "Your session expired. Sign in again to continue testing.",
       "target": "The test target could not be resolved. Check DNS or the test URL, then continue.",
       "request": "The test request is invalid or the nodes changed. Refresh the node list and retry."
-    }
+    },
+    "coldMeasurement": "First connection {{ms}} ms",
+    "steadyMeasurement": "Reused connection {{ms}} ms",
+    "manualShort": "First"
   },
   "link": "Link",
   "logLevel": "Log Level",
@@ -582,7 +585,16 @@
     "timeRange": "Time range",
     "totalTrafficShort": "Session traffic",
     "statsUnavailable": "Updates unavailable",
-    "coreSwitching": "Switching cores; updates resume automatically"
+    "coreSwitching": "Switching cores; updates resume automatically",
+    "appliedOutlet": "View applied outlet",
+    "loadingOutlet": "Reading runtime configuration…",
+    "outletReadFailed": "Could not read runtime; retry",
+    "outletNotReady": "Proxy is not ready",
+    "groupNotApplied": "This group is absent from the active configuration",
+    "appliedCandidates": "Applied: {{count}} candidate nodes",
+    "refreshOutlet": "Refresh applied outlet",
+    "daeOutletHint": "dae selects an outlet per connection and network. These are the applied candidates.",
+    "nativeOutletUnavailable": "The core did not return its current choice; only applied candidates are shown."
   },
   "importResource": {
     "optionalTag": "Label (optional)",

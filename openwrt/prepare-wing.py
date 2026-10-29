@@ -346,7 +346,7 @@ func _fetchLinksContext(ctx context.Context, subscriptionLink string, transport 
     text = text.replace('http.NewRequest("GET", subscriptionLink, nil)', 'http.NewRequestWithContext(ctx, "GET", subscriptionLink, nil)')
     # Detect the document format before extracting links. Scanning arbitrary
     # YAML/HTML for :// can turn DNS/help URLs into fake proxy nodes.
-    if 'links, err = decodeSubscriptionPayload(b)' not in text:
+    if 'links, err = decodeSubscriptionPayload(b)' not in text and 'links, err = decodeSubscriptionPayloadContext(ctx, b)' not in text:
         begin, end = text.index('\t// Resolve node links.'), text.index('\n\tif len(names)', text.index('\t// Resolve node links.'))
         text = text[:begin] + '\tlinks, err = decodeSubscriptionPayload(b)\n\tif err != nil { return nil, err }\n' + text[end:]
     text = text.replace('\n\t"github.com/daeuniverse/dae/common/subscription"', '')
@@ -384,6 +384,10 @@ func _fetchLinksContext(ctx context.Context, subscriptionLink string, transport 
         cron = cron.replace('// Update scheduler\n', '// Update scheduler only after a successful commit.\n\tif err = tx.Commit().Error; err != nil { return nil, err }\n\tschedulerCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)\n\tdefer cancel()\n')
         cron = cron.replace('AddUpdateScheduler(ctx, id)', 'AddUpdateScheduler(schedulerCtx, id)')
     text = router_transactions(text[:begin]) + cron
+    text = text.replace('links, err = decodeSubscriptionPayload(b)', 'links, err = decodeSubscriptionPayloadContext(ctx, b)')
+    text = text.replace('links, err := fetchLinksContext(c.Statement.Context, argument.Link, &detectedName)', 'dnsContext, nodeDNS := captureNodeDNS(c.Statement.Context)\n\tlinks, err := fetchLinksContext(dnsContext, argument.Link, &detectedName)')
+    text = re.sub(r'\n[ \t]*NodeDNS:\s*nodeDNS.value,', '', text)
+    text = re.sub(r'(Info:\s*"", // not supported yet)', r'\1\n\t\tNodeDNS: nodeDNS.value,', text)
     source.write_text(text, encoding="utf-8", newline="\n")
     generated = {"mutation_utils.go": digest(text.encode()), "go.mod": digest(module_text.encode())}
     for name in ("subscription_transport.go", "subscription_transport_test.go", "subscription_name.go", "subscription_name_test.go", "subscription_update.go", "subscription_update_test.go", "subscription_parse.go", "subscription_parse_test.go"):
@@ -395,6 +399,10 @@ func _fetchLinksContext(ctx context.Context, subscriptionLink string, transport 
         generated[name] = digest(data)
     # Keep latency fixes in the release source, without changing submodule pins.
     patches = {
+        "graphql/service/config/global/schema.go": ("59e3eaee0ef6afd910b2d960c89f11b6d5fa7a4d5112de0f51cb08898cf7c5e1", lambda value: value.replace('structField := t.Field(i)', 'structField := t.Field(i)\n\t\tif structField.Name == "NailinkNodeDNS" {\n\t\t\tcontinue\n\t\t}')),
+        "dae/flat_desc.go": ("ba276d448f769d1c537274cbed6f159549048cff6ebf5e59c4ac89639357c39f", lambda value: value.replace('mapping := section.Tag.Get("mapstructure")', 'mapping := section.Tag.Get("mapstructure")\n\t\tif mapping == "nailink_node_dns" { continue }')),
+        "db/subscription.go": ("31a09ad8bab7dfe4d5c73d325ee3f05b09d24ecca7e67742f192cb2390f9f397", lambda value: value.replace('type Subscription struct {', 'type Subscription struct {\n\tNodeDNS string `gorm:"not null;default:\'\'"`')),
+        "dae-core/config/config.go": ("058dac3c41779973108d79acb33eb7fe57a3d3f060da5b415e9c9fcb5995007b", lambda value: value.replace('type Global struct {', 'type Global struct {\n\tNailinkNodeDNS string `mapstructure:"nailink_node_dns"`')),
         "webrender/webrender.go": ("24edc6844f7683ef8cfc6f3e9f8a4345cd9527c9725cbfe4b0f0898a455f5dc9", lambda value: value.replace('statigz.FileServer(webFS.', 'routerFileServer(webFS.', 1)),
         "graphql/service/config/mutation_utils.go": ("f57a5aa16fec110ff2906046aed26897d7ca22308200a45d85394602ab8113c3", router_transactions),
         "graphql/service/dns/mutation_utils.go": ("229f064ba7f4004f1bbdf2c0494f0cffc7cfd57c4c692c0e0f00b704351a1e89", router_transactions),
@@ -418,7 +426,7 @@ func _fetchLinksContext(ctx context.Context, subscriptionLink string, transport 
         "dae/runtime.go": ("582676a55373d44220dced8552f094482d7d35a423d13de98ae0865cbe687062", lambda value: (HERE / "wing/runtime.go").read_text(encoding="utf-8")),
         "graphql/service/node/latency_mutation_utils.go": ("b7e722f4c24dd9606fceaf310daf285b30b8d878413ca20702970ef3b4ca805d", lambda value: (HERE / "wing/node_latency.go").read_text(encoding="utf-8")),
         "graphql/service/node/latency_resolver.go": ("afdc8eb89632429bfa0ee7106af06ee2176993ca889adb125c816bcf9b57a64b", lambda value: (HERE / "wing/node_latency_resolver.go").read_text(encoding="utf-8")),
-        "graphql/service/node/schema.go": ("00484e6a38c9de8dd7cd1b2c4ab179b0ec70cba4dbae54276bbfa2913308d56f", lambda value: value.replace('message: String\n}', 'message: String\n\tsource: String!\n}')),
+        "graphql/service/node/schema.go": ("00484e6a38c9de8dd7cd1b2c4ab179b0ec70cba4dbae54276bbfa2913308d56f", lambda value: value.replace('message: String\n}', 'message: String\n\tsource: String!\n\tsteadyMs: Int\n}')),
         "db/node_utils.go": ("39135decd67366098a5d99b46389fbbbfd47406a0fe39fffec2f71fedbccf2b2", router_node_model),
         "graphql/service/node/latency_cache.go": ("4d4fd03249c617bcc9fccb508dbc2d567fa74557dd5900ee046cbf307ff64831", lambda value: value.replace('if err := refreshLatencyCacheIfNeeded(ctx); err != nil {\n\t\treturn nil, err\n\t}', '// Reading results must never start network probes.')),
         "graphql/mutation.go": ("90a8f23ac625f2d3adf79f7f236d40b6529e2857028cc5ed02f02c0e111ee8ef", lambda value: value.replace('TestNodeLatencies(args *struct', 'TestNodeLatencies(ctx context.Context, args *struct').replace('node.TestLatencies(context.TODO(), args.IDs)', 'node.TestLatencies(ctx, args.IDs)')),
@@ -448,6 +456,23 @@ type Mutation {
             data = transform(data.decode()).encode()
         destination.write_bytes(data)
         generated[relative] = digest(data)
+    # Additive changes must also upgrade a previously prepared working copy.
+    for relative in ("graphql/service/config/mutation_utils.go", "graphql/service/group/mutation_utils.go", "graphql/service/node/schema.go"):
+        destination = root / relative
+        value = destination.read_text(encoding="utf-8")
+        if relative.endswith("config/mutation_utils.go") and 'db.NodeDNSForNodes(d, nodeModels)' not in value:
+            value = value.replace('// Fill in node section.', '''// Fill in node section.
+    nodeModels := make([]db.Node, 0, len(nodes))
+    for _, n := range nodes { nodeModels = append(nodeModels, *n.dbNode) }
+    c.Global.NailinkNodeDNS, err = db.NodeDNSForNodes(d, nodeModels)
+    if err != nil { return 0, err }
+''')
+        if relative.endswith("group/mutation_utils.go"):
+            value = replace_go_function(value, 'func AddNodes(', (HERE / 'wing/group_add_nodes.txt').read_text(encoding='utf-8'))
+        if relative.endswith("node/schema.go") and 'steadyMs: Int' not in value:
+            value = value.replace('source: String!', 'source: String!\n    steadyMs: Int')
+        destination.write_text(value, encoding="utf-8", newline="\n")
+        generated[relative] = digest(value.encode())
     register_file = root / "dae-core/component/outbound/dialer/register.go"
     register_text = register_file.read_text(encoding="utf-8")
     if 'routerProtocolExtraOption(normalizedLink' not in register_text:
@@ -474,6 +499,8 @@ type Mutation {
     mutation_text = mutation_text[:begin] + run + mutation_text[end:]
     schema_file = root / "graphql/root_schema.go"
     schema_text = schema_file.read_text(encoding="utf-8")
+    if 'coreRuntimeGroups: String!' not in schema_text:
+        schema_text = schema_text.replace('type Query {', 'type Query {\n    coreRuntimeGroups: String! @hasRole(role: ADMIN)', 1)
     if 'corePlan(target:' not in schema_text:
         schema_text = schema_text.replace('type Query {', 'type Query {\n    coreStatus: String! @hasRole(role: ADMIN)\n    corePlan(target: String!): String! @hasRole(role: ADMIN)', 1)
         schema_text = schema_text.replace('type Mutation {', 'type Mutation {\n    switchCore(target: String!, revision: String!, operation: String): Int! @hasRole(role: ADMIN)', 1)
@@ -515,6 +542,13 @@ type Mutation {
         ("dae-core/control/router_core_listener.go", "core_listener.go"),
         ("dae-core/control/router_core_listener_test.go", "core_listener_test.go"),
         ("dae/router_singbox_config.go", "singbox_config.go"),
+        ("dae/router_core_node_dns.go", "core_node_dns.go"),
+        ("dae/router_core_group_runtime.go", "core_group_runtime.go"),
+        ("dae/router_performance_test.go", "performance_test.go"),
+        ("dae/router_live_performance_test.go", "live_performance_test.go"),
+        ("db/router_node_dns.go", "db_node_dns.go"),
+        ("graphql/service/subscription/router_node_dns.go", "subscription_node_dns.go"),
+        ("graphql/service/subscription/router_node_dns_test.go", "subscription_node_dns_test.go"),
         ("dae/router_mihomo_config.go", "mihomo_config.go"),
         ("dae/router_mihomo_dns.go", "mihomo_dns.go"),
         ("dae/router_mihomo_dns_transport.go", "mihomo_dns_transport.go"),
@@ -639,6 +673,8 @@ def prepare(root):
         "graphql/service/node/latency_mutation_utils.go", "graphql/service/node/latency_cache.go",
         "graphql/service/node/latency_resolver.go", "graphql/service/node/schema.go",
         "db/node_utils.go",
+        "db/subscription.go", "dae-core/config/config.go",
+        "graphql/service/config/global/schema.go", "dae/flat_desc.go",
         "graphql/service/subscription/mutation_utils.go",
         "dae-core/component/outbound/dialer/dialer.go", "dae-core/component/outbound/dialer/register.go",
         "dae-core/component/interface_manager.go",

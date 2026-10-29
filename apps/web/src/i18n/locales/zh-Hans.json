@@ -286,7 +286,7 @@
     "unavailable": "不可用",
     "automaticShort": "自动",
     "measurementDetails": "测试耗时说明",
-    "measurementHint": "手动测试包含新建连接耗时，并非 Ping；后台自动检测可能复用连接。",
+    "measurementHint": "手动测试显示首次建连耗时，包含代理握手。详情中如有“复用连接”，表示已确认同一连接上的第二次请求；不会用入口 TCP 延迟代替真实请求。自动测试由当前内核统计，测试地址、网络和口径不同时不能直接比较。",
     "manualDescription": "手动 HTTP 测试：包含新建连接和协议握手；普通节点单次最多 8 秒，Tor 等长引导协议沿用原期限。排队和内核启动不计入延迟，请使用相同目标比较内核。",
     "automaticDescription": "后台自动检测：可能复用连接，不能与手动新建连接测试直接比较。",
     "unknownDescription": "服务端未标明测试方式。比较内核前请手动测试同一个节点和目标。",
@@ -316,7 +316,10 @@
       "session": "登录已失效，请重新登录后继续测试。",
       "target": "测试目标解析失败，请检查 DNS 或测试地址后继续。",
       "request": "测试请求无效或节点已变化，请刷新节点列表后重试。"
-    }
+    },
+    "coldMeasurement": "首连 {{ms}} ms",
+    "steadyMeasurement": "复用连接 {{ms}} ms",
+    "manualShort": "首连"
   },
   "link": "链接",
   "logLevel": "日志等级",
@@ -582,7 +585,16 @@
     "timeRange": "统计时间范围",
     "totalTrafficShort": "本次流量",
     "statsUnavailable": "数据暂不可用",
-    "coreSwitching": "内核切换中，完成后自动恢复更新"
+    "coreSwitching": "内核切换中，完成后自动恢复更新",
+    "appliedOutlet": "查看生效出口",
+    "loadingOutlet": "正在读取运行配置…",
+    "outletReadFailed": "读取失败，请重试",
+    "outletNotReady": "代理尚未就绪",
+    "groupNotApplied": "当前运行配置未使用此群组",
+    "appliedCandidates": "已生效：{{count}} 个候选节点",
+    "refreshOutlet": "刷新生效出口",
+    "daeOutletHint": "dae 根据连接和网络选择出口；此处列出已应用的候选节点。",
+    "nativeOutletUnavailable": "内核暂未返回当前选择，仅显示已生效的候选节点。"
   },
   "importResource": {
     "optionalTag": "标签（可选）",

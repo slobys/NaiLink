@@ -4,7 +4,7 @@ import type { NodeLatencyProbeResult } from '~/apis'
 // The generic Docker backend retains the upstream schema. Only router builds
 // request its additive source field; manual mutations still know their source.
 export function latencyResultFields(includeSource: boolean) {
-  return `id latencyMs alive testedAt message ${includeSource ? 'source' : ''}`
+  return `id latencyMs alive testedAt message ${includeSource ? 'source steadyMs' : ''}`
 }
 
 export function hasMeasuredLatency(result?: NodeLatencyProbeResult) {
@@ -21,7 +21,13 @@ export function formatLatencyDescription(result: NodeLatencyProbeResult | undefi
         : 'latency.unknownDescription',
   )
   const time = result.testedAt ? new Date(result.testedAt).toLocaleString() : ''
-  return time ? `${source} · ${time}` : source
+  const measured =
+    result.source === 'manual' && hasMeasuredLatency(result)
+      ? t('latency.coldMeasurement', { ms: result.latencyMs })
+      : ''
+  const steady =
+    result.source === 'manual' && result.steadyMs != null ? t('latency.steadyMeasurement', { ms: result.steadyMs }) : ''
+  return [source, measured, steady, time].filter(Boolean).join(' · ')
 }
 
 export function latencyTone(result?: NodeLatencyProbeResult): 'good' | 'warning' | 'bad' | 'unmeasured' {

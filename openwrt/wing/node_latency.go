@@ -20,7 +20,9 @@ import (
 	"github.com/daeuniverse/dae-wing/dae"
 	"github.com/daeuniverse/dae-wing/db"
 	"github.com/daeuniverse/dae-wing/routercore"
+	daeCommon "github.com/daeuniverse/dae/common"
 	dialer "github.com/daeuniverse/dae/component/outbound/dialer"
+	daeConfig "github.com/daeuniverse/dae/config"
 	"github.com/daeuniverse/outbound/netproxy"
 	"github.com/graph-gophers/graphql-go"
 	"github.com/sirupsen/logrus"
@@ -195,27 +197,48 @@ func testSingleNodeLatency(ctx context.Context, option *dialer.GlobalOption, nod
 	ctx, cancel := context.WithTimeout(ctx, routercore.ManualProbeTimeout+time.Second)
 	defer cancel()
 	r := &LatencyResolver{NodeID: node.ID, TestedAtV: time.Now(), NodeFingerprintV: latencyNodeFingerprint(node)}
+	policies, dnsErr := db.NodeDNSForNodes(db.DB(ctx), []db.Node{*node})
+	if dnsErr != nil {
+		message := "check_target_failed"
+		r.MessageV = &message
+		return r
+	}
+	if policies != "" {
+		copy := *option
+		resolver, closeDNS, err := dae.RouterProbeNodeDNS(daeConfig.Global{NailinkNodeDNS: policies})
+		if err != nil {
+			message := "check_target_failed"
+			r.MessageV = &message
+			return r
+		}
+		defer closeDNS()
+		copy.DaeDNS = resolver
+		option = &copy
+	}
 	if routercore.IsNativeURI(node.Link) {
 		message := "unsupported_protocol"
 		r.MessageV = &message
 		return r
 	}
-	d, err := dialer.NewFromLinkContext(ctx, option, dialer.InstanceOption{DisableCheck: true}, node.Link, "")
+	d, err := dialer.NewFromLinkWithProxyCacheContext(ctx, option, dialer.InstanceOption{DisableCheck: true}, node.Link, "", dialer.NewProxyIpCache())
 	if err != nil {
 		message := "invalid_node"
 		r.MessageV = &message
 		return r
 	}
 	defer d.Close()
-	result, err := probeInteractiveLatency(ctx, d)
+	result, err := probeInteractiveHTTP(ctx, d)
 	if err != nil {
 		message := latencyFailureCode(err)
+		if result.Message != "" {
+			message = result.Message
+		}
 		r.MessageV = &message
 		return r
 	}
-	r.AliveVal, r.TestedAtV = result.Alive, result.CheckedAt
+	r.AliveVal, r.TestedAtV, r.SteadyMsV = result.Alive, result.Tested, result.SteadyMs
 	if result.Alive {
-		ms := int32(result.Latency.Milliseconds())
+		ms := result.Latency
 		r.LatencyMsV = &ms
 	} else {
 		message := "unreachable"
@@ -224,65 +247,42 @@ func testSingleNodeLatency(ctx context.Context, option *dialer.GlobalOption, nod
 	return r
 }
 
-// One real HTTP request per available IP family, raced with a shared deadline.
-// Manual tests need the first working route, not background health-check retries
-// or a wait for an unusable second family. Closing a temporary dialer does not
-// modify the selected node or the running proxy's health history.
-func probeInteractiveLatency(parent context.Context, d *dialer.Dialer) (*dialer.LatencyProbeResult, error) {
-	opt, err := d.TcpCheckOptionRaw.Option()
+// Adapt the dae protocol dialer without replacing the server hostname or TLS SNI.
+type latencyHTTPDialer struct {
+	d     *dialer.Dialer
+	mark  uint32
+	mptcp bool
+}
+
+func (d latencyHTTPDialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	c, err := d.d.DialContext(ctx, daeCommon.MagicNetwork(network, d.mark, d.mptcp), address)
 	if err != nil {
 		return nil, err
 	}
+	return &netproxy.FakeNetConn{Conn: c}, nil
+}
+func probeInteractiveHTTP(ctx context.Context, d *dialer.Dialer) (dae.RouterCoreProbe, error) {
 	network, err := netproxy.ParseMagicNetwork(d.TcpCheckOptionRaw.ResolverNetwork)
 	if err != nil {
-		return nil, err
+		return dae.RouterCoreProbe{}, err
 	}
-	ctx, cancel := context.WithTimeout(parent, routercore.ManualProbeTimeout)
-	defer cancel()
-	type attempt struct {
-		ok      bool
-		latency time.Duration
-		err     error
-	}
-	results := make(chan attempt, 2)
-	var wg sync.WaitGroup
-	for _, family := range []struct {
-		ip    netip.Addr
-		index int
-	}{{opt.Ip4, dialer.IdxTcp4}, {opt.Ip6, dialer.IdxTcp6}} {
-		if !family.ip.IsValid() {
-			continue
+	result := dae.ProbeRouterHTTP(ctx, latencyHTTPDialer{d: d, mark: network.Mark, mptcp: network.Mptcp}, daeConfig.Global{TcpCheckUrl: d.TcpCheckOptionRaw.Raw, TcpCheckHttpMethod: d.TcpCheckOptionRaw.Method})
+	if !result.Alive {
+		if ctx.Err() != nil {
+			return result, ctx.Err()
 		}
-		wg.Add(1)
-		go func(ip netip.Addr, index int) {
-			defer wg.Done()
-			start := time.Now()
-			ok, err := d.HttpCheck(ctx, index, opt.Url, ip, opt.Method, network.Mark, network.Mptcp)
-			results <- attempt{ok: ok && err == nil, latency: time.Since(start), err: err}
-		}(family.ip, family.index)
-	}
-	go func() { wg.Wait(); close(results) }()
-	result := &dialer.LatencyProbeResult{}
-	var failure error
-	for attempt := range results {
-		if attempt.ok && !result.Alive {
-			result.Alive, result.Latency = true, attempt.latency
-			cancel()
-		}
-		// Prefer an actionable error over a second family's generic timeout.
-		if attempt.err != nil && (failure == nil || latencyFailureCode(failure) == "timeout") {
-			failure = attempt.err
-		}
-	}
-	result.CheckedAt = time.Now()
-	if !result.Alive && failure != nil {
-		return result, failure
+		return result, fmt.Errorf("%s", result.Message)
 	}
 	return result, nil
 }
+func probeInteractiveLatency(ctx context.Context, d *dialer.Dialer) (*dialer.LatencyProbeResult, error) {
+	value, err := probeInteractiveHTTP(ctx, d)
+	if err != nil {
+		return nil, err
+	}
+	return &dialer.LatencyProbeResult{Alive: value.Alive, Latency: time.Duration(value.Latency) * time.Millisecond, CheckedAt: value.Tested}, nil
+}
 
-// Return fixed categories only: nested network errors can contain credentials,
-// the full node URL, private certificate paths or server-controlled messages.
 func latencyFailureCode(err error) string {
 	for {
 		var request *url.Error

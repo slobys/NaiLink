@@ -22,6 +22,41 @@ import (
 
 const transactionNode = "vless://33333333-3333-4333-8333-333333333333@192.0.2.1:443?encryption=none#fixture"
 
+func TestGroupAddNodesRejectsStaleIDsWithoutCreatingRows(t *testing.T) {
+	if err := db.InitDatabase(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	db.SetOutput(io.Discard)
+	d := db.DB(context.Background())
+	g := db.Group{Name: "fixture", Policy: "fixed"}
+	if err := d.Create(&g).Error; err != nil {
+		t.Fatal(err)
+	}
+	n, err := db.NewNodeModel(transactionNode, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = d.Create(n).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err = group.AddNodes(context.Background(), common.EncodeCursor(g.ID), []graphql.ID{common.EncodeCursor(n.ID), common.EncodeCursor(999999)}); err == nil {
+		t.Fatal("stale ID accepted")
+	}
+	var nodeCount, associationCount int64
+	d.Model(&db.Node{}).Count(&nodeCount)
+	d.Table("group_nodes").Count(&associationCount)
+	if nodeCount != 1 || associationCount != 0 {
+		t.Fatal("failed add modified nodes or group", nodeCount, associationCount)
+	}
+	if _, err = group.AddNodes(context.Background(), common.EncodeCursor(g.ID), []graphql.ID{common.EncodeCursor(n.ID)}); err != nil {
+		t.Fatal("valid add failed", err)
+	}
+	d.Table("group_nodes").Count(&associationCount)
+	if associationCount != 1 {
+		t.Fatal("successful save missing association")
+	}
+}
+
 func TestRouterTransactionPanicRollsBack(t *testing.T) {
 	if err := db.InitDatabase(t.TempDir()); err != nil {
 		t.Fatal(err)

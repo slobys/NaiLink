@@ -609,11 +609,13 @@ func (m *routerCoreManager) recoverExited() error {
 }
 
 type routerDaeSession struct {
-	reload chan *ReloadMessage
-	done   chan error
-	exit   chan struct{}
-	dry    bool
-	conf   *daeConfig.Config
+	nodeDNS *mhDNSBridge
+	dnsMu   sync.Mutex
+	reload  chan *ReloadMessage
+	done    chan error
+	exit    chan struct{}
+	dry     bool
+	conf    *daeConfig.Config
 }
 
 func newRouterDaeSession(log *logrus.Logger, conf *daeConfig.Config, dirs []string, noTimestamp, dry bool) *routerDaeSession {
@@ -621,7 +623,22 @@ func newRouterDaeSession(log *logrus.Logger, conf *daeConfig.Config, dirs []stri
 		conf = deepcopy.Copy(conf).(*daeConfig.Config)
 	}
 	s := &routerDaeSession{reload: make(chan *ReloadMessage), done: make(chan error, 1), exit: make(chan struct{}), dry: dry, conf: conf}
-	go func() { err := routerRunDAE(log, conf, dirs, noTimestamp, dry, s.reload); s.done <- err; close(s.exit) }()
+	effective, bridge, dnsErr := routerWithNodeDNS(conf, log)
+	s.conf = effective
+	s.nodeDNS = bridge
+	go func() {
+		err := dnsErr
+		if err == nil {
+			err = routerRunDAE(log, effective, dirs, noTimestamp, dry, s.reload)
+		}
+		s.dnsMu.Lock()
+		if s.nodeDNS != nil {
+			s.nodeDNS.Close()
+		}
+		s.dnsMu.Unlock()
+		s.done <- err
+		close(s.exit)
+	}()
 	return s
 }
 func (s *routerDaeSession) Done() <-chan error { return s.done }
@@ -669,6 +686,19 @@ func (s *routerDaeSession) Reload(msg *ReloadMessage) error {
 	if copy.Config != nil && copy.Config != EmptyConfig && copy.Geodata == nil {
 		copy.Config = deepcopy.Copy(copy.Config).(*daeConfig.Config)
 	}
+	var bridge *mhDNSBridge
+	if copy.Config != nil && copy.Geodata == nil {
+		var err error
+		copy.Config, bridge, err = routerWithNodeDNS(copy.Config, nil)
+		if err != nil {
+			return err
+		}
+	}
+	defer func() {
+		if bridge != nil {
+			bridge.Close()
+		}
+	}()
 	select {
 	case s.reload <- &copy:
 	case <-s.exit:
@@ -676,6 +706,15 @@ func (s *routerDaeSession) Reload(msg *ReloadMessage) error {
 	}
 	select {
 	case err := <-cb:
+		if err == nil && copy.Config != nil && copy.Geodata == nil {
+			s.dnsMu.Lock()
+			if s.nodeDNS != nil {
+				s.nodeDNS.Close()
+			}
+			s.nodeDNS = bridge
+			bridge = nil
+			s.dnsMu.Unlock()
+		}
 		return err
 	case <-s.exit:
 		return errors.New("core_exited")

@@ -7,12 +7,14 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"path"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/daeuniverse/dae-wing/routercore"
@@ -24,10 +26,11 @@ import (
 )
 
 type RouterCoreProbe struct {
-	Alive   bool
-	Latency int32
-	Message string
-	Tested  time.Time
+	SteadyMs *int32
+	Alive    bool
+	Latency  int32
+	Message  string
+	Tested   time.Time
 }
 
 // Use the selected core's SOCKS UDP relay rather than a dae dialer when the
@@ -433,6 +436,11 @@ func probeRouterCoreNodesProgress(ctx context.Context, links []string, global da
 func routerProbeHTTP(ctx context.Context, dialer proxy.ContextDialer, global daeConfig.Global) RouterCoreProbe {
 	return routerProbeHTTPTimeout(ctx, dialer, global, routercore.ManualProbeTimeout)
 }
+
+// dae and native adapters use the same URL, method, family race and timer.
+func ProbeRouterHTTP(ctx context.Context, dialer proxy.ContextDialer, global daeConfig.Global) RouterCoreProbe {
+	return routerProbeHTTP(ctx, dialer, global)
+}
 func routerProbeHTTPTimeout(ctx context.Context, dialer proxy.ContextDialer, global daeConfig.Global, timeout time.Duration) RouterCoreProbe {
 	result := RouterCoreProbe{Tested: time.Now(), Message: "check_target_failed"}
 	if len(global.TcpCheckUrl) == 0 {
@@ -464,7 +472,7 @@ func routerProbeHTTPTimeout(ctx context.Context, dialer proxy.ContextDialer, glo
 	for _, address := range addresses {
 		go func() {
 			r := RouterCoreProbe{Message: "check_target_failed"}
-			transport := &http.Transport{Proxy: nil, DisableKeepAlives: true, DialContext: func(ctx context.Context, network, original string) (net.Conn, error) {
+			transport := &http.Transport{Proxy: nil, MaxIdleConnsPerHost: 1, MaxConnsPerHost: 1, IdleConnTimeout: time.Second, DialContext: func(ctx context.Context, network, original string) (net.Conn, error) {
 				host, port, err := net.SplitHostPort(original)
 				if err == nil && host == target.Hostname() {
 					original = net.JoinHostPort(address, port)
@@ -474,10 +482,13 @@ func routerProbeHTTPTimeout(ctx context.Context, dialer proxy.ContextDialer, glo
 			defer transport.CloseIdleConnections()
 			request, err := http.NewRequestWithContext(probeCtx, method, target.String(), nil)
 			if err == nil {
-				response, err := (&http.Client{Transport: transport}).Do(request)
+				client := &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+				response, err := client.Do(request)
 				if err != nil {
 					r.Message = routerCoreProbeFailure(err)
 				} else {
+					cold := time.Since(started)
+					_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4097))
 					_ = response.Body.Close()
 					valid := response.StatusCode >= 200 && response.StatusCode < 500
 					if page := path.Base(target.Path); strings.HasPrefix(page, "generate_") {
@@ -485,7 +496,24 @@ func routerProbeHTTPTimeout(ctx context.Context, dialer proxy.ContextDialer, glo
 					}
 					if valid {
 						r.Alive, r.Message = true, ""
-						r.Latency = int32(time.Since(started).Milliseconds())
+						r.Latency = int32(cold.Milliseconds())
+						// Report a second number only when net/http proves reuse.
+						// Failed/closed warm connections never invalidate a successful cold test.
+						if !response.Close {
+							warmCtx, stop := context.WithTimeout(probeCtx, time.Second)
+							var reused atomic.Bool
+							warmCtx = httptrace.WithClientTrace(warmCtx, &httptrace.ClientTrace{GotConn: func(info httptrace.GotConnInfo) { reused.Store(info.Reused) }})
+							warm, _ := http.NewRequestWithContext(warmCtx, method, target.String(), nil)
+							begin := time.Now()
+							if reply, e := client.Do(warm); e == nil {
+								elapsed := int32(time.Since(begin).Milliseconds())
+								if reused.Load() && reply.StatusCode == response.StatusCode {
+									r.SteadyMs = &elapsed
+								}
+								_ = reply.Body.Close()
+							}
+							stop()
+						}
 					}
 				}
 			}
@@ -493,19 +521,34 @@ func routerProbeHTTPTimeout(ctx context.Context, dialer proxy.ContextDialer, glo
 			completed <- r
 		}()
 	}
+	hasFailure := false
 	for range addresses {
 		r := <-completed
 		if !result.Alive && r.Alive {
 			result = r
 			cancel()
-		} else if !result.Alive {
+		} else if !result.Alive && (!hasFailure || routerProbeFailurePriority(r.Message) > routerProbeFailurePriority(result.Message)) {
 			result = r
+			hasFailure = true
 		}
 	}
 	if ctx.Err() != nil {
 		result.Alive, result.Message = false, routerCoreProbeFailure(ctx.Err())
 	}
 	return result
+}
+
+func routerProbeFailurePriority(code string) int {
+	switch code {
+	case "", "unreachable", "timeout", "cancelled":
+		return 0
+	case "node_tcp_timeout", "tls_handshake_timeout":
+		return 1
+	case "check_target_failed":
+		return 2
+	default:
+		return 3
+	}
 }
 
 type routerProbeErrors struct {

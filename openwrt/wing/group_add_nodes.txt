@@ -1,0 +1,19 @@
+	id, err := common.DecodeCursor(_id)
+	if err != nil { return 0, err }
+	ids, err := common.DecodeCursorBatch(_nodeIds)
+	if err != nil { return 0, err }
+	unique := map[uint]bool{}
+	nodeIds := []uint{}
+	for _, value := range ids { if !unique[value] { unique[value] = true; nodeIds = append(nodeIds, value) } }
+	if len(nodeIds) == 0 { return 0, fmt.Errorf("请先选择节点") }
+	tx := db.BeginTx(ctx)
+	if tx.Error != nil { return 0, tx.Error }
+	defer db.FinishTransaction(tx, &err)
+	var group db.Group
+	if err = tx.First(&group, id).Error; err != nil { return 0, fmt.Errorf("群组不存在，请刷新后重试") }
+	var nodes []db.Node
+	if err = tx.Where("id IN ?", nodeIds).Find(&nodes).Error; err != nil { return 0, err }
+	if len(nodes) != len(nodeIds) { return 0, fmt.Errorf("节点已变化，请刷新列表后重新选择；群组未修改") }
+	if err = tx.Model(&group).Association("Node").Append(nodes); err != nil { return 0, err }
+	if err = autoUpdateVersionById(tx, id); err != nil { return 0, err }
+	return int32(len(nodes)), nil

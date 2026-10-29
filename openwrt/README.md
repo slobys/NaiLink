@@ -1,9 +1,16 @@
 # NaiLink · 奶油互联
 
 支持 OpenWrt、ImmortalWrt、iStoreOS 的现代 LuCI，提供 x86_64 / ARM64 及试验性 ARMv7 / MIPS32 / MIPSel32 的
-IPK 和 APK v3 安装包。当前测试版：[openwrt-v0.6.56](https://github.com/slobys/NaiLink/releases/tag/openwrt-v0.6.56)。
+IPK 和 APK v3 安装包。当前测试版：[openwrt-v0.6.57](https://github.com/slobys/NaiLink/releases/tag/openwrt-v0.6.57)。
 
 本项目从 0.6.14 起更名为 NaiLink（奶油互联），侧边栏显示 **NaiLink**。0.6.13 及更早版本显示 **Daed**。沿用原有包名、服务、路径和配置，可继续保留数据升级。
+
+## 0.6.57 连接与生效核验
+
+- 保留 Clash 订阅中仅针对节点服务器的 HTTPS DNS 策略；只匹配实际节点域名，不导入机场的网站分流或覆盖现有 DNS。更新订阅时保存提示，应用配置时交给当前内核运行；未更新的订阅仍沿用原有解析。
+- 三个内核共用手动 HTTP 测量，保留首连耗时；确认同一连接复用后，详情提供第二次请求耗时。Mihomo 启用多入口 TCP 并发，自动测试启用统一延迟。
+- 加入群组核验节点 ID 与保存结果；“查看生效出口”读取已应用的候选节点及原生内核当前选择，避免把加入或未应用更改当成正在使用。
+- 新增一个可向后兼容的订阅 DNS 信息列，保留节点链接、ID、群组、路由、现有 DNS 和当前内核。不新增依赖，解析桥接、连接池与测试并发有上限，退出或失败时释放。
 
 ## 0.6.56 规则库批次检查
 

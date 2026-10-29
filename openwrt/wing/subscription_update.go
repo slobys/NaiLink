@@ -61,7 +61,8 @@ func updateSubscriptionSafely(ctx context.Context, id uint) (*db.Subscription, e
 	if err := db.DB(ctx).First(&before, id).Error; err != nil {
 		return nil, err
 	}
-	links, err := fetchLinksContext(ctx, before.Link)
+	dnsContext, nodeDNS := captureNodeDNS(ctx)
+	links, err := fetchLinksContext(dnsContext, before.Link)
 	if err != nil {
 		return nil, err
 	}
@@ -108,10 +109,11 @@ func updateSubscriptionSafely(ctx context.Context, id uint) (*db.Subscription, e
 			return nil, errors.New("订阅节点保存失败，已保留原节点；请重试。")
 		}
 	}
-	if err := tx.Model(&current).Clauses(clause.Returning{}).Update("updated_at", time.Now()).Error; err != nil {
+	dnsChanged := current.NodeDNS != nodeDNS.value
+	if err := tx.Model(&current).Clauses(clause.Returning{}).Updates(map[string]any{"updated_at": time.Now(), "node_dns": nodeDNS.value}).Error; err != nil {
 		return nil, err
 	}
-	if len(args) > 0 || removed.RowsAffected > 0 {
+	if len(args) > 0 || removed.RowsAffected > 0 || dnsChanged {
 		if err := AutoUpdateVersionByIds(tx, []uint{id}); err != nil {
 			return nil, err
 		}

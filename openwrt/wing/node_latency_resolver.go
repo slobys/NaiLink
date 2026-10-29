@@ -13,6 +13,7 @@ import (
 )
 
 type LatencyResolver struct {
+	SteadyMsV        *int32
 	NodeID           uint
 	LatencyMsV       *int32
 	AliveVal         bool
@@ -24,6 +25,7 @@ type LatencyResolver struct {
 
 func (r *LatencyResolver) ID() graphql.ID         { return common.EncodeCursor(r.NodeID) }
 func (r *LatencyResolver) LatencyMs() *int32      { return r.LatencyMsV }
+func (r *LatencyResolver) SteadyMs() *int32       { return r.SteadyMsV }
 func (r *LatencyResolver) Alive() bool            { return r.AliveVal }
 func (r *LatencyResolver) TestedAt() graphql.Time { return graphql.Time{Time: r.TestedAtV} }
 func (r *LatencyResolver) Message() *string       { return r.MessageV }

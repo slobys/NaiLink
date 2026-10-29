@@ -28,6 +28,8 @@ type mhDNSRule struct {
 	target, action string
 }
 type mhDNSBridge struct {
+	nodePolicies                    routercore.NodeDNS
+	nodeBootstrapAddress            string
 	log                             *logrus.Logger
 	lastLog                         atomic.Int64
 	ctx                             context.Context
@@ -79,7 +81,11 @@ func (b *mhDNSBridge) warnDNS(code string) {
 	now := time.Now().Unix()
 	last := b.lastLog.Load()
 	if now > last && b.lastLog.CompareAndSwap(last, now) {
-		b.log.WithFields(logrus.Fields{"core": "mihomo", "phase": "dns_bridge", "code": code}).Warn("DNS forwarding failed")
+		core, phase := "mihomo", "dns_bridge"
+		if len(b.nodePolicies) > 0 {
+			core, phase = RouterCoreName(), "node_dns"
+		}
+		b.log.WithFields(logrus.Fields{"core": core, "phase": phase, "code": code}).Warn("DNS forwarding failed")
 	}
 }
 func mhDNSCompile(rule sbObject, sets map[string][]sbObject) (func(*dnsmessage.Msg) bool, error) {
@@ -209,6 +215,9 @@ func mhDNSCompile(rule sbObject, sets map[string][]sbObject) (func(*dnsmessage.M
 	}, nil
 }
 func startMihomoDNS(profile sbObject, ports sbPorts, logs ...*logrus.Logger) (_ *mhDNSBridge, result error) {
+	return startMihomoDNSWithPolicies(profile, ports, nil, logs...)
+}
+func startMihomoDNSWithPolicies(profile sbObject, ports sbPorts, policies routercore.NodeDNS, logs ...*logrus.Logger) (_ *mhDNSBridge, result error) {
 	canonical := profile["_nailink_dns"].(sbObject)
 	delete(profile, "_nailink_dns")
 	dns := canonical["dns"].(sbObject)
@@ -218,6 +227,7 @@ func startMihomoDNS(profile sbObject, ports sbPorts, logs ...*logrus.Logger) (_ 
 	if len(logs) > 0 {
 		b.log = logs[0]
 	}
+	b.nodePolicies = policies
 	defer func() {
 		if result != nil {
 			b.Close()
@@ -317,7 +327,21 @@ func startMihomoDNS(profile sbObject, ports sbPorts, logs ...*logrus.Logger) (_ 
 					}
 				}
 			}
-			answer, e := b.exchange(ctx, q, b.upstreams[target], bootstrap)
+			var answer *dnsmessage.Msg
+			var e error
+			if resolvers := b.nodePolicies[routercore.NodeDNSHost(q.Question[0].Name)]; !bootstrap && len(resolvers) > 0 {
+				e = errors.New("dns_https_failed")
+				for _, resolver := range resolvers {
+					attempt, cancel := context.WithTimeout(ctx, 3*time.Second)
+					answer, e = b.exchange(attempt, q, nodeDNSUpstream(resolver), true)
+					cancel()
+					if e == nil {
+						break
+					}
+				}
+			} else {
+				answer, e = b.exchange(ctx, q, b.upstreams[target], bootstrap)
+			}
 			if e == nil {
 				reply = answer
 			} else if !errors.Is(e, context.Canceled) {
@@ -350,6 +374,7 @@ func startMihomoDNS(profile sbObject, ports sbPorts, logs ...*logrus.Logger) (_ 
 	if e != nil {
 		return nil, e
 	}
+	b.nodeBootstrapAddress = routercore.SocksAddress(bootstrap)
 	d := profile["dns"].(sbObject)
 	d["nameserver"] = []string{"udp://" + routercore.SocksAddress(normal)}
 	d["default-nameserver"] = []string{"udp://" + routercore.SocksAddress(bootstrap)}
@@ -402,6 +427,10 @@ func (b *mhDNSBridge) exchange(ctx context.Context, q *dnsmessage.Msg, server sb
 	}
 
 	dial := dialer.DialContext
+	if typ == "https" && len(b.nodePolicies) > 0 {
+		dial = b.nodeDNSDialer(dialer).DialContext
+	}
+
 	if proxyPort > 0 {
 		p, e := proxy.SOCKS5("tcp", routercore.SocksAddress(proxyPort), &proxy.Auth{User: "nailink", Password: b.secret}, &net.Dialer{Timeout: 5 * time.Second})
 		if e != nil {

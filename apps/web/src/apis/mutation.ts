@@ -542,8 +542,8 @@ export function useGroupAddNodesMutation() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ id, nodeIDs }: { id: string; nodeIDs: string[] }) => {
-      return gqlClient.request(
+    mutationFn: async ({ id, nodeIDs }: { id: string; nodeIDs: string[] }) => {
+      const saved = await gqlClient.request(
         graphql(`
           mutation GroupAddNodes($id: ID!, $nodeIDs: [ID!]!) {
             groupAddNodes(id: $id, nodeIDs: $nodeIDs)
@@ -554,6 +554,16 @@ export function useGroupAddNodesMutation() {
           nodeIDs,
         },
       )
+      if (routerMode) {
+        const result = await gqlClient.request<{ groups: { id: string; nodes: { id: string }[] }[] }>(
+          '{groups{id nodes{id}}}',
+        )
+        const ids = new Set(result.groups.find((group) => group.id === id)?.nodes.map((node) => node.id))
+        if (saved.groupAddNodes < 1 || !nodeIDs.every((nodeId) => ids.has(nodeId))) {
+          throw new Error('未能确认节点已加入群组，请刷新后重试。现有配置保留。')
+        }
+      }
+      return saved
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEY_GROUP })
@@ -807,6 +817,7 @@ export function useUpdateSubscriptionsMutation() {
 }
 
 export interface NodeLatencyProbeResult {
+  steadyMs?: number | null
   id: string
   latencyMs?: number | null
   alive: boolean
@@ -904,6 +915,7 @@ export function useRunMutation() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEY_GENERAL })
+      queryClient.invalidateQueries({ queryKey: ['core-runtime-groups'] })
     },
   })
 }

@@ -239,37 +239,48 @@ func routerCheckSingBoxProfile(ctx context.Context, profile sbObject) error {
 }
 
 type routerSingBoxSession struct {
-	engine       string
-	dnsBridge    *mhDNSBridge
-	hasTor       bool
-	mu           sync.Mutex
-	cmd          *exec.Cmd
-	done         chan error
-	exit         chan struct{}
-	ports        sbPorts
-	dir          string
-	conf         *daeConfig.Config
-	dirs         []string
-	transparent  bool
-	log          *logrus.Logger
-	replacement  *routerSingBoxSession
-	owned        bool
-	ready        atomic.Bool
-	portConflict atomic.Bool
-	apiMu        sync.Mutex
-	apiClient    *http.Client
-	apiContext   context.Context
-	apiCancel    context.CancelFunc
-	apiClosed    bool
-	statsMu      sync.Mutex
-	stats        *RuntimeOverview
-	samples      []RuntimeTrafficSample
+	engine        string
+	dnsBridge     *mhDNSBridge
+	nodeDNSBridge *mhDNSBridge
+	hasTor        bool
+	mu            sync.Mutex
+	cmd           *exec.Cmd
+	done          chan error
+	exit          chan struct{}
+	ports         sbPorts
+	dir           string
+	conf          *daeConfig.Config
+	dirs          []string
+	transparent   bool
+	log           *logrus.Logger
+	replacement   *routerSingBoxSession
+	owned         bool
+	ready         atomic.Bool
+	portConflict  atomic.Bool
+	apiMu         sync.Mutex
+	apiClient     *http.Client
+	apiContext    context.Context
+	apiCancel     context.CancelFunc
+	apiClosed     bool
+	statsMu       sync.Mutex
+	stats         *RuntimeOverview
+	samples       []RuntimeTrafficSample
 }
 
 func newRouterSingBoxSession(ctx context.Context, log *logrus.Logger, conf *daeConfig.Config, dirs []string, transparent bool, profileHooks ...func(sbObject, sbPorts)) (routerCoreSession, error) {
 	return newRouterNativeSession(ctx, log, conf, dirs, transparent, "sing-box", profileHooks...)
 }
 func newRouterNativeSession(ctx context.Context, log *logrus.Logger, conf *daeConfig.Config, dirs []string, transparent bool, engine string, profileHooks ...func(sbObject, sbPorts)) (_ routerCoreSession, failure error) {
+	originalConf := conf
+	conf, nodeDNSBridge, dnsErr := routerWithNodeDNS(conf, log, true)
+	if dnsErr != nil {
+		return nil, dnsErr
+	}
+	defer func() {
+		if failure != nil && nodeDNSBridge != nil {
+			nodeDNSBridge.Close()
+		}
+	}()
 	ports, reserved, err := newCorePorts()
 	if err != nil {
 		return nil, errors.New("core_ports_unavailable")
@@ -336,6 +347,7 @@ func newRouterNativeSession(ctx context.Context, log *logrus.Logger, conf *daeCo
 		return nil, err
 	}
 	s := &routerSingBoxSession{engine: engine, dnsBridge: bridge, done: make(chan error, 1), exit: make(chan struct{}), ports: ports, dir: dir, conf: conf, dirs: dirs, transparent: transparent, log: log, hasTor: hasTor}
+	s.conf, s.nodeDNSBridge = originalConf, nodeDNSBridge
 	data, err := json.Marshal(profile)
 	if err != nil {
 		_ = os.RemoveAll(dir)
@@ -541,6 +553,14 @@ func (s *routerSingBoxSession) Ready(ctx context.Context) error {
 }
 func (s *routerSingBoxSession) Stop(ctx context.Context) error {
 	s = s.current()
+	defer func() {
+		if s.dnsBridge != nil {
+			s.dnsBridge.Close()
+		}
+		if s.nodeDNSBridge != nil {
+			s.nodeDNSBridge.Close()
+		}
+	}()
 	s.ready.Store(false)
 	s.closeControlAPI()
 	if s.cmd != nil && s.cmd.Process != nil {
@@ -565,9 +585,6 @@ func (s *routerSingBoxSession) Stop(ctx context.Context) error {
 			_ = syscall.Kill(-s.cmd.Process.Pid, syscall.SIGKILL)
 			return errors.New("core_cleanup_failed")
 		}
-	}
-	if s.dnsBridge != nil {
-		s.dnsBridge.Close()
 	}
 	if s.owned {
 		if err := routerReleaseSingboxNetwork(s.dirs[0]); err != nil {

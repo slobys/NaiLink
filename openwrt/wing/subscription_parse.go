@@ -3,6 +3,7 @@ package subscription
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -32,6 +33,9 @@ func isSubscriptionContentError(err error) bool {
 var subscriptionScheme = regexp.MustCompile(`^[a-z][a-z0-9+.-]*://`)
 
 func decodeSubscriptionPayload(payload []byte) ([]string, error) {
+	return decodeSubscriptionPayloadContext(context.Background(), payload)
+}
+func decodeSubscriptionPayloadContext(ctx context.Context, payload []byte) ([]string, error) {
 	if len(payload) > 4<<20 {
 		return nil, subscriptionContentFailure("订阅内容超过 4 MiB，已保留原节点。")
 	}
@@ -83,7 +87,7 @@ func decodeSubscriptionPayload(payload []byte) ([]string, error) {
 	if plainFormat && len(plain) > 0 {
 		return validateSubscriptionLinks(plain)
 	}
-	return decodeClashSubscription(payload)
+	return decodeClashSubscriptionContext(ctx, payload)
 }
 
 func validateSubscriptionLinks(links []string) ([]string, error) {
@@ -129,6 +133,9 @@ func validateSubscriptionLinks(links []string) ([]string, error) {
 }
 
 func decodeClashSubscription(payload []byte) ([]string, error) {
+	return decodeClashSubscriptionContext(context.Background(), payload)
+}
+func decodeClashSubscriptionContext(ctx context.Context, payload []byte) ([]string, error) {
 	decoder := yaml.NewDecoder(bytes.NewReader(payload))
 	var doc yaml.Node
 	if e := decoder.Decode(&doc); e != nil || len(doc.Content) != 1 {
@@ -192,7 +199,11 @@ func decodeClashSubscription(payload []byte) ([]string, error) {
 	if invalid > 0 {
 		return nil, subscriptionContentFailure(fmt.Sprintf("Clash 订阅有 %d 项无法转换，未替换原节点：%s", invalid, strings.Join(problems, "；")))
 	}
-	return validateSubscriptionLinks(links)
+	valid, err := validateSubscriptionLinks(links)
+	if err == nil {
+		extractSubscriptionNodeDNS(ctx, root, proxies)
+	}
+	return valid, err
 }
 
 func validateSubscriptionYAML(node *yaml.Node, depth int, budget *int, active map[*yaml.Node]bool) error {

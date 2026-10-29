@@ -607,6 +607,9 @@ func (c *sbConverter) dns() (sbObject, string, error) {
 			return nil, "", errors.New("unsupported_dns_parameter")
 		}
 		servers = append(servers, server)
+		if name == "nailink_node_dns" && c.conf.Global.NailinkNodeDNS != "" {
+			delete(server, "detour")
+		}
 	}
 	if len(servers) == 0 {
 		servers = []sbObject{{"type": "local", "tag": "dns:local"}}
@@ -649,5 +652,13 @@ func (c *sbConverter) dns() (sbObject, string, error) {
 		rules = append([]sbObject{{"query_type": []string{blocked}, "action": "predefined", "rcode": "NOERROR"}}, rules...)
 	}
 	c.warnings = append(c.warnings, "sing-box 的节点域名引导解析使用首个直连 DNS 上游；其余 DNS 上游经默认群组。")
+	if c.conf.Global.NailinkNodeDNS != "" {
+		if host, port, err := net.SplitHostPort(c.conf.Global.BootstrapResolver); err == nil && net.ParseIP(host) != nil && net.ParseIP(host).IsLoopback() {
+			p, _ := strconv.Atoi(port)
+			bootstrap = "dns:nailink-node-server"
+			servers = append(servers, sbObject{"tag": bootstrap, "type": "udp", "server": host, "server_port": p})
+		}
+		c.warnings = append(c.warnings, "仅节点服务器域名使用订阅专用 DNS，网站 DNS 与分流规则保持不变。")
+	}
 	return sbObject{"servers": servers, "rules": rules, "final": final}, bootstrap, nil
 }

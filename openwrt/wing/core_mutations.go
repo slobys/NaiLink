@@ -7,7 +7,10 @@ import (
 	"github.com/daeuniverse/dae-wing/dae"
 )
 
-func (r *queryResolver) CoreStatus() string       { return dae.RouterCoreStatus() }
+func (r *queryResolver) CoreStatus() string { return dae.RouterCoreStatus() }
+func (r *queryResolver) CoreRuntimeGroups(ctx context.Context) string {
+	return dae.RouterCoreGroups(ctx)
+}
 func (r *queryResolver) CoreCapabilities() string { return dae.RouterCoreCapabilities() }
 func (r *queryResolver) CorePlan(ctx context.Context, args struct{ Target string }) string {
 	data, _ := json.Marshal(dae.RouterCorePlan(ctx, args.Target))
