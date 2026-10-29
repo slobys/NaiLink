@@ -243,7 +243,9 @@ func TestRouterCoreProtocolInteroperability(t *testing.T) {
 		})
 	}
 	t.Run("private-listener-collision", func(t *testing.T) {
-		busy, err := net.Listen("tcp4", "127.0.0.1:0")
+		// The preceding real protocols can leave automatic ports in TIME_WAIT.
+		// Allocate the occupied fixture reliably without weakening the collision.
+		busy, err := routerListenLoopback(net.Listen)
 		if err != nil {
 			t.Fatal(err)
 		}
