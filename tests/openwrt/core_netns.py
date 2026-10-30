@@ -178,7 +178,7 @@ subprocess.run(['nft','-f','-'],input=body.encode(),check=True)
     config=args.workspace/"config";config.mkdir(mode=0o700)
     output=(args.workspace/"daemon.log").open("w")
     if args.bridge:
-        run('nft','-f','-',input=b'table bridge nailink_test_trace { chain ingress { type filter hook prerouting priority -400; policy accept; meta l4proto tcp tcp dport 8080 meta nftrace set 1; } }\n')
+        run('nft','-f','-',input=b'table bridge nailink_test_trace {\n chain ingress {\n type filter hook prerouting priority -400; policy accept;\n meta l4proto tcp tcp dport 8080 meta nftrace set 1\n }\n}\n')
         trace_output=(args.workspace/'trace.log').open('w')
         trace_process=subprocess.Popen(['nft','monitor','trace'],stdout=trace_output,stderr=trace_output)
     def enter_daemon_cgroup():Path("/sys/fs/cgroup/cgroup.procs").write_text(str(os.getpid()))
