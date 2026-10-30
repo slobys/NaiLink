@@ -242,7 +242,9 @@ jobs:
           sudo env "PATH=$PATH" python3 tests/openwrt/core_netns.py --runtime "$PWD/.build/runtime/daed" --probe "$PWD/.build/runtime/btf-probe" --singbox /tmp/nailink-core-static/usr/bin/sing-box --nft-root / --workspace /tmp/nailink-core-netns --fw4 --ipv6
           sudo env "PATH=$PATH" python3 tests/openwrt/core_netns.py --runtime "$PWD/.build/runtime/daed" --probe "$PWD/.build/runtime/btf-probe" --singbox /tmp/nailink-core-static/usr/bin/sing-box --mihomo /tmp/nailink-mihomo-static/usr/bin/mihomo --target-core mihomo --nft-root / --workspace /tmp/nailink-mihomo-netns --fw4 --ipv6
           sudo env "PATH=$PATH" python3 tests/openwrt/core_netns.py --runtime "$PWD/.build/runtime/daed" --probe "$PWD/.build/runtime/btf-probe" --singbox /tmp/nailink-core-static/usr/bin/sing-box --nft-root / --workspace /tmp/nailink-singbox-tproxy --fw4 --ipv6 --mode tproxy
-          sudo modprobe -a br_netfilter nf_tables_bridge nft_meta_bridge
+          # Bridge family registration is integrated on newer kernels. The
+          # following namespace test verifies actual broute and TPROXY support.
+          sudo modprobe -a br_netfilter nft_meta_bridge
           sudo env "PATH=$PATH" python3 tests/openwrt/core_netns.py --runtime "$PWD/.build/runtime/daed" --probe "$PWD/.build/runtime/btf-probe" --singbox /tmp/nailink-core-static/usr/bin/sing-box --mihomo /tmp/nailink-mihomo-static/usr/bin/mihomo --target-core mihomo --nft-root / --workspace /tmp/nailink-mihomo-tproxy --fw4 --ipv6 --mode tproxy --bridge
       - name: LuCI gateway authentication and upgrade tests
         if: matrix.cpu == 'x86_64'
