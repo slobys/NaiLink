@@ -177,6 +177,10 @@ subprocess.run(['nft','-f','-'],input=body.encode(),check=True)
     print("Fixture DNS:",run("ip","netns","exec","core-client",sys.executable,Path(__file__).resolve(),"--client-dns","198.51.100.53","probe.test").strip(),flush=True)
     config=args.workspace/"config";config.mkdir(mode=0o700)
     output=(args.workspace/"daemon.log").open("w")
+    if args.bridge:
+        run('nft','-f','-',input=b'table bridge nailink_test_trace { chain ingress { type filter hook prerouting priority -400; policy accept; meta l4proto tcp tcp dport 8080 meta nftrace set 1; } }\n')
+        trace_output=(args.workspace/'trace.log').open('w')
+        trace_process=subprocess.Popen(['nft','monitor','trace'],stdout=trace_output,stderr=trace_output)
     def enter_daemon_cgroup():Path("/sys/fs/cgroup/cgroup.procs").write_text(str(os.getpid()))
     daemon=subprocess.Popen([args.runtime,"run","--config",str(config),"--listen","127.0.0.1:12025"],stdout=output,stderr=output,preexec_fn=enter_daemon_cgroup)
     opener=urllib.request.build_opener(urllib.request.ProxyHandler({}));token=""
@@ -346,6 +350,17 @@ subprocess.run(['nft','-f','-'],input=body.encode(),check=True)
         result.update(mode=args.mode,lan_udp=True,same_engine_mode_roundtrip=args.mode=='tproxy',real_tproxy_nftables=args.mode=='tproxy',production_tproxy_probe=args.mode=='tproxy',bridge_netfilter=args.bridge)
         (args.workspace/"result.json").write_text(json.dumps(result,indent=2));print(json.dumps(result),flush=True)
     finally:
+        if 'trace_process' in locals():
+            trace_process.terminate();trace_process.wait(timeout=5);trace_output.close()
+        if args.bridge:
+            for command in [('nft','list','ruleset'),('ip','-d','link'),('ip','neigh'),('sysctl','net.ipv4.conf.all.rp_filter','net.ipv4.conf.lan-port.rp_filter','net.ipv4.conf.all.src_valid_mark','net.ipv4.conf.lan-port.src_valid_mark')]:
+                try:print('BRIDGE DIAGNOSTIC',command,run(*command),flush=True)
+                except subprocess.CalledProcessError:pass
+            owner=config/'cores/network.json'
+            if owner.exists():print('NETWORK OWNER',owner.read_text(),flush=True)
+            for name in ['trace.log','daemon.log','server.log','packets.log','packets-daens.log']:
+                log=args.workspace/name
+                if log.exists():print('BRIDGE LOG',name,log.read_text(errors='replace')[-48000:],flush=True)
         if 'tcpdump' in locals():tcpdump.terminate();tcpdump.wait(timeout=5);capture.close()
         if 'tcpdump_ns' in locals():tcpdump_ns.terminate();tcpdump_ns.wait(timeout=5);capture_ns.close()
         for command in [("ip","rule"),("ip","route","show","table","all"),("tc","filter","show","dev","lan0","ingress"),("tc","filter","show","dev","wan0","egress")]:
