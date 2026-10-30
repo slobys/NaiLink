@@ -98,9 +98,9 @@ def client_dns(address,name):
     qtype=28 if name in ('probe6.test','ai6.test') else 1
     question=b"".join(bytes([len(p)])+p.encode() for p in name.split("."))+b"\0"+struct.pack('!HH',qtype,1)
     payload=struct.pack("!HHHHHH",12345,0x100,1,0,0,0)+question
-    with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as sock:
-        # A stable tuple across transitions detects stale DNS DNAT decisions.
-        sock.bind(('0.0.0.0',54053))
+    with socket.socket(socket.AF_INET6 if ':' in address else socket.AF_INET,socket.SOCK_DGRAM) as sock:
+        # Keep the same IPv4/IPv6 tuple across every transition.
+        sock.bind(('::' if ':' in address else '0.0.0.0',54053))
         sock.settimeout(8);sock.sendto(payload,(address,53));answer=sock.recv(8192)
     assert answer[:2]==payload[:2] and answer[3]&15==0 and struct.unpack("!H",answer[6:8])[0]>0,answer.hex()
     print(socket.inet_ntop(socket.AF_INET6,answer[-16:]) if qtype==28 else socket.inet_ntoa(answer[-4:]))
@@ -239,7 +239,7 @@ subprocess.run(['nft','-f','-'],input=body.encode(),check=True)
             destinations=[("probe.test","203.0.113.80"),("ai.test","203.0.113.81")]
             if args.ipv6:destinations.extend([('probe6.test','2001:db8:83::80'),('ai6.test','2001:db8:83::81')])
             for name,expected in destinations:
-                for resolver in ('198.51.100.53','10.81.0.1'):
+                for resolver in (['198.51.100.53','10.81.0.1','fd81:81::1'] if args.ipv6 else ['198.51.100.53','10.81.0.1']):
                     got=run("ip","netns","exec","core-client",sys.executable,Path(__file__).resolve(),"--client-dns",resolver,name).strip();assert got==expected,(label,resolver,name,got)
                 resolved='['+expected+']' if ':' in expected else expected
                 body=run("ip","netns","exec","core-client","curl","--noproxy","*","--resolve",f"{name}:8080:{resolved}","-fsS","-m","10",f"http://{name}:8080/identity")

@@ -2,6 +2,10 @@
 
 ## 0.6.58 可选非 TUN 接管
 
+- 发布流程 [41000611961](https://github.com/slobys/NaiLink/actions/runs/41000611961) 全部 29 项通过，包括真实桥接过滤、双栈数据路径、恢复和多架构安装包检查。79 个发布资产摘要与校验清单一致；下载的安装资产及源码中的全部 33 个变更文件与提交 `dbf04361bf9944e3c6478c5910d8655ca54505c2` 一致。
+- ARM64 / OpenWrt 25.12.5 安装该最终构建，运行 ELF 与发布 APK 匹配，停机备份为 `/root/daed-backups/20261030T042615Z-24888.tar.gz`。Mihomo 非 TUN → Mihomo TUN → sing-box 非 TUN → sing-box TUN → dae 每步都取得 Google 204、YouTube 204、ChatGPT robots.txt 200；15 次公共资源请求约 0.55–4.37 秒，非持续带宽或账号登录测试。另固定一个实机客户端 UDP DNS 会话，从 dae 出发经过上述模式并回到 dae，六个状态下旧会话和新会话均返回有答案的 NOERROR，无需清理客户端 DNS 或浏览器缓存。
+- 最终安装及全部实机往返后，191 个节点、4 个订阅、2 个群组、11 张用户表、规则文件和规则目录指针一致。恢复原 dae、稳定就绪且无未应用修改，只运行 daed，最后采样 RSS 约 91 MiB；Docker 桥接过滤仍为 1/1。额外 IPv6 DNS 传输回归也通过，两种接管方式均覆盖到路由器 DNS、外部 DNS 和固定会话，并纳入后续测试脚本。
+
 - 正式包实机补测进一步确认 TUN 的 DNS DNAT 使用虚拟网卡对端地址，而非独立 DNS 监听端口；切回 dae 时也需按已认领的 TUN 映射签名定向回收。加入 IPv4/IPv6、TCP/UDP 和非 DNS/非 NAT/其他 zone 保留测试，隔离回归同时复用到路由器 DNS 和外部 DNS 的固定会话。
 
 - 实机长寿命 UDP DNS 会话补测发现旧 DNAT 端口在切换后仍被连接跟踪复用，而新建会话正常。增加仅针对自有 DNS 监听端口及所选 LAN DNS 接管范围的连接跟踪重判，保留非 DNS 流量、其他网络、非零 zone 和 Tailscale MagicDNS；不执行全局 flush。隔离流量测试固定复用客户端 DNS 源端口，覆盖内核、模式和故障恢复往返。
