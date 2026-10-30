@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -247,6 +248,9 @@ func (s *routerSingBoxSession) watchTProxy() {
 					err = errors.New("core_network_check_failed")
 				}
 				if checks%10 == 0 {
+					if e := routerMaintainTProxyRouting(owner); e != nil {
+						err = e
+					}
 					attempt, stop := context.WithTimeout(ctx, 2*time.Second)
 					families, e := routerNftTablesFor(attempt, routerTPNft)
 					stop()
@@ -290,7 +294,8 @@ func (s *routerSingBoxSession) watchTProxy() {
 					return
 				}
 				if err != nil {
-					s.log.Warn("TPROXY local address refresh failed; restarting the managed core")
+					s.ready.Store(false)
+					s.log.WithField("code", err.Error()).Warn("TPROXY network check failed; restarting the managed core")
 					_ = s.cmd.Process.Signal(syscall.SIGTERM)
 					return
 				}
@@ -322,6 +327,79 @@ func routerTPRule(family int) *netlink.Rule {
 	r.Mark = routerTPMark
 	r.Mask = &mask
 	return r
+}
+
+// Check the private table before repairing anything. Never replace a foreign
+// route or rule, even if it reuses our reserved table number or priority.
+func routerTPRoutingMissing(family int, rules []netlink.Rule, routes []netlink.Route) (routeMissing, ruleMissing bool, err error) {
+	routeMissing, ruleMissing = true, true
+	expectedRule := routerTPRule(family)
+	for _, rule := range rules {
+		if rule.Table != routerTPTable && rule.Priority != routerTPTable {
+			continue
+		}
+		// Netlink adds protocol/type metadata when the rule is read back.
+		if rule.Type != 0 && rule.Type != syscall.RTN_UNICAST {
+			return false, false, errors.New("core_network_ownership_failed")
+		}
+		rule.Protocol, rule.Type = expectedRule.Protocol, expectedRule.Type
+		if !reflect.DeepEqual(rule, *expectedRule) {
+			return false, false, errors.New("core_network_ownership_failed")
+		}
+		ruleMissing = false
+	}
+	expectedRoute := routerTPRoute(family)
+	for _, route := range routes {
+		if route.Table != routerTPTable {
+			continue
+		}
+		if route.Type != expectedRoute.Type || route.LinkIndex != expectedRoute.LinkIndex || route.Gw != nil || len(route.MultiPath) != 0 || route.Dst != nil && route.Dst.String() != expectedRoute.Dst.String() {
+			return false, false, errors.New("core_network_ownership_failed")
+		}
+		routeMissing = false
+	}
+	return routeMissing, ruleMissing, nil
+}
+
+func routerMaintainTProxyRouting(owner routerCoreNetworkOwner) error {
+	if owner.Mode != "tproxy" || !owner.Active {
+		return errors.New("core_network_ownership_failed")
+	}
+	type repair struct {
+		family      int
+		route, rule bool
+	}
+	var repairs []repair
+	for _, family := range []int{netlink.FAMILY_V4, netlink.FAMILY_V6} {
+		if family == netlink.FAMILY_V6 && !owner.IPv6 {
+			continue
+		}
+		rules, err := netlink.RuleList(family)
+		if err != nil {
+			return errors.New("core_network_check_failed")
+		}
+		routes, err := netlink.RouteListFiltered(family, &netlink.Route{Table: routerTPTable}, netlink.RT_FILTER_TABLE)
+		if err != nil {
+			return errors.New("core_network_check_failed")
+		}
+		missingRoute, missingRule, err := routerTPRoutingMissing(family, rules, routes)
+		if err != nil {
+			return err
+		}
+		repairs = append(repairs, repair{family, missingRoute, missingRule})
+	}
+	for _, missing := range repairs {
+		if missing.route {
+			route := routerTPRoute(missing.family)
+			if netlink.RouteAdd(&route) != nil {
+				return errors.New("core_network_check_failed")
+			}
+		}
+		if missing.rule && netlink.RuleAdd(routerTPRule(missing.family)) != nil {
+			return errors.New("core_network_check_failed")
+		}
+	}
+	return nil
 }
 
 func routerActivateTProxy(root string) error {

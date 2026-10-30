@@ -303,6 +303,22 @@ subprocess.run(['nft','-f','-'],input=body.encode(),check=True)
                 time.sleep(.1)
             else:raise AssertionError('WAN address bypass set was not refreshed')
             run('ip','addr','del','203.0.113.91/32','dev','wan0')
+            # A network reload can remove policy routing without removing the
+            # nft table. Repair only our exact missing entries, keeping the
+            # current native process (and its established sessions) alive.
+            owner=json.loads((config/'cores/network.json').read_text())
+            native_pid=owner['pid']
+            run('ip','-4','rule','del','priority','20342','fwmark','0x4e4104','lookup','20342')
+            family='-6' if args.ipv6 else '-4'
+            run('ip',family,'route','del','local','default','dev','lo','table','20342')
+            for _ in range(350):
+                rules=json.loads(run('ip','-4','-j','rule'))
+                routes=json.loads(run('ip',family,'-j','route','show','table','20342'))
+                if any(str(rule.get('table'))=='20342' for rule in rules) and routes:break
+                time.sleep(.1)
+            else:raise AssertionError('TPROXY policy routing was not repaired')
+            assert json.loads((config/'cores/network.json').read_text())['pid']==native_pid,'routing repair restarted the native core'
+            traffic(args.target_core+' after policy routing loss')
         for device, direction in [('lan0', 'ingress'), ('wan0', 'egress')]:
             filters = json.loads(run('tc', '-j', 'filter', 'show', 'dev', device, direction))
             assert not any(item.get('kind') == 'bpf' for item in filters), 'previous dae capture remained attached'
@@ -355,7 +371,7 @@ subprocess.run(['nft','-f','-'],input=body.encode(),check=True)
         except RuntimeError as error:assert "core_rolled_back" in str(error),error
         traffic("automatic rollback");assert digest_database(config/"wing.db")==before
         result={"target_core":args.target_core,"real_bpf":True,"real_tun_nftables":True,"lan_dns_tcp_ai":True,"dae_optional_dae":True,"late_failure_rollback":True,"all_user_tables_preserved":True,"pending_edits_preserved":True,"singbox_stats":stats,"selected_core_http_udp_probes":True,"unexpected_exit_recovery":True,"wan_recovery":True,"fw4_reload_policies_preserved":args.fw4,"no_policy_rule_leaks":True,"ipv6":args.ipv6}
-        result.update(mode=args.mode,lan_udp=True,same_engine_mode_roundtrip=args.mode=='tproxy',real_tproxy_nftables=args.mode=='tproxy',production_tproxy_probe=args.mode=='tproxy',bridge_netfilter=args.bridge)
+        result.update(mode=args.mode,lan_udp=True,same_engine_mode_roundtrip=args.mode=='tproxy',real_tproxy_nftables=args.mode=='tproxy',production_tproxy_probe=args.mode=='tproxy',bridge_netfilter=args.bridge,tproxy_policy_routing_repair=args.mode=='tproxy')
         (args.workspace/"result.json").write_text(json.dumps(result,indent=2));print(json.dumps(result),flush=True)
     finally:
         if 'trace_process' in locals():

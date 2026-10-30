@@ -148,6 +148,7 @@ export const maintenanceMessages: Record<string, string> = {
   extra_dependency_failed: '扩展组件依赖检查失败，原组件、节点和配置保留。',
   extra_rollback_failed: '组件指针恢复未确认，旧版文件和配置保留，请检查日志。',
   core_incompatible: '兼容性检查未通过，原内核和配置保留。请查看检查报告。',
+  core_starting: '内核正在启动或恢复，请稍后重新读取状态；原配置保留。',
   core_configuration_changed: '运行配置或规则库已变化，请重新检查兼容性再切换。',
   mihomo_not_installed: '请先按需安装 mihomo 内核，当前内核和配置保留。',
   mihomo_version_mismatch: 'mihomo 版本校验未通过，请切换到其他内核后重新安装。',
@@ -162,6 +163,11 @@ export const maintenanceMessages: Record<string, string> = {
   core_configuration_check_timeout: '内核配置检查超时，原内核仍在运行。规则库较大时请稍后重试，并检查 CPU 和内存状态。',
   core_environment_unsupported: '系统能力检查未通过，请查看高级设置中的兼容性信息。',
   core_network_conflict: '检测到已有 TUN、路由标记或其他代理接管，未强制切换。',
+  core_network_check_failed: '透明代理的防火墙或策略路由检查失败，请查看恢复结果与运行日志；原配置保留。',
+  core_network_ownership_failed: '接管资源与 NaiLink 的记录不一致，已停止自动修改以保护其他服务；原配置保留。',
+  core_api_invalid: '内核管理接口返回异常数据，请重新读取状态并查看运行日志；原配置保留。',
+  core_recovery_snapshot_missing: '缺少内核恢复快照，已停止自动恢复；节点和配置保留，请查看日志后修复服务。',
+  core_recovery_snapshot_invalid: '内核恢复快照无法读取，已停止自动恢复；节点和配置保留，请查看日志后修复服务。',
   core_rolled_back: '目标内核未能就绪，已恢复原内核、节点和运行配置。',
   core_rollback_failed: '原内核自动恢复未完成，配置和恢复快照已保留。请重新启动服务并查看日志，避免卸载。',
   core_cleanup_failed: '目标内核资源清理未确认，为避免双重接管已停止切换。请重启服务并检查日志。',
@@ -212,7 +218,9 @@ export function coreProblemLabel(value: string) {
     const node = value.match(/^节点\s*\d+/)?.[0]
     return `${node ? `${node}：` : ''}节点包含尚未适配的附加参数，请重新检查兼容性以读取完整中文报告。`
   }
-  return /[\u3400-\u9FFF]/.test(value) ? value : '配置暂未通过兼容性检查，请查看运行日志；原配置保留。'
+  if (/[\u3400-\u9FFF]/.test(value)) return value
+  const code = /^[a-z][a-z0-9_]{0,63}$/.test(value) ? `（诊断码：${value}）` : ''
+  return `操作未完成${code}，请查看运行日志；原配置保留。`
 }
 
 export class MaintenanceAccessError extends Error {}

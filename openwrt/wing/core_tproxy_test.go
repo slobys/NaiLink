@@ -7,12 +7,110 @@ import (
 	"github.com/daeuniverse/dae-wing/routercore"
 	daeConfig "github.com/daeuniverse/dae/config"
 	"github.com/sirupsen/logrus"
+	"github.com/vishvananda/netlink"
 	"io"
 	"os"
 	"os/exec"
 	"strings"
 	"testing"
 )
+
+func TestRouterTProxyRoutingLossAndForeignOwnership(t *testing.T) {
+	for _, family := range []int{netlink.FAMILY_V4, netlink.FAMILY_V6} {
+		rule, route := *routerTPRule(family), routerTPRoute(family)
+		for _, tc := range []struct {
+			name                      string
+			rules                     []netlink.Rule
+			routes                    []netlink.Route
+			missingRoute, missingRule bool
+		}{
+			{"intact", []netlink.Rule{rule}, []netlink.Route{route}, false, false},
+			{"rule_removed", nil, []netlink.Route{route}, false, true},
+			{"route_removed", []netlink.Rule{rule}, nil, true, false},
+			{"both_removed", nil, nil, true, true},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				r, p, err := routerTPRoutingMissing(family, tc.rules, tc.routes)
+				if err != nil || r != tc.missingRoute || p != tc.missingRule {
+					t.Fatal(r, p, err)
+				}
+			})
+		}
+		for _, mutate := range []func(*netlink.Rule){
+			func(r *netlink.Rule) { r.Mark++ },
+			func(r *netlink.Rule) { r.Invert = true },
+			func(r *netlink.Rule) { r.IifName = "foreign" },
+			func(r *netlink.Rule) { r.Priority++ },
+			func(r *netlink.Rule) { r.Table++ },
+		} {
+			foreign := rule
+			mutate(&foreign)
+			if _, _, err := routerTPRoutingMissing(family, []netlink.Rule{rule, foreign}, []netlink.Route{route}); err == nil {
+				t.Fatal("a foreign rule must prevent repair of the reserved table")
+			}
+		}
+		foreign := route
+		foreign.Type = 1
+		if _, _, err := routerTPRoutingMissing(family, []netlink.Rule{rule}, []netlink.Route{foreign}); err == nil {
+			t.Fatal("accepted foreign route in the private table")
+		}
+	}
+}
+
+func TestRouterTProxyRoutingRepairsInIsolatedNamespace(t *testing.T) {
+	if os.Getenv("DAED_TEST_TPROXY_ROUTING") != "1" {
+		t.Skip("requires an isolated Linux root network namespace")
+	}
+	owner := routerCoreNetworkOwner{Mode: "tproxy", Active: true, IPv6: true}
+	for _, family := range []int{netlink.FAMILY_V4, netlink.FAMILY_V6} {
+		defer netlink.RuleDel(routerTPRule(family))
+		route := routerTPRoute(family)
+		defer netlink.RouteDel(&route)
+	}
+	for iteration := 0; iteration < 3; iteration++ {
+		if err := routerMaintainTProxyRouting(owner); err != nil {
+			t.Fatal(err)
+		}
+		// Repeated checks must not add duplicate rules or routes.
+		if err := routerMaintainTProxyRouting(owner); err != nil {
+			t.Fatal(err)
+		}
+		for _, family := range []int{netlink.FAMILY_V4, netlink.FAMILY_V6} {
+			rules, _ := netlink.RuleList(family)
+			routes, _ := netlink.RouteListFiltered(family, &netlink.Route{Table: routerTPTable}, netlink.RT_FILTER_TABLE)
+			r, p, err := routerTPRoutingMissing(family, rules, routes)
+			if err != nil || r || p || len(routes) != 1 {
+				t.Fatal("policy routing did not recover", r, p, routes, err)
+			}
+			if iteration != 1 {
+				if err := netlink.RuleDel(routerTPRule(family)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if iteration != 0 {
+				route := routerTPRoute(family)
+				if err := netlink.RouteDel(&route); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+	}
+	foreign := *routerTPRule(netlink.FAMILY_V6)
+	foreign.Mark++
+	if err := netlink.RuleAdd(&foreign); err != nil {
+		t.Fatal(err)
+	}
+	defer netlink.RuleDel(&foreign)
+	if err := routerMaintainTProxyRouting(owner); err == nil {
+		t.Fatal("modified a table containing a foreign rule")
+	}
+	rules, _ := netlink.RuleList(netlink.FAMILY_V4)
+	for _, rule := range rules {
+		if rule.Table == routerTPTable {
+			t.Fatal("IPv4 was changed before IPv6 ownership was checked")
+		}
+	}
+}
 
 func TestRouterTProxyBridgeRPF(t *testing.T) {
 	for _, tc := range []struct{ all, port, want string }{

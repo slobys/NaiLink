@@ -14,7 +14,7 @@ on:
     inputs:
       version:
         description: 'Package version (X.Y.Z), must match source'
-        default: '0.6.58'
+        default: '0.6.59'
         required: true
       publish:
         description: 'After all checks, upload to a release draft (main only)'
@@ -237,6 +237,7 @@ jobs:
           tar -xzf /tmp/nailink-mihomo-static/data.tar.gz -C /tmp/nailink-mihomo-static
           (cd wing && DAED_TEST_MIHOMO=/tmp/nailink-mihomo-static/usr/bin/mihomo DAED_TEST_SINGBOX=/tmp/nailink-core-static/usr/bin/sing-box go test -count=1 ./routercore ./dae)
           (cd wing && go test -c ./dae -o /tmp/nailink-dae-tests)
+          sudo unshare -n sh -c 'ip link set lo up; DAED_TEST_TPROXY_ROUTING=1 /tmp/nailink-dae-tests -test.run "^TestRouterTProxyRoutingRepairsInIsolatedNamespace$" -test.v'
           sudo unshare -n sh -c 'ip link set lo up; echo "40000 40031" > /proc/sys/net/ipv4/ip_local_port_range; DAED_ISOLATED_PORT_EXHAUSTION=1 /tmp/nailink-dae-tests -test.run "^TestPrivateListenerRealPortExhaustion$" -test.v'
           sudo env "PATH=$PATH" "GOCACHE=$(go env GOCACHE)" "GOMODCACHE=$(go env GOMODCACHE)" python3 tests/openwrt/protocol_interop.py --wing wing --sing-box /tmp/nailink-protocol-servers/sing-box-1.14.3-linux-amd64/sing-box --juicity-server /tmp/nailink-protocol-servers/juicity/juicity-server --client-singbox /tmp/nailink-core-static/usr/bin/sing-box --client-extra /tmp/nailink-extra-native --client-mihomo /tmp/nailink-mihomo-static/usr/bin/mihomo
           sudo env "PATH=$PATH" python3 tests/openwrt/core_netns.py --runtime "$PWD/.build/runtime/daed" --probe "$PWD/.build/runtime/btf-probe" --singbox /tmp/nailink-core-static/usr/bin/sing-box --nft-root / --workspace /tmp/nailink-core-netns --fw4 --ipv6

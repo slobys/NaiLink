@@ -108,6 +108,40 @@ func TestRouterCoreExitedSessionRecoversWithoutEditingConfig(t *testing.T) {
 	}
 }
 
+func TestRouterCoreInterruptedCrashRecoveryKeepsCurrentMode(t *testing.T) {
+	for _, mode := range []string{"tun", "tproxy"} {
+		t.Run(mode, func(t *testing.T) {
+			conf, dirs := coreFixtureConfig(t)
+			previousMode := "tun"
+			if mode == "tun" {
+				previousMode = "tproxy"
+			}
+			key := restartConfigKey(conf)
+			log := logrus.New()
+			log.SetOutput(io.Discard)
+			m := &routerCoreManager{root: dirs[0], conf: conf, log: log, state: routercore.State{Current: "sing-box", Previous: "mihomo", Mode: mode, PreviousMode: previousMode, Phase: "stable"}}
+			live := 0
+			m.factory = func(ctx context.Context, name string, c *daeConfig.Config) (routerCoreSession, error) {
+				// This is the durable snapshot a second process would see if power
+				// were lost while the replacement is starting.
+				pending, err := routercore.ReadState(dirs[0])
+				if err != nil || pending.Previous != name || pending.PreviousMode != mode || pending.TargetMode != mode || routerMode(ctx) != mode || restartConfigKey(c) != key {
+					t.Fatalf("interrupted recovery would restore a different mode: %+v, %v", pending, err)
+				}
+				live++
+				return &coreFakeSession{live: &live, done: make(chan error)}, nil
+			}
+			if err := m.recoverExited(); err != nil {
+				t.Fatal(err)
+			}
+			saved, err := routercore.ReadState(dirs[0])
+			if err != nil || saved.Mode != mode || saved.PreviousMode != mode || saved.TargetMode != "" || saved.Target != "" || saved.Phase != "stable" || live != 1 || restartConfigKey(conf) != key {
+				t.Fatalf("recovery did not retain the active mode: %+v, %v", saved, err)
+			}
+		})
+	}
+}
+
 func (s *coreFakeSession) Reload(*ReloadMessage) error { return nil }
 func (s *coreFakeSession) Ready(context.Context) error { return s.readyErr }
 func (s *coreFakeSession) Done() <-chan error          { return s.done }

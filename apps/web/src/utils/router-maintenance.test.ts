@@ -138,6 +138,12 @@ describe('maintenance state', () => {
   it('shows Chinese reports and safely translates legacy or unknown core errors', () => {
     expect(coreProblemLabel('节点 1：unsupported_node_option')).not.toContain('unsupported_')
     expect(coreProblemLabel('unknown_future_error')).toContain('原配置保留')
+    expect(coreProblemLabel('unknown_future_error')).toContain('诊断码：unknown_future_error')
+    expect(coreProblemLabel('unknown_future_error')).not.toContain('兼容性')
+    expect(coreProblemLabel('core_network_check_failed')).toContain('策略路由')
+    expect(coreProblemLabel('core_network_ownership_failed')).toContain('保护其他服务')
+    expect(coreProblemLabel('core_starting')).toContain('启动或恢复')
+    expect(coreProblemLabel('open /private/token=secret: denied')).not.toContain('secret')
     const report = '节点 2「AI」：UDP 开关格式异常（参数：udp）'
     expect(coreProblemLabel(report)).toBe(report)
   })

@@ -522,6 +522,7 @@ func Run(log *logrus.Logger, conf *daeConfig.Config, dirs []string, disableTimes
 	m.mu.Unlock()
 	if recovered != nil {
 		state.Target = ""
+		state.TargetMode = ""
 		state.Phase = "rolled_back"
 		state.Code = "core_interrupted_recovered"
 		if err = m.save(state, "ready"); err != nil {
@@ -630,6 +631,9 @@ func (m *routerCoreManager) recoverExited() error {
 		return err
 	}
 	state.Previous, state.Target, state.Phase, state.Running = state.Current, state.Current, "switching", conf != EmptyConfig
+	// This is a restart of the current core and mode, not a rollback to the
+	// selection that preceded the last successful switch.
+	state.PreviousMode, state.TargetMode = state.Mode, state.Mode
 	if err = m.save(state, "recovering"); err != nil {
 		return err
 	}
@@ -641,7 +645,7 @@ func (m *routerCoreManager) recoverExited() error {
 		_ = m.save(state, "failed")
 		return err
 	}
-	state.Target, state.Phase, state.Code = "", "stable", "core_restarted"
+	state.Target, state.TargetMode, state.Phase, state.Code = "", "", "stable", "core_restarted"
 	if err = m.save(state, "ready"); err != nil {
 		_ = session.Stop(ctx)
 		return err
