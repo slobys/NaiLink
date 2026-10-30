@@ -98,6 +98,7 @@ export const maintenanceMessages: Record<string, string> = {
   tproxy_bridge_unsupported:
     'LAN 桥接过滤需要 nftables broute 支持。请准备非 TUN 依赖（含 kmod-nft-bridge），仍不支持时选择 TUN；保留 Docker 桥接设置。',
   tproxy_bridge_rpf: '当前 LAN 桥接端口的反向路径检查与非 TUN 模式不兼容，请选择 TUN；保留系统安全设置。',
+  core_dns_session_failed: '处理旧 DNS 连接跟踪失败，请查看日志后重试；节点与配置保留。',
   tproxy_bridge_vlan_unsupported: '当前带 VLAN 的 LAN 桥接过滤拓扑暂不支持非 TUN，请选择 TUN；原有配置保留。',
   tproxy_tor_unsupported: '当前配置包含 Tor，非 TUN 模式暂不接管 Tor 子进程，请选择 TUN。节点与配置保留。',
   busy: '已有维护或安装任务正在执行，请稍后再试。',

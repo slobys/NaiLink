@@ -53,6 +53,7 @@ func ProblemText(code string) string {
 }
 
 var problemMessages = map[string]string{
+	"core_dns_session_failed":        "处理旧 DNS 连接跟踪失败，请查看日志后重试；节点与配置保留。",
 	"tproxy_tor_unsupported":         "当前配置包含 Tor 子进程，请选择 TUN，避免非 TUN 模式形成出站循环；节点与配置保留。",
 	"tproxy_bridge_unsupported":      "LAN 桥接过滤需要 nftables broute 支持。请准备固件匹配的非 TUN 依赖（含 kmod-nft-bridge），仍不支持时选择 TUN；不会关闭 Docker 桥接过滤。",
 	"tproxy_bridge_rpf":              "LAN 桥接端口启用了与非 TUN 转发不兼容的反向路径检查。请选择 TUN；NaiLink 不会修改系统安全设置。",

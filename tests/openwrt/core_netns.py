@@ -99,6 +99,8 @@ def client_dns(address,name):
     question=b"".join(bytes([len(p)])+p.encode() for p in name.split("."))+b"\0"+struct.pack('!HH',qtype,1)
     payload=struct.pack("!HHHHHH",12345,0x100,1,0,0,0)+question
     with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as sock:
+        # A stable tuple across transitions detects stale DNS DNAT decisions.
+        sock.bind(('0.0.0.0',54053))
         sock.settimeout(8);sock.sendto(payload,(address,53));answer=sock.recv(8192)
     assert answer[:2]==payload[:2] and answer[3]&15==0 and struct.unpack("!H",answer[6:8])[0]>0,answer.hex()
     print(socket.inet_ntop(socket.AF_INET6,answer[-16:]) if qtype==28 else socket.inet_ntoa(answer[-4:]))

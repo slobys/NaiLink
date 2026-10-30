@@ -362,7 +362,10 @@ func routerActivateTProxy(root string) error {
 	}
 	owner.Active = true
 	raw, _ := json.Marshal(owner)
-	return routercore.Write(routerOwnerPath(root), raw)
+	if err = routercore.Write(routerOwnerPath(root), raw); err != nil {
+		return err
+	}
+	return routerDNSClearConntrack(owner, true)
 }
 
 // Remove only the exact table/rules/routes reserved by a private claim. A
@@ -430,6 +433,9 @@ func routerReleaseTProxy(root string, owner routerCoreNetworkOwner) error {
 				return errors.New("core_cleanup_failed")
 			}
 		}
+	}
+	if err = routerDNSClearConntrack(owner, false); err != nil {
+		return err
 	}
 	if err = routerClearCoreFW4(ctx); err != nil {
 		return err

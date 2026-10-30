@@ -580,6 +580,8 @@ type Mutation {
         ("dae/router_core_tproxy.go", "core_tproxy.go"),
         ("dae/router_core_tproxy_bridge.go", "core_tproxy_bridge.go"),
         ("dae/router_core_tproxy_test.go", "core_tproxy_test.go"),
+        ("dae/router_core_dns_conntrack.go", "core_dns_conntrack.go"),
+        ("dae/router_core_dns_conntrack_test.go", "core_dns_conntrack_test.go"),
         ("dae/router_core_overview.go", "core_overview.go"),
         ("dae/router_core_config_test.go", "core_config_test.go"),
         ("dae/router_core_protocol_interop_test.go", "core_protocol_interop_test.go"),

@@ -503,6 +503,9 @@ func routerReleaseSingboxNetwork(root string) error {
 			return errors.New("core_cleanup_failed")
 		}
 	}
+	if err = routerDNSClearConntrack(owner, false); err != nil {
+		return err
+	}
 	if err = os.Remove(routerOwnerPath(root)); err != nil && !os.IsNotExist(err) {
 		return errors.New("core_state_failed")
 	}
