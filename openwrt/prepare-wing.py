@@ -25,6 +25,24 @@ TRANSACTION_DEFER = '''defer func() {
 
 
 def router_dns_expiry_test(text):
+    name = "func TestDnsController_RemoveDnsRespCache_RecomputesKnowledgeFromRemainingScopedEntries("
+    start = text.index(name)
+    end = text.index("\nfunc ", start + len(name))
+    body = text[start:end]
+    if "remainingExpiresAt" not in body:
+        expected = '''\trequire.Eventually(t, func() bool {
+\t\treturn !ctrl.HasDnsKnowledge(baseKey)
+\t}, 300*time.Millisecond, 10*time.Millisecond, "knowledge should expire with the last remaining scoped cache entry, not the removed one")'''
+        if "now.Add(25 * time.Millisecond)" not in body or expected not in body:
+            raise ValueError("Unknown DNS scoped knowledge test; review before applying")
+        body = body.replace('\trequire.NoError(t, ctrl.__updateDnsCacheDeadline', '\tfirstDeadline := time.Now().Add(time.Hour)\n\trequire.NoError(t, ctrl.__updateDnsCacheDeadline', 1)
+        body = body.replace('now.Add(25 * time.Millisecond)', 'firstDeadline').replace('now.Add(150 * time.Millisecond)', 'firstDeadline.Add(time.Hour)')
+        body = body.replace(expected, '''\tremainingExpiresAt, ok := ctrl.dnsKnowledge.Load(baseKey)
+\trequire.True(t, ok)
+\trequire.Equal(t, firstDeadline.UnixNano(), remainingExpiresAt, "knowledge must use the remaining scoped entry deadline")
+\tctrl.evictExpiredDnsCache(firstDeadline.Add(time.Nanosecond))
+\trequire.False(t, ctrl.HasDnsKnowledge(baseKey), "knowledge must expire with the last remaining scoped entry")''')
+        text = text[:start] + body + text[end:]
     # Expiry accepts an explicit instant. Do not require a QEMU runner to reach
     # the pre-expiry assertion in 20 ms, or weaken the cache/knowledge checks.
     name = "func TestDnsController_EvictExpiredDnsCache_RemovesKnowledgeForLastScopedEntry("
