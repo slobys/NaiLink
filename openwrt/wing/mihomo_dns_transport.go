@@ -146,65 +146,171 @@ func mhDNSReadOnly(q *dnsmessage.Msg) bool {
 func mhDNSStaleConnection(e error) bool {
 	return errors.Is(e, io.EOF) || errors.Is(e, io.ErrUnexpectedEOF) || errors.Is(e, net.ErrClosed) || errors.Is(e, syscall.ECONNRESET) || errors.Is(e, syscall.EPIPE)
 }
+
+type mhDNSWireResult struct {
+	answer  *dnsmessage.Msg
+	err     error
+	entry   *mhDNSWireConn
+	stopped bool
+}
+
+func (b *mhDNSBridge) finishWire(result mhDNSWireResult, keep bool) (*dnsmessage.Msg, error) {
+	if result.entry != nil {
+		b.wire.put(result.entry, keep && result.err == nil && result.stopped)
+	}
+	return result.answer, result.err
+}
+
+func (b *mhDNSBridge) queryWire(ctx context.Context, q *dnsmessage.Msg, key mhDNSWireKey, entry *mhDNSWireConn, connect func(context.Context) (net.Conn, error)) (result mhDNSWireResult) {
+	result.entry = entry
+	if result.err = ctx.Err(); result.err != nil {
+		return
+	}
+	if entry == nil {
+		conn, err := connect(ctx)
+		if err != nil {
+			result.err = err
+			return
+		}
+		entry, result.err = b.wire.add(key, conn)
+		if result.err != nil {
+			return
+		}
+	}
+	result.entry = entry
+	stop := context.AfterFunc(ctx, func() { _ = entry.conn.Close() })
+	deadline := time.Now().Add(5 * time.Second)
+	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
+		deadline = d
+	}
+	_ = entry.conn.SetDeadline(deadline)
+	udpSize := uint16(dnsmessage.MinMsgSize)
+	if opt := q.IsEdns0(); opt != nil && opt.UDPSize() > udpSize {
+		udpSize = opt.UDPSize()
+	}
+	client := &dnsmessage.Conn{Conn: entry.conn, UDPSize: udpSize}
+	result.err = client.WriteMsg(q)
+	if result.err == nil {
+		result.answer, result.err = client.ReadMsg()
+	}
+	if result.err == nil && !mhValidDNSAnswer(q, result.answer) {
+		result.err = errors.New("invalid_dns_reply")
+	}
+	result.stopped = stop()
+	if ctx.Err() != nil {
+		result.err = ctx.Err()
+	}
+	return
+}
+
 func (b *mhDNSBridge) exchangeWire(ctx context.Context, q *dnsmessage.Msg, key mhDNSWireKey, connect func(context.Context) (net.Conn, error)) (*dnsmessage.Msg, error) {
+	// Reconnection and any speculative backup share the caller's original budget.
+	if _, bounded := ctx.Deadline(); !bounded {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 6*time.Second)
+		defer cancel()
+	}
 	reusable := key.transport != "udp" && mhDNSReadOnly(q)
-	for attempt := 0; attempt < 2; attempt++ {
-		if e := ctx.Err(); e != nil {
-			return nil, e
-		}
-		var entry *mhDNSWireConn
+	var entry *mhDNSWireConn
+	if reusable {
 		var err error
-		if reusable && attempt == 0 {
-			entry, err = b.wire.take(key)
-			if err != nil {
-				return nil, err
-			}
-		}
-		reused := entry != nil
-		if entry == nil {
-			conn, e := connect(ctx)
-			if e != nil {
-				return nil, e
-			}
-			entry, e = b.wire.add(key, conn)
-			if e != nil {
-				return nil, e
-			}
-		}
-		stop := context.AfterFunc(ctx, func() { _ = entry.conn.Close() })
-		deadline := time.Now().Add(5 * time.Second)
-		if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
-			deadline = d
-		}
-		_ = entry.conn.SetDeadline(deadline)
-		udpSize := uint16(dnsmessage.MinMsgSize)
-		if opt := q.IsEdns0(); opt != nil && opt.UDPSize() > udpSize {
-			udpSize = opt.UDPSize()
-		}
-		client := &dnsmessage.Conn{Conn: entry.conn, UDPSize: udpSize}
-		err = client.WriteMsg(q)
-		var answer *dnsmessage.Msg
-		if err == nil {
-			answer, err = client.ReadMsg()
-		}
-		if err == nil && !mhValidDNSAnswer(q, answer) {
-			err = errors.New("invalid_dns_reply")
-		}
-		stopped := stop()
-		if ctx.Err() != nil {
-			err = ctx.Err()
-		}
-		b.wire.put(entry, reusable && err == nil && stopped)
-		if err == nil {
-			return answer, nil
-		}
-		// Rebuild a dead reused stream once, with the same route and deadline.
-		// Never retry a fresh connection, malformed reply or DNS update/transfer.
-		if !(reused && attempt == 0 && ctx.Err() == nil && mhDNSStaleConnection(err)) {
+		entry, err = b.wire.take(key)
+		if err != nil {
 			return nil, err
 		}
 	}
-	return nil, net.ErrClosed
+	if entry == nil {
+		return b.finishWire(b.queryWire(ctx, q, key, nil, connect), reusable)
+	}
+
+	// Only a read-only query on an established stream may use one same-path
+	// backup. Keep the original read alive: a slow valid response must not lose
+	// its deadline merely because a middlebox blackhole is also possible.
+	lifetime, cancel := context.WithCancel(ctx)
+	first := make(chan mhDNSWireResult, 1)
+	go func() { first <- b.queryWire(lifetime, q, key, entry, connect) }()
+	var backup chan mhDNSWireResult
+	started := false
+	var backupErr error
+	delay := 2 * time.Second
+	if deadline, ok := ctx.Deadline(); ok {
+		budget := time.Until(deadline)
+		if budget < time.Second {
+			delay = 0
+		} else {
+			delay = min(delay, budget/2)
+		}
+	}
+	var timer *time.Timer
+	var tick <-chan time.Time
+	if delay > 0 {
+		timer = time.NewTimer(delay)
+		tick = timer.C
+		defer timer.Stop()
+	}
+	defer func() {
+		cancel()
+		if first != nil {
+			b.finishWire(<-first, false)
+		}
+		if backup != nil {
+			b.finishWire(<-backup, false)
+		}
+	}()
+	startBackup := func() {
+		if started || ctx.Err() != nil {
+			return
+		}
+		started = true
+		tick = nil
+		backup = make(chan mhDNSWireResult, 1)
+		ch := backup
+		go func() { ch <- b.queryWire(lifetime, q, key, nil, connect) }()
+	}
+	for {
+		select {
+		case result := <-first:
+			first = nil
+			if result.err == nil {
+				return b.finishWire(result, true)
+			}
+			b.finishWire(result, false)
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			// Malformed responses, updates and caller cancellation are not retried.
+			if !mhDNSStaleConnection(result.err) {
+				var timeout net.Error
+				if !started || !errors.As(result.err, &timeout) || !timeout.Timeout() {
+					return nil, result.err
+				}
+			}
+			startBackup()
+			if backup == nil {
+				if ctx.Err() != nil {
+					return nil, ctx.Err()
+				}
+				return nil, backupErr
+			}
+		case result := <-backup:
+			backup = nil
+			if result.err == nil {
+				return b.finishWire(result, true)
+			}
+			b.finishWire(result, false)
+			backupErr = result.err
+			if first == nil {
+				if ctx.Err() != nil {
+					return nil, ctx.Err()
+				}
+				return nil, result.err
+			}
+		case <-tick:
+			startBackup()
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 }
 
 func (b *mhDNSBridge) dohClient(proxyPort int, dial func(context.Context, string, string) (net.Conn, error)) (*http.Client, error) {

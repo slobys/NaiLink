@@ -24,6 +24,43 @@ type coreFakeSession struct {
 	stopped           bool
 }
 
+type coreDeadlineSession struct {
+	coreFakeSession
+	cancel         context.CancelFunc
+	cleanupContext error
+}
+
+func (s *coreDeadlineSession) Ready(context.Context) error {
+	// Startup succeeds just as its transaction deadline is cancelled.
+	s.cancel()
+	return nil
+}
+
+func (s *coreDeadlineSession) Stop(ctx context.Context) error {
+	s.cleanupContext = ctx.Err()
+	if s.cleanupContext != nil {
+		return s.cleanupContext
+	}
+	return s.coreFakeSession.Stop(ctx)
+}
+
+func TestRouterCoreCancelledReadyCannotCommitLiveSession(t *testing.T) {
+	conf, dirs := coreFixtureConfig(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	live := 0
+	session := &coreDeadlineSession{coreFakeSession: coreFakeSession{live: &live, done: make(chan error)}, cancel: cancel}
+	m := &routerCoreManager{root: dirs[0], conf: conf}
+	m.factory = func(context.Context, string, *daeConfig.Config) (routerCoreSession, error) {
+		live++
+		return session, nil
+	}
+	active, err := m.start(ctx, "sing-box", conf)
+	if !errors.Is(err, context.Canceled) || active != nil || live != 0 || !session.stopped || session.cleanupContext != nil {
+		t.Fatalf("cancelled startup committed or cleanup reused the expired context: active=%v live=%d stopped=%v cleanup=%v error=%v", active != nil, live, session.stopped, session.cleanupContext, err)
+	}
+}
+
 func TestRouterCoreOldOptionalVersionRecoversAfterSameCoreRestart(t *testing.T) {
 	for _, previous := range []string{"dae", "sing-box", ""} {
 		t.Run(previous, func(t *testing.T) {

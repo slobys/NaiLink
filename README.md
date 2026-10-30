@@ -15,13 +15,15 @@
 
 管理节点、订阅和群组，测试节点延迟，查看实时流量，配置 DNS 与路由。支持电脑、手机和多种主题，沿用路由器 LuCI 登录，无需另设账户。
 
-基于 [daed](https://github.com/daeuniverse/daed) 二次开发，独立维护。当前版本为 **[0.6.59 测试版](https://github.com/slobys/NaiLink/releases/tag/openwrt-v0.6.59)**，提供 IPK / APK v3 安装包。
+基于 [daed](https://github.com/daeuniverse/daed) 二次开发，独立维护。当前版本为 **[0.6.60 测试版](https://github.com/slobys/NaiLink/releases/tag/openwrt-v0.6.60)**，提供 IPK / APK v3 安装包。
 
 新增 **mihomo 内核切换**，与 dae、sing-box 共用节点、订阅和配置。按需下载，切换前检查兼容性和实际连接，失败自动尝试恢复原内核。支持 x86_64 / ARM64。[支持范围与限制 →](docs/core-switching.md)
 
 **0.6.58 非 TUN 接管**：sing-box、mihomo 可选 **非 TUN（TPROXY）**，TUN 保留备用。点击顶部“内核”，选择接管方式，检查后切换；失败尝试恢复原内核与原模式。保留节点、订阅、分流和未应用的修改，升级不会自动改换现有模式。[使用方法与限制 →](docs/core-switching.md#接管方式)
 
 **0.6.59 恢复稳定性**：修复意外退出后再次中断可能恢复到错误接管模式的问题；非 TUN 模式检测并补回 NaiLink 自己缺失的策略路由，无需重启正常内核。细分启动、网络检查与资源冲突提示，保留节点和配置。
+
+**0.6.60 首次连接与切换保护**：复用 TCP / TLS DNS 连接迟迟不返回时，在原查询期限内最多发起一次同上游、同出口的备用查询，保留慢但有效的原响应并释放未使用的连接。统一三内核启动完成检查；超时或取消不提交新会话，失败清理使用独立时限。保留现有节点、配置和接管方式。
 
 保留 0.6.57 的节点 HTTPS DNS 策略、生效出口查看与统一测试口径。
 
@@ -42,7 +44,7 @@
 以 **root** 登录路由器 SSH，执行下面一行，打开中文菜单：
 
 ```sh
-uclient-fetch -O /tmp/nailink-install.sh https://github.com/slobys/NaiLink/releases/download/openwrt-v0.6.59/install.sh && sh /tmp/nailink-install.sh --menu --release openwrt-v0.6.59
+uclient-fetch -O /tmp/nailink-install.sh https://github.com/slobys/NaiLink/releases/download/openwrt-v0.6.60/install.sh && sh /tmp/nailink-install.sh --menu --release openwrt-v0.6.60
 ```
 
 选择 **1 安装 / 更新**。安装后运行 `nailink` 可再次打开菜单，也可选择 **2 卸载**、**3 检查环境** 或 **0 退出**。
@@ -57,7 +59,7 @@ uclient-fetch -O /tmp/nailink-install.sh https://github.com/slobys/NaiLink/relea
 
 保留 0.6.30 的代理就绪检查与有效 DNS 分流关联恢复，可用 `nailink --check-network` 查看诊断。[恢复机制与限制 →](https://slobys.github.io/NaiLink/maintenance.html#restart-recovery)
 
-旧版菜单遇到 Raw 下载失败时，可运行 `nailink --install --release openwrt-v0.6.59`。如果 GitHub 也无法解析，先检查路由器自身 DNS。[下载故障排查 →](https://slobys.github.io/NaiLink/troubleshooting.html#download)
+旧版菜单遇到 Raw 下载失败时，可运行 `nailink --install --release openwrt-v0.6.60`。如果 GitHub 也无法解析，先检查路由器自身 DNS。[下载故障排查 →](https://slobys.github.io/NaiLink/troubleshooting.html#download)
 
 **0.6.42 修复 Clash 订阅**：支持内嵌 `proxies` 的 YAML / JSON、SIP008 和普通 / Base64 节点列表；更新失败保留原节点，内容未变时保留节点 ID。仅提取节点，不导入订阅中的 DNS、路由或监听设置。[格式与限制 →](https://slobys.github.io/NaiLink/nodes.html#clash)
 
@@ -89,7 +91,7 @@ uclient-fetch -O /tmp/nailink-install.sh https://github.com/slobys/NaiLink/relea
 
 ## 源码与交流
 
-[完整源码包](https://github.com/slobys/NaiLink/releases/download/openwrt-v0.6.59/daed-openwrt-source.tar.gz) · [构建说明](openwrt/README.md#开发) · [验证记录](openwrt/VALIDATION.md) · [Logo](docs/site/assets/nailink-logo.png)
+[完整源码包](https://github.com/slobys/NaiLink/releases/download/openwrt-v0.6.60/daed-openwrt-source.tar.gz) · [构建说明](openwrt/README.md#开发) · [验证记录](openwrt/VALIDATION.md) · [Logo](docs/site/assets/nailink-logo.png)
 
 编译请使用完整源码包，或 `git clone --recurse-submodules https://github.com/slobys/NaiLink.git`。GitHub 的 Download ZIP 不包含后端子模块。
 

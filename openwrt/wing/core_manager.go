@@ -303,15 +303,38 @@ func (m *routerCoreManager) start(ctx context.Context, name string, conf *daeCon
 	if err != nil {
 		return nil, err
 	}
-	if err = session.Ready(ctx); err != nil {
-		stopCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		if stopErr := session.Stop(stopCtx); stopErr != nil {
+	if err = routerSessionReady(ctx, session); err != nil {
+		if stopErr := routerStopSession(session); stopErr != nil {
 			return nil, errors.New("core_cleanup_failed")
 		}
 		return nil, err
 	}
 	return session, nil
+}
+
+// Readiness and cleanup share the same transaction boundary for all cores.
+// A late Ready success must not commit a cancelled startup. Cleanup always has
+// its own bounded budget, even when startup or state persistence has timed out.
+func routerSessionReady(ctx context.Context, session routerCoreSession) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if session == nil {
+		return errors.New("core_start_failed")
+	}
+	if err := session.Ready(ctx); err != nil {
+		return err
+	}
+	return ctx.Err()
+}
+
+func routerStopSession(session routerCoreSession) error {
+	if session == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return session.Stop(ctx)
 }
 func (m *routerCoreManager) switchTo(ctx context.Context, target, revision string, operation ...string) error {
 	var modes []string
@@ -384,9 +407,7 @@ func (m *routerCoreManager) switchPrepared(ctx context.Context, target string, o
 			m.log.WithField("core", target).Info("Core switch confirmed")
 			return nil
 		}
-		stopCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		stopErr := candidate.Stop(stopCtx)
-		cancel()
+		stopErr := routerStopSession(candidate)
 		if stopErr != nil {
 			pending.Phase = "rollback_failed"
 			pending.Code = "core_cleanup_failed"
@@ -647,7 +668,9 @@ func (m *routerCoreManager) recoverExited() error {
 	}
 	state.Target, state.TargetMode, state.Phase, state.Code = "", "", "stable", "core_restarted"
 	if err = m.save(state, "ready"); err != nil {
-		_ = session.Stop(ctx)
+		if cleanupErr := routerStopSession(session); cleanupErr != nil {
+			return errors.New("core_cleanup_failed")
+		}
 		return err
 	}
 	m.mu.Lock()

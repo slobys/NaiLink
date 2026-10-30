@@ -187,7 +187,7 @@ func routerStartPrivateProbe(ctx context.Context, start func() (routerCoreSessio
 		if err != nil {
 			return nil, err
 		}
-		if err = session.Ready(ctx); err == nil {
+		if err = routerSessionReady(ctx, session); err == nil {
 			return session, nil
 		}
 		if routerStopProbe(session) != nil {

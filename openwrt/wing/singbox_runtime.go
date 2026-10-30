@@ -683,7 +683,7 @@ func (s *routerSingBoxSession) Reload(message *ReloadMessage) error {
 	}
 	candidate, err := newRouterNativeSession(ctx, old.log, conf, old.dirs, old.transparent, old.engine)
 	if err == nil {
-		err = candidate.Ready(ctx)
+		err = routerSessionReady(ctx, candidate)
 	}
 	if err == nil && message.Geodata != nil {
 		err = routerCommitGeodata(message.Geodata)
@@ -695,9 +695,7 @@ func (s *routerSingBoxSession) Reload(message *ReloadMessage) error {
 		return nil
 	}
 	if candidate != nil {
-		cleanup, stop := context.WithTimeout(context.Background(), 30*time.Second)
-		cleanupErr := candidate.Stop(cleanup)
-		stop()
+		cleanupErr := routerStopSession(candidate)
 		if cleanupErr != nil {
 			return errors.New("core_cleanup_failed")
 		}
@@ -712,11 +710,11 @@ func (s *routerSingBoxSession) Reload(message *ReloadMessage) error {
 	restoreCtx = routerModeContext(restoreCtx, old.ports.Mode)
 	restored, restoreErr := newRouterNativeSession(restoreCtx, old.log, old.conf, old.dirs, old.transparent, old.engine)
 	if restoreErr == nil {
-		restoreErr = restored.Ready(restoreCtx)
+		restoreErr = routerSessionReady(restoreCtx, restored)
 	}
 	if restoreErr != nil {
-		if restored != nil {
-			_ = restored.Stop(restoreCtx)
+		if cleanupErr := routerStopSession(restored); cleanupErr != nil {
+			return errors.New("core_cleanup_failed")
 		}
 		return errors.New("core_rollback_failed")
 	}

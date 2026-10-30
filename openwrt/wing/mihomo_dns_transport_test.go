@@ -170,6 +170,146 @@ func TestMihomoDNSRebuildsClosedTCP(t *testing.T) {
 	}
 }
 
+func TestMihomoDNSRebuildsSilentReusedStreamWithinQueryBudget(t *testing.T) {
+	for _, scenario := range []string{"tcp", "tls", "slow-valid", "backup-fails", "both-silent", "fresh-only", "stop-active", "update", "transfer"} {
+		t.Run(scenario, func(t *testing.T) {
+			transport := "tcp"
+			if scenario == "tls" {
+				transport = "tls"
+			}
+			listener, err := net.Listen("tcp4", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			counted := &mhCountDNSListener{Listener: listener}
+			var serving net.Listener = counted
+			connect := (&net.Dialer{}).DialContext
+			if transport == "tls" {
+				fixture := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+				t.Cleanup(fixture.Close)
+				serving = tls.NewListener(counted, fixture.TLS.Clone())
+				trust := fixture.Client().Transport.(*http.Transport).TLSClientConfig.Clone()
+				connect = (&tls.Dialer{Config: trust}).DialContext
+			}
+			var first atomic.Value
+			release := make(chan struct{})
+			backupSeen := make(chan struct{}, 1)
+			defer close(release)
+			server := &dnsmessage.Server{Listener: serving, Net: "tcp", Handler: dnsmessage.HandlerFunc(func(w dnsmessage.ResponseWriter, q *dnsmessage.Msg) {
+				if strings.HasPrefix(q.Question[0].Name, "warm.") {
+					first.Store(w.RemoteAddr().String())
+				} else if scenario == "slow-valid" || scenario == "backup-fails" {
+					// A backup must not shorten a slow but valid original response.
+					time.Sleep(1200 * time.Millisecond)
+				} else if scenario == "both-silent" || scenario == "fresh-only" || scenario == "stop-active" || scenario == "update" || scenario == "transfer" || w.RemoteAddr().String() == first.Load() {
+					if scenario == "stop-active" && w.RemoteAddr().String() != first.Load() {
+						select {
+						case backupSeen <- struct{}{}:
+						default:
+						}
+					}
+					// A middlebox silently drops the established stream without EOF.
+					<-release
+					return
+				}
+				_ = w.WriteMsg(mhTestDNSAnswer(q))
+			})}
+			go server.ActivateAndServe()
+			t.Cleanup(func() { _ = server.Shutdown() })
+			b, _ := mhTestDNSBridge(t, sbObject{"tag": "fixture", "type": "tcp", "server": "127.0.0.1", "server_port": listener.Addr().(*net.TCPAddr).Port})
+			if scenario == "stop-active" {
+				go func() {
+					select {
+					case <-backupSeen:
+						b.Close()
+					case <-release:
+					}
+				}()
+			}
+			names := []string{"warm.example.", "after-idle.example."}
+			if scenario == "fresh-only" {
+				names = names[1:]
+			}
+			for _, name := range names {
+				q := new(dnsmessage.Msg)
+				q.SetQuestion(name, dnsmessage.TypeA)
+				if name != "warm.example." {
+					if scenario == "update" {
+						q.Opcode = dnsmessage.OpcodeUpdate
+					}
+					if scenario == "transfer" {
+						q.Question[0].Qtype = dnsmessage.TypeAXFR
+					}
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), 1600*time.Millisecond)
+				answer, err := b.exchangeWire(ctx, q, mhDNSKey(transport, listener.Addr().String(), 0), func(ctx context.Context) (net.Conn, error) {
+					if scenario == "backup-fails" && counted.accepted.Load() > 0 {
+						return nil, errors.New("fixture_backup_unavailable")
+					}
+					return connect(ctx, "tcp", listener.Addr().String())
+				})
+				cancel()
+				if (scenario == "stop-active" || scenario == "update") && name != "warm.example." {
+					if err == nil {
+						t.Fatal("stopped bridge returned a successful query")
+					}
+					continue
+				}
+				if (scenario == "both-silent" || scenario == "fresh-only" || scenario == "transfer") && name != "warm.example." {
+					var timeout net.Error
+					if err == nil || !(errors.Is(err, context.DeadlineExceeded) || errors.As(err, &timeout) && timeout.Timeout()) {
+						t.Fatalf("silent connections extended the original budget: %v", err)
+					}
+					continue
+				}
+				if err != nil || !mhValidDNSAnswer(q, answer) || len(answer.Answer) != 1 {
+					t.Fatalf("first query after a silent stale stream did not recover within its original budget: %v", err)
+				}
+			}
+			wantConnections := int32(2)
+			if scenario == "backup-fails" || scenario == "fresh-only" {
+				wantConnections = 1
+			}
+			if counted.accepted.Load() != wantConnections {
+				t.Fatalf("want one bounded same-path reconnect, got %d connections", counted.accepted.Load())
+			}
+			b.wire.mu.Lock()
+			retained := len(b.wire.conns)
+			b.wire.mu.Unlock()
+			wantRetained := 1
+			if scenario == "both-silent" || scenario == "fresh-only" || scenario == "stop-active" {
+				wantRetained = 0
+			}
+			if retained != wantRetained {
+				t.Fatalf("losing or failed query retained a socket: %d", retained)
+			}
+		})
+	}
+}
+
+func TestMihomoDNSCancelledLeaseDoesNotLeakConnection(t *testing.T) {
+	b := &mhDNSBridge{}
+	local, remote := net.Pipe()
+	defer remote.Close()
+	defer b.wire.close()
+	key := mhDNSKey("tcp", "fixture:53", 0)
+	entry, err := b.wire.add(key, local)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	q := new(dnsmessage.Msg)
+	q.SetQuestion("cancelled.example.", dnsmessage.TypeA)
+	_, err = b.finishWire(b.queryWire(ctx, q, key, entry, func(context.Context) (net.Conn, error) {
+		t.Fatal("cancelled lease opened another connection")
+		return nil, nil
+	}), true)
+	if !errors.Is(err, context.Canceled) || len(b.wire.conns) != 0 {
+		t.Fatal("cancelled request retained a leased stream", err, len(b.wire.conns))
+	}
+}
+
 func TestMihomoDNSClosesCancelledUDP(t *testing.T) {
 	packet, e := net.ListenPacket("udp4", "127.0.0.1:0")
 	if e != nil {
