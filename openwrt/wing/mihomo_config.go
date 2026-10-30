@@ -4,6 +4,7 @@ package dae
 import (
 	"errors"
 	"fmt"
+	"net"
 	"sort"
 	"strconv"
 	"strings"
@@ -327,6 +328,11 @@ func mihomoFromCanonical(profile sbObject, conf *daeConfig.Config, ports sbPorts
 	result["tcp-concurrent"] = true
 	result["unified-delay"] = true
 	for _, in := range mhObjects(profile["inbounds"]) {
+		if in["type"] == "tproxy" {
+			result["tun"] = sbObject{"enable": false}
+			result["listeners"] = append(result["listeners"].([]sbObject), sbObject{"name": "lan-in", "type": "tproxy", "listen": routerTProxyListenAddress(), "port": ports.TProxy, "udp": true})
+			result["dns"].(sbObject)["listen"] = net.JoinHostPort(routerTProxyListenAddress(), strconv.Itoa(ports.DNS))
+		}
 		if in["type"] == "tun" {
 			result["tun"] = sbObject{"enable": true, "device": routercore.TunName, "stack": "system", "auto-route": true, "auto-redirect": true, "auto-detect-interface": route["auto_detect_interface"] == true, "strict-route": true, "mtu": 1500, "inet6-address": []string{"fdfe:daed::1/126"}, "iproute2-table-index": 20340, "iproute2-rule-index": 20340, "auto-redirect-iproute2-fallback-rule-index": 32768, "auto-redirect-input-mark": 0x4e4101, "auto-redirect-output-mark": 0x4e4102, "include-interface": in["include_interface"], "dns-hijack": []string{"any:53", "tcp://any:53"}}
 		}

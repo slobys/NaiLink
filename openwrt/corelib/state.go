@@ -14,7 +14,7 @@ import (
 
 const SingBoxVersion = "1.14.3-nailink.1"
 const SingBoxRelease = "openwrt-v0.6.35"
-const AdapterRevision = 8
+const AdapterRevision = 9
 const BinaryPath = "/usr/libexec/daed/cores/sing-box"
 const TunName = "nailink0"
 
@@ -26,15 +26,19 @@ var Releases = map[string]Release{
 }
 
 type State struct {
-	Operation string `json:"operation,omitempty"`
-	Current   string `json:"current"`
-	Previous  string `json:"previous,omitempty"`
-	Target    string `json:"target,omitempty"`
-	Phase     string `json:"phase"`
-	Code      string `json:"code,omitempty"`
-	Running   bool   `json:"running,omitempty"`
+	Mode         string `json:"mode,omitempty"`
+	PreviousMode string `json:"previous_mode,omitempty"`
+	TargetMode   string `json:"target_mode,omitempty"`
+	Operation    string `json:"operation,omitempty"`
+	Current      string `json:"current"`
+	Previous     string `json:"previous,omitempty"`
+	Target       string `json:"target,omitempty"`
+	Phase        string `json:"phase"`
+	Code         string `json:"code,omitempty"`
+	Running      bool   `json:"running,omitempty"`
 }
 type Plan struct {
+	Mode       string   `json:"mode"`
 	Target     string   `json:"target"`
 	Revision   string   `json:"revision"`
 	Compatible bool     `json:"compatible"`
@@ -46,6 +50,15 @@ type Plan struct {
 }
 
 func ValidCore(name string) bool { return name == "dae" || name == "sing-box" || name == "mihomo" }
+
+// Empty is the legacy TUN selection. Upgrades never change a working datapath.
+func CoreMode(mode string) string {
+	if mode == "" {
+		return "tun"
+	}
+	return mode
+}
+func ValidMode(mode string) bool { return CoreMode(mode) == "tun" || mode == "tproxy" }
 func Root(config string) string  { return filepath.Join(config, "cores") }
 
 // Never follow substituted private state directories or files.
@@ -118,12 +131,13 @@ func ReadState(config string) (State, error) {
 	}
 	data, err := Read(filepath.Join(root, "state.json"), 16384)
 	if os.IsNotExist(err) {
+		state.Mode = "tproxy"
 		return state, nil
 	}
 	if err != nil {
 		return state, err
 	}
-	if json.Unmarshal(data, &state) != nil || !ValidCore(state.Current) ||
+	if json.Unmarshal(data, &state) != nil || !ValidCore(state.Current) || !ValidMode(state.Mode) || !ValidMode(state.PreviousMode) || !ValidMode(state.TargetMode) ||
 		(state.Previous != "" && !ValidCore(state.Previous)) || (state.Target != "" && !ValidCore(state.Target)) {
 		return state, errors.New("unsafe_core_state")
 	}
@@ -138,7 +152,7 @@ func ReadState(config string) (State, error) {
 	return state, nil
 }
 func SaveState(config string, state State) error {
-	if !ValidCore(state.Current) {
+	if !ValidCore(state.Current) || !ValidMode(state.Mode) || !ValidMode(state.PreviousMode) || !ValidMode(state.TargetMode) {
 		return errors.New("invalid_core")
 	}
 	data, err := json.Marshal(state)

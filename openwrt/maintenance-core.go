@@ -24,6 +24,11 @@ import (
 var coreMaintenanceCodes = []string{"mihomo_not_installed", "mihomo_version_mismatch", "mihomo_configuration_invalid", "extra_not_installed", "extra_dependency_failed", "extra_rollback_failed", "core_incompatible", "core_configuration_changed", "singbox_not_installed", "singbox_version_mismatch", "singbox_configuration_invalid", "core_environment_unsupported", "core_network_conflict", "core_rolled_back", "core_rollback_failed", "core_cleanup_failed", "core_stop_failed", "core_state_failed", "core_snapshot_failed", "core_start_failed", "core_not_ready", "core_connectivity_failed", "core_dependency_failed", "core_exited", "core_not_running", "nftables_unavailable"}
 
 func coreMaintenanceCode(message string) string {
+	for _, code := range []string{"invalid_core_mode", "tproxy_tor_unsupported", "tproxy_environment_unsupported", "core_tun_unavailable", "tproxy_fw4_required", "tproxy_bridge_unsupported", "tproxy_bridge_rpf", "tproxy_bridge_vlan_unsupported"} {
+		if strings.Contains(message, code) {
+			return code
+		}
+	}
 	if message == "core_request_failed" {
 		return message
 	}
@@ -47,6 +52,15 @@ func uncertainCoreJob(job maintenanceJob) bool {
 	return job.Code == "backend_unavailable" || job.Code == "core_request_failed" || job.Code == "interrupted"
 }
 func coreMaintenanceAction(action string) bool {
+	if action == "core_prepare_tproxy" || action == "core_prepare_tun" {
+		return true
+	}
+	for _, suffix := range []string{"_tproxy", "_tun"} {
+		if strings.HasSuffix(action, suffix) {
+			base := strings.TrimSuffix(action, suffix)
+			return base == "core_check_singbox" || base == "core_check_mihomo" || base == "core_switch_singbox" || base == "core_switch_mihomo"
+		}
+	}
 	switch action {
 	case "core_check_dae", "core_check_singbox", "core_check_mihomo", "core_install_singbox", "core_install_mihomo", "core_install_extra", "core_switch_dae", "core_switch_singbox", "core_switch_mihomo":
 		return true
@@ -76,6 +90,7 @@ type optionalCoreStatus struct {
 	Version   string `json:"version"`
 }
 type coreMaintenanceStatus struct {
+	Mode         string                        `json:"mode"`
 	Engines      map[string]optionalCoreStatus `json:"engines"`
 	Current      string                        `json:"current"`
 	Phase        string                        `json:"phase"`
@@ -106,6 +121,7 @@ func (m *maintenanceManager) coreStatus() *coreMaintenanceStatus {
 	_, supported := routercore.Releases[runtime.GOARCH]
 	_, extraErr := routercore.ExtraDirectory(m.extraPath())
 	status := &coreMaintenanceStatus{Extra: extraErr == nil, ExtraVersion: routercore.ExtraVersion, Current: state.Current, Phase: state.Phase, Code: state.Code, Supported: supported, Version: routercore.SingBoxVersion}
+	status.Mode = routercore.CoreMode(state.Mode)
 	if st, err := os.Lstat(m.corePath()); err == nil && st.Mode().IsRegular() && st.Mode().Perm()&0022 == 0 && st.Mode().Perm()&0111 != 0 {
 		status.Installed = true
 	}
@@ -127,6 +143,9 @@ func (m *maintenanceManager) maintainCore(ctx context.Context, job *maintenanceJ
 		return errors.New("busy")
 	}
 	defer lock.Close()
+	if job.Action == "core_prepare_tproxy" || job.Action == "core_prepare_tun" {
+		return m.prepareCoreDependency(ctx, job, strings.TrimPrefix(job.Action, "core_prepare_"))
+	}
 	if job.Action == "core_install_extra" {
 		return m.installExtra(ctx, job)
 	}
@@ -136,18 +155,30 @@ func (m *maintenanceManager) maintainCore(ctx context.Context, job *maintenanceJ
 	if job.Action == "core_install_singbox" {
 		return m.installSingBox(ctx, job)
 	}
+	action, mode := job.Action, ""
+	for _, suffix := range []string{"_tproxy", "_tun"} {
+		if strings.HasSuffix(action, suffix) {
+			mode = strings.TrimPrefix(suffix, "_")
+			action = strings.TrimSuffix(action, suffix)
+			break
+		}
+	}
 	target := "dae"
-	if strings.HasSuffix(job.Action, "singbox") {
+	if strings.HasSuffix(action, "singbox") {
 		target = "sing-box"
-	} else if strings.HasSuffix(job.Action, "mihomo") {
+	} else if strings.HasSuffix(action, "mihomo") {
 		target = "mihomo"
 	}
 	job.Target = target
+	modeArgument := ""
+	if mode != "" {
+		modeArgument = `,mode:"` + mode + `"`
+	}
 	if strings.HasPrefix(job.Action, "core_check_") {
 		var reply struct {
 			CorePlan string `json:"corePlan"`
 		}
-		query := `{corePlan(target:"` + target + `")}`
+		query := `{corePlan(target:"` + target + `"` + modeArgument + `)}`
 		if err = m.graph(ctx, query, &reply); err != nil {
 			if err.Error() == "apply_failed" {
 				return errors.New("core_request_failed")
@@ -155,7 +186,7 @@ func (m *maintenanceManager) maintainCore(ctx context.Context, job *maintenanceJ
 			return err
 		}
 		var plan routercore.Plan
-		if json.Unmarshal([]byte(reply.CorePlan), &plan) != nil || plan.Target != target || !routercore.ValidRevision(plan.Revision) {
+		if json.Unmarshal([]byte(reply.CorePlan), &plan) != nil || plan.Target != target || mode != "" && plan.Mode != mode || !routercore.ValidRevision(plan.Revision) {
 			return errors.New("backend_unavailable")
 		}
 		if err = writeMaintenanceJSON(filepath.Join(m.stateDir, "core-plan.json"), storedCorePlan{plan, m.now().Unix()}); err != nil {
@@ -165,7 +196,7 @@ func (m *maintenanceManager) maintainCore(ctx context.Context, job *maintenanceJ
 		return nil
 	}
 	var saved storedCorePlan
-	if readMaintenanceJSON(filepath.Join(m.stateDir, "core-plan.json"), &saved) != nil || saved.Plan.Target != target || !saved.Plan.Compatible || !routercore.ValidRevision(saved.Plan.Revision) || m.now().Unix()-saved.Checked > 600 || saved.Checked > m.now().Unix()+60 {
+	if readMaintenanceJSON(filepath.Join(m.stateDir, "core-plan.json"), &saved) != nil || saved.Plan.Target != target || mode != "" && saved.Plan.Mode != mode || !saved.Plan.Compatible || !routercore.ValidRevision(saved.Plan.Revision) || m.now().Unix()-saved.Checked > 600 || saved.Checked > m.now().Unix()+60 {
 		return errors.New("check_required")
 	}
 	if err = m.save(job, "switching"); err != nil {
@@ -174,7 +205,7 @@ func (m *maintenanceManager) maintainCore(ctx context.Context, job *maintenanceJ
 	var result struct {
 		SwitchCore int `json:"switchCore"`
 	}
-	query := `mutation {switchCore(target:"` + target + `",revision:"` + saved.Plan.Revision + `",operation:"` + job.ID + `")}`
+	query := `mutation {switchCore(target:"` + target + `",revision:"` + saved.Plan.Revision + `",operation:"` + job.ID + `"` + modeArgument + `)}`
 	if err = m.graph(ctx, query, &result); err != nil {
 		if err.Error() == "apply_failed" {
 			return errors.New("core_request_failed")
@@ -185,6 +216,64 @@ func (m *maintenanceManager) maintainCore(ctx context.Context, job *maintenanceJ
 		return errors.New("core_not_ready")
 	}
 	return nil
+}
+
+// Installing a matching module does not stop the selected engine. Refuse a
+// solver plan that replaces existing packages (especially the running kernel).
+func (m *maintenanceManager) prepareCoreDependency(ctx context.Context, job *maintenanceJob, mode string) error {
+	pkg, module := "kmod-tun", "tun"
+	var extra []string
+	if mode == "tproxy" {
+		pkg, module = "kmod-nft-tproxy", "nft_tproxy"
+		extra = []string{"kmod-nft-bridge"}
+	} else if mode != "tun" {
+		return errors.New("invalid_core_mode")
+	}
+	if err := m.save(job, "dependencies"); err != nil {
+		return err
+	}
+	manager, check, install := "", []string{}, []string{}
+	if _, err := exec.LookPath("opkg"); err == nil {
+		manager = "opkg"
+		check = []string{"opkg", "--noaction", "install", pkg}
+		install = []string{"opkg", "install", pkg}
+	} else if _, err = exec.LookPath("apk"); err == nil {
+		manager = "apk"
+		check = []string{"apk", "add", "--simulate", pkg}
+		install = []string{"apk", "add", pkg}
+	}
+	if manager == "" {
+		return errors.New("core_dependency_failed")
+	}
+	check = append(check, extra...)
+	install = append(install, extra...)
+	plan, err := m.run(ctx, check...)
+	if err != nil || !safeCoreDependencyPlan(plan) {
+		return errors.New("core_dependency_failed")
+	}
+	if _, err = m.run(ctx, install...); err != nil {
+		return errors.New("core_dependency_failed")
+	}
+	if _, err = exec.LookPath("modprobe"); err == nil {
+		if _, err = m.run(ctx, "modprobe", module); err != nil {
+			return errors.New("core_dependency_failed")
+		}
+		if mode == "tproxy" {
+			if _, err = m.run(ctx, "modprobe", "nft_meta_bridge"); err != nil {
+				return errors.New("core_dependency_failed")
+			}
+		}
+	}
+	return nil
+}
+func safeCoreDependencyPlan(plan []byte) bool {
+	text := strings.ToLower(string(plan))
+	for _, word := range []string{"upgrading ", "downgrading ", "purging ", "removing ", "replacing ", "reinstalling ", "installing kernel ", "installing kernel("} {
+		if strings.Contains(text, word) {
+			return false
+		}
+	}
+	return true
 }
 func (m *maintenanceManager) mihomoPath() string {
 	if m.mihomoBinary != "" {
@@ -273,33 +362,8 @@ func (m *maintenanceManager) installOptionalCore(ctx context.Context, job *maint
 	if err != nil || !strings.HasPrefix(string(output), prefix) {
 		return errors.New(versionError)
 	}
-	// Install only the optional kernel module, using the router's own package
-	// manager/feeds. Never replace a kernel or change feeds to force compatibility.
-	if st, err := os.Stat("/dev/net/tun"); err != nil || st.Mode()&os.ModeCharDevice == 0 {
-		if err = m.save(job, "dependencies"); err != nil {
-			return err
-		}
-		if _, err := exec.LookPath("opkg"); err == nil {
-			if _, err = m.run(ctx, "opkg", "--noaction", "install", "kmod-tun"); err != nil {
-				return errors.New("core_dependency_failed")
-			}
-			if _, err = m.run(ctx, "opkg", "install", "kmod-tun"); err != nil {
-				return errors.New("core_dependency_failed")
-			}
-		} else if _, err := exec.LookPath("apk"); err == nil {
-			if _, err = m.run(ctx, "apk", "add", "--simulate", "kmod-tun"); err != nil {
-				return errors.New("core_dependency_failed")
-			}
-			if _, err = m.run(ctx, "apk", "add", "kmod-tun"); err != nil {
-				return errors.New("core_dependency_failed")
-			}
-		} else {
-			return errors.New("core_dependency_failed")
-		}
-	}
-	if _, err := exec.LookPath("modprobe"); err == nil {
-		_, _ = m.run(ctx, "modprobe", "tun")
-	}
+	// Datapath modules are prepared separately for the selected mode; installing
+	// an optional core must not require TUN when the user wants TPROXY.
 	if err = os.Chmod(path, 0755); err != nil {
 		return errors.New("state_failed")
 	}

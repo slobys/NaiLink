@@ -884,6 +884,10 @@ func maintenanceCLI(command, configDir, jobID string) {
 			fmt.Fprintln(os.Stderr, "NaiLink maintenance worker stopped")
 		}
 	default:
-		json.NewEncoder(os.Stdout).Encode(maintenanceStatus{Code: "invalid_action"})
+		if coreMaintenanceAction(command) {
+			json.NewEncoder(os.Stdout).Encode(manager.start(command))
+		} else {
+			json.NewEncoder(os.Stdout).Encode(maintenanceStatus{Code: "invalid_action"})
+		}
 	}
 }

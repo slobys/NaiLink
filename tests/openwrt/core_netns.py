@@ -10,6 +10,7 @@ import hashlib
 import http.server
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import socket
@@ -64,13 +65,22 @@ def serve_wan(args):
                 data=self.rfile.read(struct.unpack("!H",header)[0]);reply=dns_answer(data)
                 if not reply:return
                 self.wfile.write(struct.pack("!H",len(reply))+reply);self.wfile.flush()
-    servers=[http.server.ThreadingHTTPServer(("0.0.0.0",8080),HTTP),socketserver.ThreadingUDPServer(("198.51.100.53",53),UDP),socketserver.ThreadingTCPServer(("198.51.100.53",53),TCP)]
+    class Echo(socketserver.BaseRequestHandler):
+        def handle(self):
+            data,sock=self.request
+            if data==b'nailink-transparent-udp':sock.sendto(json.dumps({'peer':self.client_address[0]}).encode(),self.client_address)
+    servers=[http.server.ThreadingHTTPServer(("0.0.0.0",8080),HTTP),socketserver.ThreadingUDPServer(("198.51.100.53",53),UDP),socketserver.ThreadingTCPServer(("198.51.100.53",53),TCP),socketserver.ThreadingUDPServer(('0.0.0.0',9000),Echo)]
     if args.ipv6:
         class HTTP6(http.server.ThreadingHTTPServer):
             address_family=socket.AF_INET6
             def server_bind(self):
                 self.socket.setsockopt(socket.IPPROTO_IPV6,socket.IPV6_V6ONLY,1);super().server_bind()
         servers.append(HTTP6(("::",8080),HTTP))
+        class Echo6(socketserver.ThreadingUDPServer):
+            address_family=socket.AF_INET6
+            def server_bind(self):
+                self.socket.setsockopt(socket.IPPROTO_IPV6,socket.IPV6_V6ONLY,1);super().server_bind()
+        servers.append(Echo6(('::',9000),Echo))
     for server in servers:threading.Thread(target=server.serve_forever,daemon=True).start()
     config={"log":{"level":"info"},"inbounds":[{"type":"vless","tag":tag,"listen":"10.82.0.2","listen_port":port,"users":[{"uuid":uuid}]} for tag,port,uuid in [("proxy-in",3080,UUID_PROXY),("ai-in",3081,UUID_AI)]],"outbounds":[{"type":"direct","tag":"direct"}],"route":{"final":"direct"}}
     path=args.workspace/"server.json";path.write_text(json.dumps(config))
@@ -117,7 +127,12 @@ def inside(args):
     if args.mihomo:
         shutil.copy2(args.mihomo,private/"cores/mihomo");os.chmod(private/"cores/mihomo",0o755)
     shutil.copy2(args.probe,private/"btf-probe")
-    (private/"check").write_text('#!/bin/sh\nset -e\ncase "$2" in\n dae) exec /usr/libexec/daed/btf-probe --kernel ;;\n sing-box|mihomo) test -c /dev/net/tun; exec nft -j list tables ;;\n *) exit 1 ;;\nesac\n')
+    # Keep real production TPROXY capability syntax in the discovery shim;
+    # only the firmware/UCI discovery is replaced in this Linux namespace.
+    check_source=(PROJECT/'openwrt/files/daed-check').read_text()
+    tproxy_probe=re.search(r"if (printf 'table inet nailink_probe_.*?\| nft --check -f -) >/dev/null",check_source)
+    assert tproxy_probe, 'Missing production TPROXY environment probe'
+    (private/"check").write_text('#!/bin/sh\nset -e\ncase "$2" in\n dae) exec /usr/libexec/daed/btf-probe --kernel ;;\n sing-box|mihomo) if [ "$4" = tproxy ]; then '+tproxy_probe.group(1)+'; else test -c /dev/net/tun; fi; exec nft -j list tables ;;\n *) exit 1 ;;\nesac\n')
     os.chmod(private/"check",0o755)
     run("nft","add","table","inet","unrelated_sentinel")
     if args.fw4:
@@ -134,12 +149,19 @@ subprocess.run(['nft','-f','-'],input=body.encode(),check=True)
     run("ip","link","set","lo","up")
     for link,peer,space,local,remote in [("lan0","lan-peer","core-client","10.81.0.1/24","10.81.0.2/24"),("wan0","wan-peer","core-wan","10.82.0.1/24","10.82.0.2/24")]:
         run("ip","link","add",link,"type","veth","peer","name",peer);run("ip","link","set",peer,"netns",space)
+        physical=link
+        if link=='lan0' and args.bridge:
+            physical='lan-port';run('ip','link','set',link,'name',physical);run('ip','link','add',link,'type','bridge');run('ip','link','set',physical,'master',link);run('ip','link','set',physical,'up')
         run("ip","address","add",local,"dev",link);run("ip","link","set",link,"up")
         run("ip","netns","exec",space,"ip","link","set","lo","up");run("ip","netns","exec",space,"ip","address","add",remote,"dev",peer);run("ip","netns","exec",space,"ip","link","set",peer,"up")
         run("ip","netns","exec",space,"ip","route","add","default","via",local.split('/')[0])
-        run("ethtool","-K",link,"rx","off","tx","off")
+        run("ethtool","-K",physical,"rx","off","tx","off")
         run("ip","netns","exec",space,"ethtool","-K",peer,"rx","off","tx","off")
     run("ip","route","add","default","via","10.82.0.2","dev","wan0")
+    if args.bridge:
+        assert Path('/proc/sys/net/bridge/bridge-nf-call-iptables').exists(), 'Bridge netfilter is required for this fixture'
+        run('sysctl','-w','net.bridge.bridge-nf-call-iptables=1','net.bridge.bridge-nf-call-ip6tables=1')
+        run('nft','add','table','bridge','unrelated_bridge_sentinel')
     if args.ipv6:
         for iface,space,local,remote in [('lan0','core-client','fd81:81::1/64','fd81:81::2/64'),('wan0','core-wan','fd81:82::1/64','fd81:82::2/64')]:
             peer='lan-peer' if iface=='lan0' else 'wan-peer';run('ip','-6','addr','add',local,'dev',iface,'nodad');run('ip','netns','exec',space,'ip','-6','addr','add',remote,'dev',peer,'nodad');run('ip','netns','exec',space,'ip','-6','route','add','default','via',local.split('/')[0])
@@ -158,7 +180,9 @@ subprocess.run(['nft','-f','-'],input=body.encode(),check=True)
     def enter_daemon_cgroup():Path("/sys/fs/cgroup/cgroup.procs").write_text(str(os.getpid()))
     daemon=subprocess.Popen([args.runtime,"run","--config",str(config),"--listen","127.0.0.1:12025"],stdout=output,stderr=output,preexec_fn=enter_daemon_cgroup)
     opener=urllib.request.build_opener(urllib.request.ProxyHandler({}));token=""
-    def gql(query):
+    def gql(query, *, explicit_mode=False):
+        if not explicit_mode:
+            query=query.replace('corePlan(', 'corePlan(mode:'+json.dumps(args.mode)+',').replace('switchCore(', 'switchCore(mode:'+json.dumps(args.mode)+',')
         request=urllib.request.Request("http://127.0.0.1:12025/graphql",json.dumps({"query":query}).encode(),{"Content-Type":"application/json","Authorization":"Bearer "+token})
         with opener.open(request,timeout=160) as response:data=json.load(response)
         if data.get("errors"):raise RuntimeError(json.dumps(data["errors"]))
@@ -210,6 +234,11 @@ subprocess.run(['nft','-f','-'],input=body.encode(),check=True)
                 resolved='['+expected+']' if ':' in expected else expected
                 body=run("ip","netns","exec","core-client","curl","--noproxy","*","--resolve",f"{name}:8080:{resolved}","-fsS","-m","10",f"http://{name}:8080/identity")
                 assert json.loads(body)["peer"] not in ("10.81.0.2","10.82.0.1",'fd81:81::2','fd81:82::1'),(label,"traffic bypassed proxy",body)
+            # A real non-DNS UDP payload must traverse transparent ingress.
+            for address in (['203.0.113.80','2001:db8:83::80'] if args.ipv6 else ['203.0.113.80']):
+                code='import socket,json;address='+repr(address)+';s=socket.socket(socket.AF_INET6 if ":" in address else socket.AF_INET,socket.SOCK_DGRAM);s.settimeout(10);s.sendto(b"nailink-transparent-udp",(address,9000));print(s.recv(4096).decode())'
+                data=json.loads(run('ip','netns','exec','core-client',sys.executable,'-c',code))
+                assert data['peer'] not in ('10.81.0.2','10.82.0.1','fd81:81::2','fd81:82::1'),(label,'UDP bypassed proxy',data)
             # Simulate an old/poisoned client DNS cache. Domain dial mode must
             # route by the real HTTP host and let the proxy resolve it, without
             # requiring clients to flush caches after switching cores.
@@ -223,10 +252,45 @@ subprocess.run(['nft','-f','-'],input=body.encode(),check=True)
         gql('mutation{updateConfig(id:'+json.dumps(cid)+',global:{checkInterval:"601s"}){id}}')
         before=digest_database(config/"wing.db")
         original_rules=run('ip','-j','rule')
+        if args.bridge and args.mode=='tproxy':
+            keys=['net.ipv4.conf.all.rp_filter','net.ipv4.conf.lan-port.rp_filter']
+            previous={key:run('sysctl','-n',key).strip() for key in keys}
+            run('sysctl','-w',*(key+'=1' for key in keys))
+            blocked=json.loads(gql('{corePlan(target:"'+args.target_core+'")}')['corePlan'])
+            assert not blocked['compatible'] and 'tproxy_bridge_rpf' in blocked['problems'],blocked
+            assert json.loads(gql('{coreStatus}')['coreStatus'])['current']=='dae'
+            assert all(run('sysctl','-n',key).strip()=='1' for key in keys)
+            run('sysctl','-w',*(key+'='+value for key,value in previous.items()))
         plan=json.loads(gql('{corePlan(target:"'+args.target_core+'")}')["corePlan"]);assert plan["compatible"],plan
         gql('mutation{switchCore(target:"'+args.target_core+'",revision:'+json.dumps(plan["revision"])+')}')
         assert gql('{nodeLatencies(ids:'+json.dumps(node_ids)+'){alive}}')['nodeLatencies']==[], 'results from the previous core leaked'
         traffic(args.target_core);assert digest_database(config/"wing.db")==before,"switch modified user tables"
+        if args.mode=='tproxy':
+            assert not any(link['ifname']=='nailink0' for link in json.loads(run('ip','-j','link'))),'TPROXY unexpectedly created a TUN'
+            state=json.loads((config/'cores/state.json').read_text());assert state['mode']=='tproxy',state
+            owner=json.loads((config/'cores/network.json').read_text())
+            if args.fw4:run('nft','chain','inet','fw4','input','{ policy accept; }')
+            for port in (owner['proxy_port'],owner['dns_port']):
+                code='import socket\ntry:\n s=socket.create_connection(("10.82.0.1",'+str(port)+'),timeout=.5)\nexcept OSError:pass\nelse:raise AssertionError("WAN can access private managed listener")'
+                run('ip','netns','exec','core-wan',sys.executable,'-c',code)
+            if args.fw4:run('nft','chain','inet','fw4','input','{ policy drop; }')
+            keys=['net.ipv4.conf.all.rp_filter','net.ipv4.conf.lo.rp_filter','net.ipv4.conf.lan0.rp_filter']
+            previous={key:run('sysctl','-n',key).strip() for key in keys}
+            if not args.bridge:
+                run('sysctl','-w',*(key+'=1' for key in keys));traffic('TPROXY with strict reverse-path filtering')
+                run('sysctl','-w',*(key+'='+value for key,value in previous.items()))
+            for mode in ('tun','tproxy'):
+                plan=json.loads(gql('{corePlan(target:'+json.dumps(args.target_core)+',mode:'+json.dumps(mode)+')}',explicit_mode=True)['corePlan'])
+                assert plan['compatible'],plan
+                gql('mutation{switchCore(target:'+json.dumps(args.target_core)+',mode:'+json.dumps(mode)+',revision:'+json.dumps(plan['revision'])+')}',explicit_mode=True)
+                traffic('same engine mode '+mode)
+                assert any(link['ifname']=='nailink0' for link in json.loads(run('ip','-j','link')))==(mode=='tun')
+            run('ip','addr','add','203.0.113.91/32','dev','wan0')
+            for _ in range(60):
+                if '203.0.113.91' in run('nft','list','set','inet','nailink_tproxy','local4'):break
+                time.sleep(.1)
+            else:raise AssertionError('WAN address bypass set was not refreshed')
+            run('ip','addr','del','203.0.113.91/32','dev','wan0')
         for device, direction in [('lan0', 'ingress'), ('wan0', 'egress')]:
             filters = json.loads(run('tc', '-j', 'filter', 'show', 'dev', device, direction))
             assert not any(item.get('kind') == 'bpf' for item in filters), 'previous dae capture remained attached'
@@ -267,6 +331,11 @@ subprocess.run(['nft','-f','-'],input=body.encode(),check=True)
         assert run('ip','-j','rule')==original_rules,'managed policy rules leaked after switching back'
         assert not (config/'cores/network.json').exists() and not Path('/etc/nftables.d/0-nailink-core.nft').exists()
         run('nft','list','table','inet','unrelated_sentinel')
+        if args.bridge:
+            run('nft','list','table','bridge','unrelated_bridge_sentinel')
+            assert run('sysctl','-n','net.bridge.bridge-nf-call-iptables').strip()=='1'
+            assert run('sysctl','-n','net.bridge.bridge-nf-call-ip6tables').strip()=='1'
+            assert 'nailink_broute' not in run('nft','list','tables')
         managed=private/("cores/"+args.target_core);managed.rename(private/("cores/"+args.target_core+".real"))
         managed.write_text('#!/bin/sh\ncase "$1" in '+('version|check' if args.target_core=='sing-box' else '-v|-t')+') exec /usr/libexec/daed/cores/'+args.target_core+'.real "$@" ;; *) exit 77 ;; esac\n');managed.chmod(0o755)
         plan=json.loads(gql('{corePlan(target:"'+args.target_core+'")}')["corePlan"]);assert plan["compatible"],plan
@@ -274,6 +343,7 @@ subprocess.run(['nft','-f','-'],input=body.encode(),check=True)
         except RuntimeError as error:assert "core_rolled_back" in str(error),error
         traffic("automatic rollback");assert digest_database(config/"wing.db")==before
         result={"target_core":args.target_core,"real_bpf":True,"real_tun_nftables":True,"lan_dns_tcp_ai":True,"dae_optional_dae":True,"late_failure_rollback":True,"all_user_tables_preserved":True,"pending_edits_preserved":True,"singbox_stats":stats,"selected_core_http_udp_probes":True,"unexpected_exit_recovery":True,"wan_recovery":True,"fw4_reload_policies_preserved":args.fw4,"no_policy_rule_leaks":True,"ipv6":args.ipv6}
+        result.update(mode=args.mode,lan_udp=True,same_engine_mode_roundtrip=args.mode=='tproxy',real_tproxy_nftables=args.mode=='tproxy',production_tproxy_probe=args.mode=='tproxy',bridge_netfilter=args.bridge)
         (args.workspace/"result.json").write_text(json.dumps(result,indent=2));print(json.dumps(result),flush=True)
     finally:
         if 'tcpdump' in locals():tcpdump.terminate();tcpdump.wait(timeout=5);capture.close()
@@ -298,6 +368,8 @@ def main():
     parser.add_argument('--target-core',choices=['sing-box','mihomo'],default='sing-box')
     parser.add_argument('--fw4',action='store_true')
     parser.add_argument('--ipv6',action='store_true')
+    parser.add_argument('--mode',choices=['tun','tproxy'],default='tun')
+    parser.add_argument('--bridge',action='store_true')
     args=parser.parse_args();args.workspace=Path(args.workspace) if args.workspace else None
     if args.client_dns:return client_dns(*args.client_dns)
     if args.wan:return serve_wan(args)

@@ -5,6 +5,45 @@
 <p>
   建议先复制当前方案再修改，并保留原值。首次联网前不要同时更改接口、DNS、路由、协议参数，否则很难判断哪一步出了问题。
 </p>
+<h2 id="interception">非 TUN / TUN 接管怎么选</h2>
+<p>
+  0.6.58 起，点击顶部<strong>内核</strong>，为 sing-box、mihomo 选择<strong>非 TUN · TPROXY</strong>或<strong
+    >TUN · 备用</strong
+  >，检查通过后切换。dae 继续使用 eBPF。升级保留当前模式，节点、订阅和分流配置保持。
+</p>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>模式</th>
+        <th>怎么接管</th>
+        <th>系统前提</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>非 TUN · TPROXY</td>
+        <td>LAN → 独立防火墙规则与策略路由 → 当前内核 → 原有分流规则</td>
+        <td>firewall4、nftables、固件匹配的 kmod-nft-tproxy；桥接过滤还需 kmod-nft-bridge 与 broute 能力</td>
+      </tr>
+      <tr>
+        <td>TUN · 备用</td>
+        <td>LAN → nailink0 虚拟网卡 → 当前内核 → 原有分流规则</td>
+        <td>kmod-tun、nftables / firewall4</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+<p>
+  两种方式均支持 TCP / UDP 与 IPv4 / IPv6。内核自身出站、管理地址和私有网段跳过接管，避免循环；DNS
+  沿用现有分流。当前仍限 x86_64 / ARM64，Tor 子进程暂需
+  TUN。缺少模块时可点<strong>安装接管依赖</strong>再重新检查；不会为了安装模块而替换系统内核。
+</p>
+<p>
+  Docker 等服务开启桥接过滤时，会自动检查桥接适配能力，仅处理发往所选 LAN 桥自身 MAC 的公网
+  TCP/UDP，保留原桥接过滤设置。带 VLAN 或严格反向路径检查的桥接拓扑暂需使用 TUN；检查不通过时保留原模式。
+</p>
+<p>切换会短暂断连，失败尝试恢复原内核和原模式。非 TUN 不保证一定更快，建议按实际线路稳定性选择，不需要时可切回 TUN。</p>
 <h2 id="interfaces">LAN / WAN 接口怎么选</h2>
 <div class="table-wrap">
   <table>

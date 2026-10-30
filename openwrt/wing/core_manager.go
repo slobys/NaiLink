@@ -28,7 +28,7 @@ type routerCoreSession interface {
 	Stop(context.Context) error
 	Done() <-chan error
 }
-type routerCoreSwitch struct{ Target, Revision, Operation string }
+type routerCoreSwitch struct{ Target, Revision, Operation, Mode string }
 type routerCoreManager struct {
 	mu        sync.RWMutex
 	root      string
@@ -133,20 +133,30 @@ func RouterCoreStatus() string {
 	}{m.state, m.phase, m.dry, memory})
 	return string(data)
 }
-func RouterCorePlan(ctx context.Context, target string) routercore.Plan {
+func RouterCorePlan(ctx context.Context, target string, mode ...string) routercore.Plan {
 	m := currentRouterCoreManager()
 	if m == nil {
 		return routercore.Plan{Target: target, Problems: []string{"core_starting"}}
 	}
-	return m.plan(ctx, target)
+	return m.plan(ctx, target, mode...)
 }
-func (m *routerCoreManager) plan(ctx context.Context, target string) routercore.Plan {
+func (m *routerCoreManager) plan(ctx context.Context, target string, modes ...string) routercore.Plan {
 	m.mu.RLock()
 	conf := m.conf
 	current := m.state.Current
 	phase := m.phase
+	currentMode := routercore.CoreMode(m.state.Mode)
 	m.mu.RUnlock()
-	result := routercore.Plan{Target: target, Warnings: []string{}, Problems: []string{}}
+	mode := currentMode
+	if len(modes) > 0 {
+		mode = routercore.CoreMode(modes[0])
+	}
+	result := routercore.Plan{Target: target, Mode: mode, Warnings: []string{}, Problems: []string{}}
+	if !routercore.ValidMode(mode) {
+		result.Problems = append(result.Problems, "invalid_core_mode")
+		return result
+	}
+	ctx = routerModeContext(ctx, mode)
 	if !routercore.ValidCore(target) {
 		result.Problems = append(result.Problems, "invalid_core")
 		return result
@@ -158,7 +168,7 @@ func (m *routerCoreManager) plan(ctx context.Context, target string) routercore.
 	result.Nodes = len(conf.Node)
 	result.Groups = len(conf.Group)
 	result.Installed = target == "dae" || target == "sing-box" && routerSingBoxInstalled() || target == "mihomo" && routerMihomoInstalled()
-	result.Revision = routercore.Fingerprint([]any{current, target, conf, routerCurrentGeodataIdentity(m.dirs), result.Installed, routercore.SingBoxVersion, routercore.AdapterRevision, routerExtraIdentity(), routercore.MihomoVersion})
+	result.Revision = routercore.Fingerprint([]any{current, currentMode, target, mode, conf, routerCurrentGeodataIdentity(m.dirs), result.Installed, routercore.SingBoxVersion, routercore.AdapterRevision, routerExtraIdentity(), routercore.MihomoVersion})
 	var profile sbObject
 	if target == "dae" {
 		result.Problems = append(result.Problems, routerDaeNodeProblems(conf)...)
@@ -166,7 +176,7 @@ func (m *routerCoreManager) plan(ctx context.Context, target string) routercore.
 	if target != "dae" {
 		var warnings []string
 		var err error
-		ports := sbPorts{Mixed: 39001, API: 39002, DNS: 39003, Secret: "configuration-check-only"}
+		ports := sbPorts{Mixed: 39001, API: 39002, DNS: 39003, Mode: mode, TProxy: 39006, Secret: "configuration-check-only"}
 		profile, warnings, err = coreCanonicalConfig(conf, m.dirs, ports, !m.dry, target)
 		if err == nil && target == "mihomo" {
 			profile, err = mihomoFromCanonical(profile, conf, ports)
@@ -176,6 +186,9 @@ func (m *routerCoreManager) plan(ctx context.Context, target string) routercore.
 			warnings = append(warnings, "mihomo 自动选择使用 URL 健康检查；DNS 策略由 NaiLink 私有转发器保留，不迁移原内核 DNS 缓存。")
 		}
 		result.Warnings = warnings
+		if mode == "tproxy" {
+			result.Warnings = append(result.Warnings, "非 TUN 接管保留管理地址与私有网段直连，DNS 53 端口交给 NaiLink 处理；Tor 子进程需使用 TUN。")
+		}
 		if err != nil {
 			var nodes sbNodeProblems
 			if errors.As(err, &nodes) {
@@ -194,6 +207,11 @@ func (m *routerCoreManager) plan(ctx context.Context, target string) routercore.
 	}
 	if err := m.preflight(ctx, target); err != nil {
 		result.Problems = append(result.Problems, err.Error())
+	}
+	if target != "dae" && mode == "tproxy" && !m.dry && len(result.Problems) == 0 {
+		if err := routerTProxyPreflight(ctx, conf); err != nil {
+			result.Problems = append(result.Problems, err.Error())
+		}
 	}
 	if len(result.Problems) == 0 && target != "dae" {
 		if err := routerCheckNativeProfile(ctx, profile, target); err != nil {
@@ -241,8 +259,15 @@ func SwitchRouterCore(ctx context.Context, target, revision string, operation ..
 	if len(op) > 64 {
 		return errors.New("invalid_core_request")
 	}
+	mode := ""
+	if len(operation) > 1 {
+		mode = operation[1]
+		if !routercore.ValidMode(mode) {
+			return errors.New("invalid_core_request")
+		}
+	}
 	select {
-	case ChReloadConfigs <- &ReloadMessage{Core: &routerCoreSwitch{target, revision, op}, Callback: callback}:
+	case ChReloadConfigs <- &ReloadMessage{Core: &routerCoreSwitch{Target: target, Revision: revision, Operation: op, Mode: mode}, Callback: callback}:
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -266,6 +291,12 @@ func (m *routerCoreManager) save(state routercore.State, phase string) error {
 	return nil
 }
 func (m *routerCoreManager) start(ctx context.Context, name string, conf *daeConfig.Config) (routerCoreSession, error) {
+	if ctx.Value(routerModeKey{}) == nil {
+		m.mu.RLock()
+		mode := m.state.Mode
+		m.mu.RUnlock()
+		ctx = routerModeContext(ctx, mode)
+	}
 	ctx, cancel := context.WithTimeout(ctx, routerCoreStartTimeout(conf))
 	defer cancel()
 	session, err := m.factory(ctx, name, conf)
@@ -283,7 +314,11 @@ func (m *routerCoreManager) start(ctx context.Context, name string, conf *daeCon
 	return session, nil
 }
 func (m *routerCoreManager) switchTo(ctx context.Context, target, revision string, operation ...string) error {
-	plan := m.plan(ctx, target)
+	var modes []string
+	if len(operation) > 1 && operation[1] != "" {
+		modes = []string{operation[1]}
+	}
+	plan := m.plan(ctx, target, modes...)
 	if !plan.Compatible {
 		return errors.New("core_incompatible")
 	}
@@ -296,7 +331,14 @@ func (m *routerCoreManager) switchPrepared(ctx context.Context, target string, o
 	m.mu.RLock()
 	oldState, conf, old := m.state, m.conf, m.active
 	m.mu.RUnlock()
-	if oldState.Current == target {
+	mode := routercore.CoreMode(oldState.Mode)
+	if len(operation) > 1 && operation[1] != "" {
+		mode = routercore.CoreMode(operation[1])
+	}
+	if !routercore.ValidMode(mode) {
+		return errors.New("invalid_core_request")
+	}
+	if oldState.Current == target && routercore.CoreMode(oldState.Mode) == mode {
 		return nil
 	}
 	snapshot, err := conf.Marshal(2)
@@ -306,7 +348,7 @@ func (m *routerCoreManager) switchPrepared(ctx context.Context, target string, o
 	if err = routercore.Write(filepath.Join(routercore.Root(m.root), "previous.dae"), snapshot); err != nil {
 		return errors.New("core_snapshot_failed")
 	}
-	pending := routercore.State{Current: oldState.Current, Previous: oldState.Current, Target: target, Phase: "switching", Running: conf != EmptyConfig}
+	pending := routercore.State{Mode: oldState.Mode, PreviousMode: oldState.Mode, TargetMode: mode, Current: oldState.Current, Previous: oldState.Current, Target: target, Phase: "switching", Running: conf != EmptyConfig}
 	if len(operation) > 0 {
 		pending.Operation = operation[0]
 	}
@@ -327,10 +369,10 @@ func (m *routerCoreManager) switchPrepared(ctx context.Context, target string, o
 	m.mu.Lock()
 	m.active = nil
 	m.mu.Unlock()
-	candidate, err := m.start(ctx, target, conf)
+	candidate, err := m.start(routerModeContext(ctx, mode), target, conf)
 	if err == nil {
 		// The runtime must be ready before persisting the new selection.
-		stable := routercore.State{Current: target, Previous: oldState.Current, Phase: "stable", Running: conf != EmptyConfig}
+		stable := routercore.State{Mode: mode, PreviousMode: oldState.Mode, Current: target, Previous: oldState.Current, Phase: "stable", Running: conf != EmptyConfig}
 		stable.Operation = pending.Operation
 		err = routercore.SaveState(m.root, stable)
 		if err == nil {
@@ -366,9 +408,10 @@ func (m *routerCoreManager) switchPrepared(ctx context.Context, target string, o
 	}
 	rollbackCtx, cancel := context.WithTimeout(context.Background(), routerCoreStartTimeout(conf))
 	defer cancel()
-	restored, restoreErr := m.start(rollbackCtx, oldState.Current, conf)
+	restored, restoreErr := m.start(routerModeContext(rollbackCtx, oldState.Mode), oldState.Current, conf)
 	pending.Current = oldState.Current
 	pending.Target = ""
+	pending.TargetMode = ""
 	pending.Phase = "rolled_back"
 	pending.Code = "core_rolled_back"
 	if restoreErr != nil {
@@ -388,14 +431,14 @@ func (m *routerCoreManager) switchPrepared(ctx context.Context, target string, o
 }
 func (m *routerCoreManager) startInitial(state routercore.State, conf *daeConfig.Config) (routerCoreSession, routercore.State, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), routerCoreStartTimeout(conf))
-	initial, err := m.start(ctx, state.Current, conf)
+	initial, err := m.start(routerModeContext(ctx, state.Mode), state.Current, conf)
 	cancel()
 	if err == nil || state.Current == "dae" || err.Error() == "core_cleanup_failed" {
 		return initial, state, err
 	}
 	failed := state.Current
 	candidates := []string{}
-	if routercore.ValidCore(state.Previous) && state.Previous != failed {
+	if routercore.ValidCore(state.Previous) && (state.Previous != failed || routercore.CoreMode(state.Mode) != routercore.CoreMode(state.PreviousMode)) {
 		candidates = append(candidates, state.Previous)
 	}
 	if state.Previous != "dae" {
@@ -403,7 +446,7 @@ func (m *routerCoreManager) startInitial(state routercore.State, conf *daeConfig
 	}
 	for _, fallback := range candidates {
 		ctx, cancel = context.WithTimeout(context.Background(), routerCoreStartTimeout(conf))
-		initial, err = m.start(ctx, fallback, conf)
+		initial, err = m.start(routerModeContext(ctx, state.PreviousMode), fallback, conf)
 		cancel()
 		if err != nil {
 			if err.Error() == "core_cleanup_failed" {
@@ -412,6 +455,7 @@ func (m *routerCoreManager) startInitial(state routercore.State, conf *daeConfig
 			continue
 		}
 		state.Previous, state.Current, state.Target, state.Phase, state.Code = failed, fallback, "", "rolled_back", "core_startup_rolled_back"
+		state.Mode, state.PreviousMode, state.TargetMode = state.PreviousMode, state.Mode, ""
 		if saveErr := m.save(state, "ready"); saveErr != nil {
 			stopCtx, stopCancel := context.WithTimeout(context.Background(), 30*time.Second)
 			_ = initial.Stop(stopCtx)
@@ -448,6 +492,7 @@ func Run(log *logrus.Logger, conf *daeConfig.Config, dirs []string, disableTimes
 	if recovered != nil {
 		conf = recovered
 		state.Current = state.Previous
+		state.Mode = state.PreviousMode
 	}
 	m := &routerCoreManager{root: root, log: log, dirs: dirs, dry: dry, conf: conf, state: state, phase: "starting"}
 	m.preflight = func(ctx context.Context, target string) error {
@@ -512,7 +557,7 @@ func Run(log *logrus.Logger, conf *daeConfig.Config, dirs []string, disableTimes
 			}
 			if message.Core != nil {
 				ctx, cancel := context.WithTimeout(context.Background(), 260*time.Second)
-				err = m.switchTo(ctx, message.Core.Target, message.Core.Revision, message.Core.Operation)
+				err = m.switchTo(ctx, message.Core.Target, message.Core.Revision, message.Core.Operation, message.Core.Mode)
 				cancel()
 				message.Callback <- err
 				continue

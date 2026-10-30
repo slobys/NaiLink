@@ -11,6 +11,7 @@ import { coreProblemLabel, maintenanceMessages } from '~/utils/router-maintenanc
 const cores = ['dae', 'sing-box', 'mihomo'] as const
 type CoreName = (typeof cores)[number]
 interface LiveCore {
+  mode?: 'tun' | 'tproxy'
   current: string
   runtime: string
   running?: boolean
@@ -18,8 +19,8 @@ interface LiveCore {
 }
 const descriptions = {
   dae: 'eBPF 接管',
-  'sing-box': 'TUN · 多协议',
-  mihomo: 'TUN · Clash',
+  'sing-box': '多协议支持',
+  mihomo: 'Clash 生态',
 }
 function problemLabel(value: string) {
   return (
@@ -45,6 +46,7 @@ function problemLabel(value: string) {
 export function RouterCore() {
   const [open, setOpen] = useState(false)
   const [target, setTarget] = useState<CoreName>('dae')
+  const [mode, setMode] = useState<'tun' | 'tproxy'>('tproxy')
   const { query, mutation, busy } = useRouterMaintenance()
   const pendingMutations = useIsMutating()
   const core = query.data?.cores
@@ -63,11 +65,14 @@ export function RouterCore() {
   const lastCore = useRef<string | undefined>(undefined)
   useEffect(() => {
     if (!core?.current) return
-    if (lastCore.current && lastCore.current !== core.current) client.invalidateQueries()
-    lastCore.current = core.current
-  }, [client, core?.current])
+    const selection = `${core.current}:${core.mode || 'tun'}`
+    if (lastCore.current && lastCore.current !== selection) client.invalidateQueries()
+    lastCore.current = selection
+  }, [client, core?.current, core?.mode])
   const current = cores.includes(core?.current as CoreName) ? (core!.current as CoreName) : undefined
-  const plan = core?.plan?.target === target ? core.plan : undefined
+  const plan =
+    core?.plan?.target === target && (target === 'dae' || (core.plan.mode || 'tun') === mode) ? core.plan : undefined
+  const usingSelection = target === current && (target === 'dae' || mode === (core?.mode || 'tun'))
   const selectedCore =
     target === 'dae'
       ? undefined
@@ -81,9 +86,15 @@ export function RouterCore() {
   const installed = target === 'dae' || !!selectedCore?.installed
   const job = query.data?.job
   const suffix = target === 'sing-box' ? 'singbox' : target
+  const selectionSuffix =
+    target === 'dae' ? 'dae' : target === 'sing-box' ? (`singbox_${mode}` as const) : (`mihomo_${mode}` as const)
   const coreJob =
     job?.action.startsWith('core_') &&
-    (busy || job.action.endsWith(`_${suffix}`) || (target === 'sing-box' && job.action === 'core_install_extra'))
+    (busy ||
+      job.action === `core_prepare_${mode}` ||
+      job.action.endsWith(`_${selectionSuffix}`) ||
+      job.action.endsWith(`_${suffix}`) ||
+      (target === 'sing-box' && job.action === 'core_install_extra'))
       ? job
       : undefined
   const ready = !!plan?.compatible && /^[a-f0-9]{64}$/i.test(plan.revision)
@@ -105,12 +116,14 @@ export function RouterCore() {
       ? maintenanceMessages[coreJob.code || ''] || maintenanceMessages.operation_failed
       : coreJob?.state === 'success'
         ? coreJob.action.startsWith('core_switch_')
-          ? `切换完成，当前内核：${current || '读取中'}`
+          ? `切换完成，当前内核：${current || '读取中'}${current && current !== 'dae' ? (core?.mode === 'tproxy' ? ' · 非 TUN' : ' · TUN') : ''}`
           : coreJob.action === 'core_install_extra'
             ? '扩展协议包已安装，现有节点和配置保留。'
             : coreJob.action.startsWith('core_install_')
               ? '内核已安装，请检查兼容性后再切换。'
-              : undefined
+              : coreJob.action.startsWith('core_prepare_')
+                ? '接管依赖已安装，请重新检查兼容性。'
+                : undefined
         : coreJob
           ? '正在处理，请勿断电。关闭窗口后，后台任务仍会继续。'
           : undefined
@@ -128,6 +141,7 @@ export function RouterCore() {
         aria-label={`代理内核 ${current || '未知'}，检查和切换`}
         onClick={() => {
           setTarget(current || 'dae')
+          setMode(core?.mode || 'tun')
           setOpen(true)
           query.refetch()
         }}
@@ -181,6 +195,11 @@ export function RouterCore() {
                   : '安装的其他内核不使用时不会运行。'}
               </p>
             </section>
+            {current !== 'dae' && (
+              <p className="text-xs text-muted-foreground" data-core-current-mode>
+                当前接管：{core?.mode === 'tproxy' ? '非 TUN · TPROXY' : 'TUN'}
+              </p>
+            )}
             <section aria-label="选择目标内核">
               <div className="mb-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
                 <span>选择内核</span>
@@ -233,7 +252,7 @@ export function RouterCore() {
                 data-core-selection
               >
                 {target} · {descriptions[target]} ·{' '}
-                {current === target
+                {usingSelection
                   ? '正在使用'
                   : target !== 'dae' && selectedCore?.supported === false
                     ? '当前架构不支持'
@@ -242,6 +261,44 @@ export function RouterCore() {
                       : '需先下载安装'}
               </p>
             </section>
+            {target !== 'dae' && (
+              <section aria-label="接管方式" className="space-y-2">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>接管方式</span>
+                  <span>设备无需单独设置代理</span>
+                </div>
+                <div
+                  role="group"
+                  aria-label="接管方式"
+                  className="grid grid-cols-2 gap-1 rounded-xl border bg-muted/40 p-1"
+                >
+                  {(['tproxy', 'tun'] as const).map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      data-core-mode={value}
+                      aria-pressed={mode === value}
+                      disabled={busy}
+                      onClick={() => setMode(value)}
+                      className={cn(
+                        'flex min-h-11 items-center justify-center gap-1 rounded-lg px-2 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-50',
+                        mode === value
+                          ? 'bg-primary text-primary-foreground shadow-sm'
+                          : 'text-muted-foreground hover:bg-background hover:text-foreground',
+                      )}
+                    >
+                      {mode === value && <Check className="size-3 shrink-0" aria-hidden="true" />}
+                      {value === 'tproxy' ? '非 TUN · TPROXY' : 'TUN · 备用'}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {mode === 'tproxy'
+                    ? '通过防火墙接管 TCP / UDP，无需虚拟网卡；需固件支持 TPROXY。'
+                    : '通过虚拟网卡接管。非 TUN 模式不兼容时可切回此模式。'}
+                </p>
+              </section>
+            )}
             {target !== 'dae' && (!installed || repairCore) && (
               <section className="space-y-2 text-sm" aria-label="安装可选内核">
                 <p className="text-xs leading-relaxed text-muted-foreground">
@@ -274,6 +331,23 @@ export function RouterCore() {
                     ))}
                   </ul>
                 )}
+                {target !== 'dae' &&
+                  plan.problems.some(
+                    (value) =>
+                      value === 'tproxy_environment_unsupported' ||
+                      value === 'tproxy_bridge_unsupported' ||
+                      value === 'core_environment_unsupported' ||
+                      value === 'core_tun_unavailable',
+                  ) && (
+                    <Button
+                      variant="outline"
+                      className="min-h-11 w-full"
+                      disabled={blocked}
+                      onClick={() => mutation.mutate(`core_prepare_${mode}`)}
+                    >
+                      安装接管依赖
+                    </Button>
+                  )}
                 {!!plan.warnings?.length && (
                   <details className="rounded-lg border px-3 py-2 text-xs" data-core-behavior>
                     <summary className="cursor-pointer py-1 font-medium">
@@ -298,7 +372,7 @@ export function RouterCore() {
                   保留节点、订阅、群组和未应用的修改，仅切换当前运行配置。切换会短暂断连，失败自动尝试恢复原内核，请勿断电。
                 </p>
                 <p>
-                  dae 使用 eBPF；sing-box、mihomo 使用 TUN / nftables，目前支持
+                  dae 使用 eBPF；sing-box、mihomo 可选非 TUN（TPROXY）或 TUN，目前支持
                   x86_64、ARM64。安装程序占用存储空间，不等于同时占用运行内存。
                 </p>
                 <p>
@@ -393,16 +467,22 @@ export function RouterCore() {
                 variant="outline"
                 className="h-auto min-h-11 min-w-0 whitespace-normal px-2 py-2 text-xs sm:text-sm"
                 disabled={blocked || !installed}
-                onClick={() => mutation.mutate(`core_check_${suffix}`)}
+                onClick={() => mutation.mutate(`core_check_${selectionSuffix}`)}
               >
                 检查兼容性
               </Button>
               <Button
                 className="h-auto min-h-11 min-w-0 whitespace-normal px-2 py-2 text-xs sm:text-sm"
-                disabled={blocked || !ready || target === current}
-                onClick={() => mutation.mutate(`core_switch_${suffix}`)}
+                disabled={blocked || !ready || usingSelection}
+                onClick={() => mutation.mutate(`core_switch_${selectionSuffix}`)}
               >
-                {target === current ? '正在使用' : `切换到 ${target}`}
+                {usingSelection
+                  ? '正在使用'
+                  : target === current
+                    ? mode === 'tproxy'
+                      ? '启用非 TUN'
+                      : '启用 TUN'
+                    : `切换到 ${target}`}
               </Button>
             </div>
           </div>

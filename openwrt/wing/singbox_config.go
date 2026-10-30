@@ -26,6 +26,8 @@ type sbObject = routercore.Object
 type sbPorts struct {
 	Mixed, API, DNS int
 	Secret          string
+	Mode            string
+	TProxy          int
 }
 type sbConverter struct {
 	conf     *daeConfig.Config
@@ -254,6 +256,11 @@ func coreCanonicalConfig(conf *daeConfig.Config, dirs []string, ports sbPorts, t
 		return nil, nil, err
 	}
 	route := sbObject{"rules": routeRules, "final": final, "auto_detect_interface": true, "default_domain_resolver": sbObject{"server": bootstrap}}
+	// sing-tun owns its output mark. Setting default_mark alongside automatic
+	// TUN redirection is accepted by `check` but fails on the first real dial.
+	if !transparent || routercore.CoreMode(ports.Mode) == "tproxy" {
+		route["default_mark"] = routerBypassMark
+	}
 	if len(conf.Global.WanInterface) == 1 && conf.Global.WanInterface[0] != "auto" {
 		delete(route, "auto_detect_interface")
 		route["default_interface"] = conf.Global.WanInterface[0]
@@ -271,7 +278,20 @@ func coreCanonicalConfig(conf *daeConfig.Config, dirs []string, ports sbPorts, t
 		if len(conf.Global.LanInterface) == 0 {
 			return nil, nil, errors.New("missing_lan_interface")
 		}
-		inbounds = append(inbounds, sbObject{"type": "tun", "tag": "lan-in", "interface_name": routercore.TunName, "address": []string{"198.19.255.1/30", "fdfe:daed::1/126"}, "mtu": 1500, "auto_route": true, "auto_redirect": true, "strict_route": true, "stack": "system", "iproute2_table_index": 20340, "iproute2_rule_index": 20340, "auto_redirect_iproute2_fallback_rule_index": 32768, "auto_redirect_input_mark": "0x4e4101", "auto_redirect_output_mark": "0x4e4102", "auto_redirect_reset_mark": "0x4e4103", "include_interface": conf.Global.LanInterface})
+		if routercore.CoreMode(ports.Mode) == "tproxy" {
+			if ports.TProxy < 1 || ports.TProxy > 65535 {
+				return nil, nil, errors.New("core_ports_unavailable")
+			}
+			for _, out := range outbounds {
+				if routercore.NativeFeature(out) == "tor" {
+					return nil, nil, errors.New("tproxy_tor_unsupported")
+				}
+			}
+			inbounds[1]["listen"] = routerTProxyListenAddress()
+			inbounds = append(inbounds, sbObject{"type": "tproxy", "tag": "lan-in", "listen": routerTProxyListenAddress(), "listen_port": ports.TProxy})
+		} else {
+			inbounds = append(inbounds, sbObject{"type": "tun", "tag": "lan-in", "interface_name": routercore.TunName, "address": []string{"198.19.255.1/30", "fdfe:daed::1/126"}, "mtu": 1500, "auto_route": true, "auto_redirect": true, "strict_route": true, "stack": "system", "iproute2_table_index": 20340, "iproute2_rule_index": 20340, "auto_redirect_iproute2_fallback_rule_index": 32768, "auto_redirect_input_mark": "0x4e4101", "auto_redirect_output_mark": "0x4e4102", "auto_redirect_reset_mark": "0x4e4103", "include_interface": conf.Global.LanInterface})
+		}
 	}
 	level := conf.Global.LogLevel
 	if level == "warning" {

@@ -30,6 +30,8 @@ async function waitText(locator, pattern) {
   assert.match(await locator.textContent(), pattern)
 }
 async function checkHorizontalChoices(dialog, selected) {
+  // Measure the settled dialog, not the 95% opening-scale animation.
+  await new Promise((resolve) => setTimeout(resolve, 250))
   const choices = dialog.locator('[data-core-option]')
   assert.equal(await choices.count(), 3)
   const boxes = await choices.evaluateAll((nodes) =>
@@ -58,7 +60,6 @@ async function checkHorizontalChoices(dialog, selected) {
     'Option label wrapped',
   )
   assert.ok((await dialog.locator('[data-core-selection]').textContent()).startsWith(`${selected} ·`))
-  await new Promise((resolve) => setTimeout(resolve, 220))
   const backgrounds = await choices.evaluateAll((nodes) =>
     nodes.map((node) => ({
       pressed: node.getAttribute('aria-pressed'),
@@ -84,7 +85,7 @@ async function checkManualLatency(page, context, touch, screenshot) {
   const explanation = frame.getByRole('button', { name: '测试耗时说明', exact: true })
   if (touch) await explanation.tap()
   else await explanation.click()
-  await frame.getByText('手动测试包含新建连接耗时，并非 Ping；后台自动检测可能复用连接。').waitFor()
+  await frame.getByText(/手动测试显示首次建连耗时，包含代理握手/).waitFor()
   await page.screenshot({ path: screenshot.replace('.png', '-explanation.png'), fullPage: true })
   await page.keyboard.press('Escape')
   const response = await context.request.post(`${base}/cgi-bin/daed-router/graphql`, {
@@ -102,7 +103,7 @@ async function checkManualLatency(page, context, touch, screenshot) {
   await page.screenshot({ path: screenshot, fullPage: true })
   await frame.getByRole('button', { name: '导入节点', exact: true }).click()
   const guide = frame.locator('[data-protocol-guide]')
-  await waitText(guide, /当前内核：(dae|sing-box|mihomo)/)
+  await waitText(guide, /当前内核：(?:dae|sing-box|mihomo)/)
   await guide.getByRole('button', { name: 'VLESS / REALITY', exact: true }).click()
   await guide.getByRole('status').waitFor()
   if (/当前内核：sing-box/.test(await guide.textContent())) {
@@ -204,6 +205,22 @@ async function checkManualLatency(page, context, touch, screenshot) {
     await dialog.getByRole('button', { name: '切换到 sing-box' }).click()
     await waitText(dialog, /切换完成，当前内核：sing-box/)
     assert.equal(JSON.parse((await gql('{coreStatus}')).coreStatus).current, 'sing-box')
+    // A same-core mode change needs a fresh compatibility report and persists
+    // the selected mode; it must not be dismissed as "already using" this core.
+    const desktopMode = await dialog.locator('[data-core-mode][aria-pressed="true"]').getAttribute('data-core-mode')
+    for (const mode of desktopMode === 'tun' ? ['tproxy', 'tun'] : ['tun', 'tproxy']) {
+      await dialog.locator(`[data-core-mode="${mode}"]`).click()
+      await dialog.getByRole('button', { name: '检查兼容性' }).click()
+      await waitText(dialog, /兼容性检查通过/)
+      const change = dialog.getByRole('button', { name: mode === 'tun' ? '启用 TUN' : '启用非 TUN', exact: true })
+      await change.click()
+      await waitText(dialog, /切换完成，当前内核：sing-box/)
+      for (let i = 0; i < 60; i++) {
+        if (JSON.parse((await gql('{coreStatus}')).coreStatus).mode === mode) break
+        await new Promise((resolve) => setTimeout(resolve, 100))
+      }
+      assert.equal(JSON.parse((await gql('{coreStatus}')).coreStatus).mode, mode)
+    }
     await page.screenshot({ path: path.join(output, 'desktop-singbox.png'), fullPage: true })
     await dialog.getByRole('button', { name: 'dae', exact: true }).click()
     await dialog.getByRole('button', { name: '检查兼容性' }).click()
@@ -287,6 +304,23 @@ async function checkManualLatency(page, context, touch, screenshot) {
     await waitText(dialog, /兼容性检查通过/)
     await dialog.getByRole('button', { name: '切换到 mihomo' }).tap()
     await waitText(dialog, /切换完成，当前内核：mihomo/)
+    const mobileMode = await dialog.locator('[data-core-mode][aria-pressed="true"]').getAttribute('data-core-mode')
+    for (const mode of mobileMode === 'tun' ? ['tproxy', 'tun'] : ['tun', 'tproxy']) {
+      await dialog.locator(`[data-core-mode="${mode}"]`).tap()
+      const change = dialog.getByRole('button', { name: mode === 'tun' ? '启用 TUN' : '启用非 TUN', exact: true })
+      assert.equal(await change.isDisabled(), true, 'A changed mode needs a fresh compatibility check')
+      await dialog.getByRole('button', { name: '检查兼容性' }).tap()
+      await waitText(dialog, /兼容性检查通过/)
+      await change.tap()
+      await waitText(dialog, /切换完成，当前内核：mihomo/)
+      const reply = await mobile.request.post(`${base}/cgi-bin/daed-router/graphql`, {
+        headers: { Origin: base },
+        data: { query: '{coreStatus}' },
+      })
+      const state = await reply.json()
+      assert.ok(!state.errors)
+      assert.equal(JSON.parse(state.data.coreStatus).mode, mode)
+    }
     const mhBox = await dialog.boundingBox()
     assert.ok(mhBox.x >= 0 && mhBox.x + mhBox.width <= 391, JSON.stringify(mhBox))
     await page.screenshot({ path: path.join(output, 'mobile-mihomo.png'), fullPage: true })
@@ -312,6 +346,7 @@ async function checkManualLatency(page, context, touch, screenshot) {
       pendingEditsPreserved: true,
       mobileTouchSwitch: true,
       mobileRefreshRecovery: true,
+      desktopMobileSameCoreModeSwitch: true,
       noHorizontalDialogOverflow: true,
       desktopManualLatencySource: true,
       mobileManualLatencySource: true,

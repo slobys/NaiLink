@@ -43,7 +43,7 @@ func routerCheckNative(ctx context.Context, conf *daeConfig.Config, dirs []strin
 	if engine != "mihomo" {
 		return routerCheckSingBox(ctx, conf, dirs, transparent)
 	}
-	ports := sbPorts{Mixed: 39001, API: 39002, DNS: 39003, Secret: "offline-configuration-check"}
+	ports := sbPorts{Mixed: 39001, API: 39002, DNS: 39003, TProxy: 39006, Mode: routerMode(ctx), Secret: "offline-configuration-check"}
 	profile, _, e := coreCanonicalConfig(conf, dirs, ports, transparent, engine)
 	if e != nil {
 		return e

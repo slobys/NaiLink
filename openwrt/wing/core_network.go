@@ -27,13 +27,20 @@ func routerCoreAllRoutes() ([]netlink.Route, error) {
 }
 
 type routerCoreNetworkOwner struct {
-	Core           string `json:"core,omitempty"`
-	Config         string `json:"config"`
-	PID            int    `json:"pid"`
-	Started        string `json:"started"`
-	BaselineTables []int  `json:"baseline_tables"`
-	RedirectTable  int    `json:"redirect_table,omitempty"`
-	BootID         string `json:"boot_id"`
+	Bridges        []routerTPBridge `json:"bridges,omitempty"`
+	Mode           string           `json:"mode,omitempty"`
+	ProxyPort      int              `json:"proxy_port,omitempty"`
+	DNSPort        int              `json:"dns_port,omitempty"`
+	LAN            []string         `json:"lan,omitempty"`
+	IPv6           bool             `json:"ipv6,omitempty"`
+	Active         bool             `json:"active,omitempty"`
+	Core           string           `json:"core,omitempty"`
+	Config         string           `json:"config"`
+	PID            int              `json:"pid"`
+	Started        string           `json:"started"`
+	BaselineTables []int            `json:"baseline_tables"`
+	RedirectTable  int              `json:"redirect_table,omitempty"`
+	BootID         string           `json:"boot_id"`
 }
 
 func routerBootID() string {
@@ -47,7 +54,7 @@ func routerClearCoreFW4(ctx context.Context) error {
 		return errors.New("core_network_ownership_failed")
 	}
 	data, err := os.ReadFile(routerCoreFW4Include)
-	if err != nil || !bytes.Contains(data, []byte(`"`+routercore.TunName+`"`)) || !bytes.Contains(data, []byte("!nailink-core")) {
+	if err != nil || (!bytes.HasPrefix(data, []byte("# NaiLink managed TUN access; no chain policy changes\n")) && !bytes.HasPrefix(data, []byte("# NaiLink managed TPROXY access\n"))) || !bytes.Contains(data, []byte("!nailink-core")) {
 		return errors.New("core_network_ownership_failed")
 	}
 	if err = os.Remove(routerCoreFW4Include); err != nil {
@@ -193,7 +200,7 @@ func routerNftTablesFor(ctx context.Context, table string) ([]string, error) {
 	for _, entry := range reply.Nftables {
 		if entry.Table != nil && entry.Table.Name == table {
 			switch entry.Table.Family {
-			case "inet", "ip", "ip6":
+			case "inet", "ip", "ip6", "bridge":
 				families = append(families, entry.Table.Family)
 			default:
 				return nil, errors.New("core_network_conflict")
@@ -212,7 +219,7 @@ func routerCheckNetworkAvailable(ctx context.Context) error {
 	if _, err := os.Lstat("/etc/nftables.d/0-sing-box-auto-redirect.nft"); err == nil || !os.IsNotExist(err) {
 		return errors.New("core_network_conflict")
 	}
-	for _, table := range []string{"sing-box", "mihomo"} {
+	for _, table := range []string{"sing-box", "mihomo", routerTPNft, routerTPBridgeNft} {
 		families, err := routerNftTablesFor(ctx, table)
 		if err != nil {
 			return err
@@ -229,7 +236,7 @@ func routerCheckNetworkAvailable(ctx context.Context) error {
 		return errors.New("core_network_check_failed")
 	}
 	for _, rule := range rules {
-		if rule.Priority == 1 || rule.Priority == 32768 || rule.Priority >= 20340 && rule.Priority <= 20360 || rule.Table == 20340 {
+		if rule.Priority == 1 || rule.Priority == 32768 || rule.Priority >= 20340 && rule.Priority <= 20360 || rule.Table == 20340 || rule.Table == routerTPTable || rule.Mark == routerTPMark {
 			return errors.New("core_network_conflict")
 		}
 	}
@@ -238,7 +245,7 @@ func routerCheckNetworkAvailable(ctx context.Context) error {
 		return errors.New("core_network_check_failed")
 	}
 	for _, route := range routes {
-		if route.Table == 20340 {
+		if route.Table == 20340 || route.Table == routerTPTable {
 			return errors.New("core_network_conflict")
 		}
 	}
@@ -247,7 +254,7 @@ func routerCheckNetworkAvailable(ctx context.Context) error {
 func routerClaimSingboxNetwork(root, config string) error {
 	return routerClaimNativeNetwork(root, config, "sing-box")
 }
-func routerClaimNativeNetwork(root, config, engine string) (result error) {
+func routerClaimNativeNetwork(root, config, engine string, options ...routerCoreNetworkOwner) (result error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	if _, err := os.Lstat(routerOwnerPath(root)); err == nil || !os.IsNotExist(err) {
@@ -257,6 +264,25 @@ func routerClaimNativeNetwork(root, config, engine string) (result error) {
 		return err
 	}
 	owner := routerCoreNetworkOwner{Core: engine, Config: config, BootID: routerBootID()}
+	if len(options) > 0 {
+		o := options[0]
+		owner.Mode, owner.ProxyPort, owner.DNSPort, owner.LAN, owner.IPv6 = o.Mode, o.ProxyPort, o.DNSPort, o.LAN, o.IPv6
+	}
+	if owner.Mode == "tproxy" {
+		var bridgeErr error
+		owner.Bridges, bridgeErr = routerTPBridgeTopology(owner.LAN)
+		if bridgeErr != nil {
+			return bridgeErr
+		}
+		if err := routerTPValidateOwner(owner); err != nil {
+			return err
+		}
+		for _, name := range owner.LAN {
+			if _, err := net.InterfaceByName(name); err != nil {
+				return errors.New("missing_lan_interface")
+			}
+		}
+	}
 	if owner.BootID == "" {
 		return errors.New("core_environment_unsupported")
 	}
@@ -285,6 +311,15 @@ func routerClaimNativeNetwork(root, config, engine string) (result error) {
 			}
 		}
 	}()
+	if owner.Mode == "tproxy" {
+		rules, err := routerTPRules(owner, false)
+		if err != nil {
+			return err
+		}
+		if err = routerTPNftRun(ctx, rules, false); err != nil {
+			return err
+		}
+	}
 	// Own a small fw4 include instead of allowing the child to rewrite shared
 	// chain policies. Rules only accept traffic to/from this managed interface.
 	if _, err := exec.LookPath("fw4"); err == nil && exec.CommandContext(ctx, "nft", "list", "table", "inet", "fw4").Run() == nil {
@@ -297,6 +332,13 @@ func routerClaimNativeNetwork(root, config, engine string) (result error) {
 			return errors.New("core_network_conflict")
 		}
 		rules := []byte("# NaiLink managed TUN access; no chain policy changes\nchain input { iifname \"nailink0\" accept comment \"!nailink-core\"; oifname \"nailink0\" accept comment \"!nailink-core\"; }\nchain forward { iifname \"nailink0\" accept comment \"!nailink-core\"; oifname \"nailink0\" accept comment \"!nailink-core\"; }\n")
+		if owner.Mode == "tproxy" {
+			var names []string
+			for _, name := range owner.LAN {
+				names = append(names, fmt.Sprintf("%q", name))
+			}
+			rules = []byte(fmt.Sprintf("# NaiLink managed TPROXY access\nchain input { meta mark 0x%x accept comment \"!nailink-core\"; iifname { %s } meta l4proto { tcp, udp } th dport %d accept comment \"!nailink-core\"; }\n", routerTPMark, strings.Join(names, ", "), owner.DNSPort))
+		}
 		_, writeErr := file.Write(rules)
 		syncErr := file.Sync()
 		closeErr := file.Close()
@@ -328,7 +370,7 @@ func routerReadNetworkOwner(root string) (routerCoreNetworkOwner, error) {
 	if err != nil {
 		return owner, err
 	}
-	if json.Unmarshal(data, &owner) != nil || owner.PID < 0 || owner.Core != "" && owner.Core != "sing-box" && owner.Core != "mihomo" {
+	if json.Unmarshal(data, &owner) != nil || owner.PID < 0 || !routercore.ValidMode(owner.Mode) || owner.Core != "" && owner.Core != "sing-box" && owner.Core != "mihomo" {
 		return owner, errors.New("unsafe_core_state")
 	}
 	relative, err := filepath.Rel(routerCoreRuntimeDir, owner.Config)
@@ -392,6 +434,9 @@ func routerReleaseSingboxNetwork(root string) error {
 	}
 	if err != nil {
 		return err
+	}
+	if owner.Mode == "tproxy" {
+		return routerReleaseTProxy(root, owner)
 	}
 	routes, err := routerCoreAllRoutes()
 	if err != nil {

@@ -34,8 +34,34 @@ var routerExtraRoot = routercore.ExtraRoot
 var routerTorDataRoot = "/etc/daed/tor"
 var routerCoreRuntimeDir = "/var/run/daed/cores"
 var routerCorePreflight = func(ctx context.Context, target string) error {
-	command := exec.CommandContext(ctx, "/usr/libexec/daed/check", "--core", target, "--check")
+	command := exec.CommandContext(ctx, "/usr/libexec/daed/check", "--core", target, "--mode", routerMode(ctx), "--check")
+	var report routerCoreBoundedWriter
+	command.Stdout = &report
 	if err := command.Run(); err != nil {
+		var result struct {
+			Checks []struct{ Name, Status string }
+		}
+		if json.Unmarshal(report.data, &result) == nil {
+			for _, item := range result.Checks {
+				if item.Status == "error" && strings.HasPrefix(item.Name, "other_") {
+					return errors.New("core_network_conflict")
+				}
+			}
+			for _, item := range result.Checks {
+				if item.Status != "error" {
+					continue
+				}
+				if item.Name == "fw4" {
+					return errors.New("tproxy_fw4_required")
+				}
+				if item.Name == "tun" {
+					return errors.New("core_tun_unavailable")
+				}
+			}
+		}
+		if target != "dae" && routerMode(ctx) == "tproxy" {
+			return errors.New("tproxy_environment_unsupported")
+		}
 		return errors.New("core_environment_unsupported")
 	}
 	return nil
@@ -198,7 +224,7 @@ func routerLoopbackPair(listen func(string, string) (net.Listener, error), packe
 	return nil, nil, errors.New("core_ports_unavailable")
 }
 func routerCheckSingBox(ctx context.Context, conf *daeConfig.Config, dirs []string, transparent bool) error {
-	profile, _, err := singBoxConfig(conf, dirs, sbPorts{Mixed: 39001, API: 39002, DNS: 39003, Secret: "offline-configuration-check"}, transparent)
+	profile, _, err := singBoxConfig(conf, dirs, sbPorts{Mixed: 39001, API: 39002, DNS: 39003, TProxy: 39006, Mode: routerMode(ctx), Secret: "offline-configuration-check"}, transparent)
 	if err != nil {
 		return err
 	}
@@ -239,6 +265,8 @@ func routerCheckSingBoxProfile(ctx context.Context, profile sbObject) error {
 }
 
 type routerSingBoxSession struct {
+	tpCancel      context.CancelFunc
+	tpDone        chan struct{}
 	engine        string
 	dnsBridge     *mhDNSBridge
 	nodeDNSBridge *mhDNSBridge
@@ -290,6 +318,17 @@ func newRouterNativeSession(ctx context.Context, log *logrus.Logger, conf *daeCo
 			_ = l.Close()
 		}
 	}()
+	ports.Mode = routerMode(ctx)
+	if transparent && conf != EmptyConfig && ports.Mode == "tproxy" {
+		for _, target := range []*int{&ports.TProxy, &ports.DNS} {
+			port, held, e := routerTPReserve()
+			if e != nil {
+				return nil, errors.New("core_ports_unavailable")
+			}
+			*target = port
+			reserved = append(reserved, held...)
+		}
+	}
 	profile, _, err := coreCanonicalConfig(conf, dirs, ports, transparent, engine)
 	if err != nil {
 		return nil, err
@@ -370,7 +409,7 @@ func newRouterNativeSession(ctx context.Context, log *logrus.Logger, conf *daeCo
 		return nil, errors.New("singbox_configuration_invalid")
 	}
 	if transparent && conf != EmptyConfig {
-		if err = routerClaimNativeNetwork(dirs[0], path, engine); err != nil {
+		if err = routerClaimNativeNetwork(dirs[0], path, engine, routerCoreNetworkOwner{Mode: ports.Mode, ProxyPort: ports.TProxy, DNSPort: ports.DNS, LAN: conf.Global.LanInterface, IPv6: routerTPIPv6()}); err != nil {
 			_ = os.RemoveAll(dir)
 			return nil, err
 		}
@@ -516,8 +555,16 @@ func (s *routerSingBoxSession) Ready(ctx context.Context) error {
 				s.ready.Store(true)
 				return nil
 			}
-			if _, err := net.InterfaceByName(routercore.TunName); err == nil {
-				if err = routerRecordRedirectTable(s.dirs[0]); err != nil {
+			_, networkErr := net.InterfaceByName(routercore.TunName)
+			if s.ports.Mode == "tproxy" {
+				networkErr = routerActivateTProxy(s.dirs[0])
+			}
+			if networkErr == nil {
+				var err error
+				if s.ports.Mode != "tproxy" {
+					err = routerRecordRedirectTable(s.dirs[0])
+				}
+				if err != nil {
 					if err.Error() != "core_not_ready" {
 						return err
 					}
@@ -529,6 +576,9 @@ func (s *routerSingBoxSession) Ready(ctx context.Context) error {
 					}
 				}
 				if err = routerVerifySingBox(ctx, s); err == nil {
+					if s.ports.Mode == "tproxy" && s.tpCancel == nil {
+						s.watchTProxy()
+					}
 					s.ready.Store(true)
 					return nil
 				} else {
@@ -537,6 +587,8 @@ func (s *routerSingBoxSession) Ready(ctx context.Context) error {
 						return err
 					}
 				}
+			} else if s.ports.Mode == "tproxy" {
+				return networkErr
 			}
 		}
 		select {
@@ -553,6 +605,14 @@ func (s *routerSingBoxSession) Ready(ctx context.Context) error {
 }
 func (s *routerSingBoxSession) Stop(ctx context.Context) error {
 	s = s.current()
+	if s.tpCancel != nil {
+		s.tpCancel()
+		select {
+		case <-s.tpDone:
+		case <-ctx.Done():
+			return errors.New("core_cleanup_failed")
+		}
+	}
 	defer func() {
 		if s.dnsBridge != nil {
 			s.dnsBridge.Close()
@@ -608,6 +668,7 @@ func (s *routerSingBoxSession) Reload(message *ReloadMessage) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), routerCoreStartTimeout(conf))
 	defer cancel()
+	ctx = routerModeContext(ctx, old.ports.Mode)
 	if err = routerCheckNative(ctx, conf, old.dirs, old.transparent, old.engine); err != nil {
 		if rollback != nil {
 			_ = rollback()
@@ -648,6 +709,7 @@ func (s *routerSingBoxSession) Reload(message *ReloadMessage) error {
 	}
 	restoreCtx, stop := context.WithTimeout(context.Background(), routerCoreStartTimeout(old.conf))
 	defer stop()
+	restoreCtx = routerModeContext(restoreCtx, old.ports.Mode)
 	restored, restoreErr := newRouterNativeSession(restoreCtx, old.log, old.conf, old.dirs, old.transparent, old.engine)
 	if restoreErr == nil {
 		restoreErr = restored.Ready(restoreCtx)

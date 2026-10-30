@@ -11,7 +11,11 @@ export type MaintenanceAction =
   | 'core_switch_dae'
   | 'core_switch_singbox'
   | 'core_switch_mihomo'
+  | 'core_prepare_tproxy'
+  | 'core_prepare_tun'
+  | `core_${'check' | 'switch'}_${'singbox' | 'mihomo'}_${'tun' | 'tproxy'}`
 export interface CorePlan {
+  mode?: 'tun' | 'tproxy'
   target: 'dae' | 'sing-box' | 'mihomo'
   revision: string
   compatible: boolean
@@ -22,6 +26,7 @@ export interface CorePlan {
   groups: number
 }
 export interface CoreStatus {
+  mode?: 'tun' | 'tproxy'
   engines?: Record<string, { installed: boolean; supported: boolean; version: string }>
   current: string
   phase: string
@@ -86,6 +91,15 @@ export function geodataVersionState(
 }
 
 export const maintenanceMessages: Record<string, string> = {
+  invalid_core_mode: '接管模式无效，请重新选择。',
+  core_tun_unavailable: 'TUN 设备不可用。可安装固件匹配的 kmod-tun，或选择非 TUN；现有代理保留。',
+  tproxy_fw4_required: '非 TUN 接管需要 firewall4；当前旧式防火墙不会被自动改造，请使用兼容固件或原有模式。',
+  tproxy_environment_unsupported: '非 TUN 接管检查未通过。请安装固件匹配的 kmod-nft-tproxy，或选择 TUN；现有代理保留。',
+  tproxy_bridge_unsupported:
+    'LAN 桥接过滤需要 nftables broute 支持。请准备非 TUN 依赖（含 kmod-nft-bridge），仍不支持时选择 TUN；保留 Docker 桥接设置。',
+  tproxy_bridge_rpf: '当前 LAN 桥接端口的反向路径检查与非 TUN 模式不兼容，请选择 TUN；保留系统安全设置。',
+  tproxy_bridge_vlan_unsupported: '当前带 VLAN 的 LAN 桥接过滤拓扑暂不支持非 TUN，请选择 TUN；原有配置保留。',
+  tproxy_tor_unsupported: '当前配置包含 Tor，非 TUN 模式暂不接管 Tor 子进程，请选择 TUN。节点与配置保留。',
   busy: '已有维护或安装任务正在执行，请稍后再试。',
   check_required: '请先检查最新版本，再开始更新。',
   already_latest: '当前已是最新版本。',

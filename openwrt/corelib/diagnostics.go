@@ -53,10 +53,14 @@ func ProblemText(code string) string {
 }
 
 var problemMessages = map[string]string{
-	"mihomo_protocol_unsupported": "此协议暂未适配 mihomo，请保留节点并选择其他内核",
-	"mihomo_option_unsupported":   "节点参数尚不能等价转换为 mihomo，原参数保留",
-	"mihomo_rule_unsupported":     "路由匹配不能安全转换为 mihomo，原规则保留",
-	"mihomo_dns_unsupported":      "DNS 规则不能安全转换为 mihomo，原配置保留",
+	"tproxy_tor_unsupported":         "当前配置包含 Tor 子进程，请选择 TUN，避免非 TUN 模式形成出站循环；节点与配置保留。",
+	"tproxy_bridge_unsupported":      "LAN 桥接过滤需要 nftables broute 支持。请准备固件匹配的非 TUN 依赖（含 kmod-nft-bridge），仍不支持时选择 TUN；不会关闭 Docker 桥接过滤。",
+	"tproxy_bridge_rpf":              "LAN 桥接端口启用了与非 TUN 转发不兼容的反向路径检查。请选择 TUN；NaiLink 不会修改系统安全设置。",
+	"tproxy_bridge_vlan_unsupported": "当前带 VLAN 的 LAN 桥接过滤拓扑暂不支持非 TUN 接管，请选择 TUN；原有 VLAN 与分流配置保留。",
+	"mihomo_protocol_unsupported":    "此协议暂未适配 mihomo，请保留节点并选择其他内核",
+	"mihomo_option_unsupported":      "节点参数尚不能等价转换为 mihomo，原参数保留",
+	"mihomo_rule_unsupported":        "路由匹配不能安全转换为 mihomo，原规则保留",
+	"mihomo_dns_unsupported":         "DNS 规则不能安全转换为 mihomo，原配置保留",
 
 	"invalid_naive_concurrency":  "Naive 并发连接参数必须为 0 至 4，避免过多连接占用资源",
 	"unsupported_naive_insecure": "Naive / Cronet 不支持跳过证书验证，请配置正确证书或内联 CA",

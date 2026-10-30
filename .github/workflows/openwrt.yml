@@ -14,7 +14,7 @@ on:
     inputs:
       version:
         description: 'Package version (X.Y.Z), must match source'
-        default: '0.6.57'
+        default: '0.6.58'
         required: true
       publish:
         description: 'After all checks, upload to a release draft (main only)'
@@ -241,6 +241,9 @@ jobs:
           sudo env "PATH=$PATH" "GOCACHE=$(go env GOCACHE)" "GOMODCACHE=$(go env GOMODCACHE)" python3 tests/openwrt/protocol_interop.py --wing wing --sing-box /tmp/nailink-protocol-servers/sing-box-1.14.3-linux-amd64/sing-box --juicity-server /tmp/nailink-protocol-servers/juicity/juicity-server --client-singbox /tmp/nailink-core-static/usr/bin/sing-box --client-extra /tmp/nailink-extra-native --client-mihomo /tmp/nailink-mihomo-static/usr/bin/mihomo
           sudo env "PATH=$PATH" python3 tests/openwrt/core_netns.py --runtime "$PWD/.build/runtime/daed" --probe "$PWD/.build/runtime/btf-probe" --singbox /tmp/nailink-core-static/usr/bin/sing-box --nft-root / --workspace /tmp/nailink-core-netns --fw4 --ipv6
           sudo env "PATH=$PATH" python3 tests/openwrt/core_netns.py --runtime "$PWD/.build/runtime/daed" --probe "$PWD/.build/runtime/btf-probe" --singbox /tmp/nailink-core-static/usr/bin/sing-box --mihomo /tmp/nailink-mihomo-static/usr/bin/mihomo --target-core mihomo --nft-root / --workspace /tmp/nailink-mihomo-netns --fw4 --ipv6
+          sudo env "PATH=$PATH" python3 tests/openwrt/core_netns.py --runtime "$PWD/.build/runtime/daed" --probe "$PWD/.build/runtime/btf-probe" --singbox /tmp/nailink-core-static/usr/bin/sing-box --nft-root / --workspace /tmp/nailink-singbox-tproxy --fw4 --ipv6 --mode tproxy
+          sudo modprobe -a br_netfilter nf_tables_bridge nft_meta_bridge
+          sudo env "PATH=$PATH" python3 tests/openwrt/core_netns.py --runtime "$PWD/.build/runtime/daed" --probe "$PWD/.build/runtime/btf-probe" --singbox /tmp/nailink-core-static/usr/bin/sing-box --mihomo /tmp/nailink-mihomo-static/usr/bin/mihomo --target-core mihomo --nft-root / --workspace /tmp/nailink-mihomo-tproxy --fw4 --ipv6 --mode tproxy --bridge
       - name: LuCI gateway authentication and upgrade tests
         if: matrix.cpu == 'x86_64'
         run: |

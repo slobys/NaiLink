@@ -11,12 +11,14 @@ fi
 
 check_only=0
 selected_core=''
+selected_mode=''
 strict_core=0
 while [ "$#" -gt 0 ]; do
 	case "$1" in
 		--listen) listen_only=1 ;;
 		--check) check_only=1 ;;
 		--core) [ "$#" -gt 1 ] || exit 1; selected_core=$2; strict_core=1; shift ;;
+		--mode) [ "$#" -gt 1 ] || exit 1; selected_mode=$2; shift ;;
 		*) exit 1 ;;
 	esac
 	shift
@@ -27,6 +29,11 @@ if [ -z "$selected_core" ]; then
 	else selected_core=dae; fi
 fi
 case "$selected_core" in dae|sing-box|mihomo) ;; *) echo 'Invalid saved core selection.' >&2; exit 1 ;; esac
+if [ -z "$selected_mode" ] && [ -e /etc/daed/cores/state.json ]; then
+	selected_mode=$(jsonfilter -i /etc/daed/cores/state.json -e '@.mode' 2>/dev/null) || selected_mode=''
+fi
+selected_mode=${selected_mode:-tun}
+case "$selected_mode" in tun|tproxy) ;; *) echo 'Invalid interception mode.' >&2; exit 1 ;; esac
 
 config_value() {
 	uci -q get "daed.main.$1" 2>/dev/null || printf '%s\n' "$2"
@@ -150,8 +157,15 @@ else
 fi
 else
 	case "$arch" in x86_64|aarch64) ;; *) add_check core_architecture error 'This optional core integration supports x86_64 and ARM64 only.' ;; esac
-	if [ -c /dev/net/tun ]; then add_check tun ok 'TUN device is available.'
-	else add_check tun error 'TUN is unavailable. Install the matching firmware kmod-tun package; no kernel replacement is attempted.'; fi
+	if [ "$selected_mode" = tproxy ]; then
+		if ! command -v fw4 >/dev/null 2>&1; then add_check fw4 error 'NaiLink TPROXY integration requires firewall4; legacy fw3 policies are not modified.'; fi
+		if printf 'table inet nailink_probe_%s {\n chain test {\n  type filter hook prerouting priority -150;\n  meta l4proto { tcp, udp } tproxy to :39006;\n }\n}\n' "$$" | nft --check -f - >/dev/null 2>&1; then
+			add_check tproxy ok 'nftables TCP/UDP TPROXY is available; no TUN device is required.'
+		else add_check tproxy error 'TPROXY is unavailable. Install the firmware-matching kmod-nft-tproxy package, or choose TUN.'; fi
+	else
+		if [ -c /dev/net/tun ]; then add_check tun ok 'TUN device is available.'
+		else add_check tun error 'TUN is unavailable. Install the matching firmware kmod-tun package; no kernel replacement is attempted.'; fi
+	fi
 	if command -v nft >/dev/null 2>&1 && nft -j list tables >/dev/null 2>&1; then
 		add_check nftables ok 'nftables is available; The selected core validates actual routing at startup.'
 	else add_check nftables error 'The selected core requires working nftables / fw4. Other proxy rules are not changed.'; fi

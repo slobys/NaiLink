@@ -507,6 +507,8 @@ type Mutation {
     if 'activateGeodata(target:' not in schema_text:
         schema_text = schema_text.replace('type Mutation {', 'type Mutation {\n    activateGeodata(target: String!, previous: String!): Int! @hasRole(role: ADMIN)', 1)
     schema_text = schema_text.replace('switchCore(target: String!, revision: String!):', 'switchCore(target: String!, revision: String!, operation: String):')
+    schema_text = schema_text.replace('corePlan(target: String!):', 'corePlan(target: String!, mode: String):')
+    schema_text = schema_text.replace('switchCore(target: String!, revision: String!, operation: String):', 'switchCore(target: String!, revision: String!, operation: String, mode: String):')
     if 'coreCapabilities:' not in schema_text:
         schema_text = schema_text.replace('type Query {', 'type Query {\n    coreCapabilities: String! @hasRole(role: ADMIN)', 1)
     if 'startLatencyTest(' not in schema_text:
@@ -557,6 +559,9 @@ type Mutation {
         ("dae/router_mihomo_test.go", "mihomo_test.go"),
         ("dae/router_singbox_runtime.go", "singbox_runtime.go"),
         ("dae/router_core_network.go", "core_network.go"),
+        ("dae/router_core_tproxy.go", "core_tproxy.go"),
+        ("dae/router_core_tproxy_bridge.go", "core_tproxy_bridge.go"),
+        ("dae/router_core_tproxy_test.go", "core_tproxy_test.go"),
         ("dae/router_core_overview.go", "core_overview.go"),
         ("dae/router_core_config_test.go", "core_config_test.go"),
         ("dae/router_core_protocol_interop_test.go", "core_protocol_interop_test.go"),

@@ -12,6 +12,27 @@ import (
 	"github.com/daeuniverse/dae-wing/routercore"
 )
 
+func TestCoreModeActionsAndDependencyReplacementGuard(t *testing.T) {
+	for _, action := range []string{"core_prepare_tproxy", "core_prepare_tun", "core_check_mihomo_tproxy", "core_switch_singbox_tun"} {
+		if !coreMaintenanceAction(action) {
+			t.Fatal("valid mode action rejected", action)
+		}
+	}
+	for _, action := range []string{"core_prepare_anything", "core_switch_dae_tproxy", "core_switch_mihomo_tproxy;reboot"} {
+		if coreMaintenanceAction(action) {
+			t.Fatal("unsafe mode action accepted", action)
+		}
+	}
+	for _, plan := range []string{"(1/2) Upgrading kernel (6.12 -> 6.13)", "Removing firewall4", "Installing kernel (6.13)"} {
+		if safeCoreDependencyPlan([]byte(plan)) {
+			t.Fatal("accepted replacing installed packages", plan)
+		}
+	}
+	if !safeCoreDependencyPlan([]byte("(1/2) Installing kmod-nft-tproxy (6.12.1-r1)")) {
+		t.Fatal("matching new module rejected")
+	}
+}
+
 func TestCoreArchiveRejectsUnsafeEntries(t *testing.T) {
 	for _, item := range []struct {
 		name string
