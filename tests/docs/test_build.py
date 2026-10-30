@@ -24,13 +24,16 @@ class HandbookTest(unittest.TestCase):
     def test_public_output_and_cross_page_anchors(self):
         builder.validate(self.output)
         pages = list(self.output.glob("*.html"))
-        self.assertEqual(len(pages), 11)
+        config = json.loads((ROOT / "docs/site/site.json").read_text(encoding="utf-8"))
+        expected = {page["id"] + ".html" for group in config["groups"] for page in group["pages"]} | {"404.html"}
+        self.assertEqual({page.name for page in pages}, expected)
         self.assertTrue((self.output / "assets/nailink-logo.png").is_file())
         self.assertFalse((self.output / "build.py").exists())
         self.assertFalse((self.output / "BRAND.md").exists())
         index = json.loads((self.output / "search-index.json").read_text(encoding="utf-8"))
         self.assertTrue(any(i["url"] == "troubleshooting.html#test-timeout" for i in index))
         self.assertTrue(any(i["url"] == "groups.html#add" for i in index))
+        self.assertTrue(any(i["url"] == "cores.html#switch" for i in index))
         self.assertGreater(len(index), 40)
 
     def test_broken_anchor_is_rejected(self):

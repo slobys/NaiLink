@@ -24,6 +24,14 @@ async function main() {
     assert.match(await page.locator(':focus').getAttribute('class'), /search-result/)
     await page.keyboard.press('Enter')
     await page.waitForURL('**/troubleshooting.html#test-timeout')
+    await page.locator('#sidebar').getByRole('link', { name: '内核与接管方式', exact: true }).click()
+    await page.waitForURL('**/cores.html')
+    await page.getByRole('heading', { name: '在面板中完成切换' }).waitFor()
+    await page.getByRole('button', { name: '搜索文档' }).click()
+    await page.locator('#search-input').fill('切换内核')
+    await page.locator('.search-result[href^="cores.html"]').first().waitFor()
+    await page.getByRole('button', { name: '关闭搜索' }).click()
+    await page.screenshot({ path: `${output}/desktop-cores.png`, fullPage: true })
     await page.goto(`${base}installation.html`)
     // Clipboard is stubbed only in this test: the production button must send the exact visible command.
     await page.evaluate(() => {
@@ -50,6 +58,7 @@ async function main() {
       'index',
       'installation',
       'quick-start',
+      'cores',
       'nodes',
       'groups',
       'network',
@@ -78,6 +87,7 @@ async function main() {
       'index',
       'installation',
       'quick-start',
+      'cores',
       'nodes',
       'groups',
       'network',
@@ -105,6 +115,15 @@ async function main() {
     assert.match(await phone.locator('.search-result').first().getAttribute('href'), /network.html/)
     await phone.screenshot({ path: `${output}/mobile-search.png` })
     await phone.getByRole('button', { name: '关闭搜索' }).click()
+    await phone.goto(`${base}cores.html`)
+    await phone.getByRole('heading', { name: '在面板中完成切换' }).waitFor()
+    await phone.screenshot({ path: `${output}/mobile-cores.png`, fullPage: true })
+    await phone.setViewportSize({ width: 320, height: 740 })
+    assert.equal(
+      await phone.locator('body').evaluate((el) => el.scrollWidth > innerWidth),
+      false,
+      '320px cores overflow',
+    )
     await phone.goto(base)
     await phone.screenshot({ path: `${output}/mobile-home.png`, fullPage: true })
     // A failed index request must show recovery guidance, then permit retry.
@@ -120,7 +139,7 @@ async function main() {
     await failedPage.locator('.search-result').first().waitFor()
     assert.deepEqual(errors, [])
     process.stdout.write(
-      'Passed: 10 pages desktop/mobile, Chinese search, keyboard, copy, theme persistence, navigation and search recovery.\n',
+      'Passed: 11 pages desktop/mobile, compact core guide, Chinese search, keyboard, copy, theme persistence, navigation and search recovery.\n',
     )
   } finally {
     await browser.close()

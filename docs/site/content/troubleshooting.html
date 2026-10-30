@@ -92,10 +92,15 @@ nslookup raw.githubusercontent.com</code></pre>
 <p>在路由器 SSH 中执行以下只读命令，不会重启服务或修改配置：</p>
 <pre><code class="language-sh">free -m
 grep -E '^(MemTotal|MemAvailable|Cached|SReclaimable):' /proc/meminfo
-for pid in $$(pidof daed); do
-  echo "NaiLink PID: $$pid"
-  grep -E '^(Name|VmSize|VmRSS|RssAnon|RssFile):' /proc/$$pid/status
+for name in daed sing-box sing-box-extra mihomo tor; do
+  for pid in $$(pidof "$$name"); do
+    echo "$$name PID: $$pid"
+    grep -E '^(Name|VmSize|VmRSS|RssAnon|RssFile):' /proc/$$pid/status
+  done
 done</code></pre>
+<p>
+  切换窗口会显示管理服务和当前内核的常驻内存近似合计；共享页可能重复统计。安装了其他内核但没有启用时，它们不会同时作为代理运行。批量节点测试可能短时启动私有进程，任务结束后释放。
+</p>
 <p>
   若没有 NaiLink 输出，先检查服务是否运行。<code>RssAnon</code> 主要用于观察匿名内存，<code>RssFile</code>
   包含驻留的代码与文件映射；透明代理的内核映射等开销不全部计入进程 RSS。
@@ -159,11 +164,93 @@ done</code></pre>
 <p>
   日志中 Netkit 创建失败后回退到 veth，并继续成功启动时，不要仅根据这条警告认定启动失败。应结合实际绑定和访问结果判断。
 </p>
+<h2 id="speed">同一订阅，比其他客户端延迟高或视频卡</h2>
+<p>
+  先确认两边确实使用同一个节点和入口，再区分首次连接延迟与持续下载速度。测试显示的毫秒数不是带宽，也不是页面完整加载时间。
+</p>
+<ol>
+  <li>
+    <strong>一次只用一条代理路径：</strong>比较 NaiLink 时关闭电脑客户端的系统代理 /
+    TUN；比较客户端时确认其服务器连接没有再经过路由器代理，避免双重代理干扰。
+  </li>
+  <li>
+    <strong>确认实际生效节点：</strong
+    >加入群组后等待保存并<strong>应用配置</strong>，再通过<strong>查看生效出口</strong>核对结果。自动群组可以更换成员，卡片里有这个节点不代表流量一定使用它。
+  </li>
+  <li>
+    <strong>对齐测试条件：</strong>使用同一目标、HTTP 方法、网络和时间段。NaiLink
+    的<strong>首连</strong>结果包含建连、代理握手和响应；客户端复用连接的延迟不能与它直接等同。
+  </li>
+  <li>
+    <strong>独立比较传输：</strong
+    >用同一视频画质或同一下载文件观察一段时间，记录速度和中断。Wi-Fi、服务器入口、出口线路和 UDP / QUIC 都可能影响播放。
+  </li>
+  <li>
+    <strong>再比较内核或接管模式：</strong>每次只改一个选项，检查并切换后重建测试连接。非 TUN 不保证比 TUN
+    更快，保留实测稳定的选择。
+  </li>
+</ol>
+<p>
+  确认只在 NaiLink
+  上异常时，提供同一节点的对照、实际内核与模式、测试目标、时间和同期日志。不要为降低毫秒数而缩短检测范围、关闭证书验证或清空全部缓存。操作说明见<a
+    href="cores.html#switch"
+    >内核切换</a
+  >和<a href="groups.html">群组管理</a>。
+</p>
+
+<h2 id="core-switch">切换内核后等待恢复或提示未就绪</h2>
+<p>
+  先看窗口上方的当前内核、接管方式和后台结果。被高亮的目标尚不代表切换成功；操作中状态和统计可能暂时不可用，先等待完成，再点<strong>重新读取状态</strong>。
+</p>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>提示或分类</th>
+        <th>下一步</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>参数不兼容 / 配置检查失败</td>
+        <td>阅读全部节点问题，修正目标内核不支持的参数，再重新检查；不要只删除原节点。</td>
+      </tr>
+      <tr>
+        <td>core_starting / 等待恢复</td>
+        <td>等待正在执行的任务，重新读取状态；持续无进展时记录时间并查看运行日志。</td>
+      </tr>
+      <tr>
+        <td>core_not_ready / core_dns_failed / core_connectivity_failed</td>
+        <td>目标尚未通过就绪、DNS 或实际连接检查。查看是否已恢复原内核，再排查上游、节点和线路。</td>
+      </tr>
+      <tr>
+        <td>core_network_conflict / core_network_ownership_failed</td>
+        <td>检查其他透明代理、路由或资源占用；不要清空整机防火墙或删除不明规则。</td>
+      </tr>
+      <tr>
+        <td>core_rollback_failed / core_cleanup_failed</td>
+        <td>保留日志、配置与备份，按提示恢复服务后再检查；避免反复切换、卸载或覆盖运行中的数据库。</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+<p>
+  $version 不接受已经超时或取消的启动成功结果，失败清理也有独立时限。若仍无法恢复，使用<a
+    href="maintenance.html#restart-recovery"
+    >只读网络诊断</a
+  >并保留错误分类。内核切换会短暂断连，无法把旧浏览器连接无缝迁移；无需把清空浏览器缓存作为常规操作。
+</p>
+
 <h2 id="first-open">首次打开慢，刷新后恢复</h2>
 <p>
   间歇性失败可能涉及 DNS 无响应、节点线路、IPv6 或浏览器 QUIC；仅凭刷新后恢复无法确定原因。 v0.6.25 对
   <code>tcp+udp</code> DNS 提前尝试 TCP，并让有备用成员的自动群组在 TCP
   建连失败时补试一次，减少失败直接传给浏览器的情况。
+</p>
+<p>
+  $version 修复 DNS 桥复用 TCP / TLS
+  连接被静默丢弃后的等待：只读查询在原期限内最多补发一次同上游、同出口的请求，同时保留原连接的有效响应。它不更换
+  DNS、不直连绕过代理，也不能修复服务器入口不可达。
 </p>
 <p>
   想使用备用节点，需要把至少两个可用节点放进同一个群组，选择平滑低延迟等自动策略并应用配置。
@@ -239,14 +326,19 @@ done</code></pre>
   应用都可用。请勿公开订阅地址、节点密码或完整链接。
 </p>
 
-<h2 id="dns-stability">mihomo DNS 查询繁忙或偶发中断</h2>
+<h2 id="dns-stability">DNS 桥查询繁忙或复用连接中断</h2>
 <p>
   0.6.44 在 NaiLink 的 mihomo DNS 转发层加入有限连接复用，减少反复建立 TCP / TLS
   连接。连接按上游和出口隔离，停止内核时全部释放；不新增 DNS 答案缓存，也不改变节点选择、DNS 上游或分流设置。
 </p>
 <p>
   短时突发允许最多 32 个查询执行、32 个等待，排队和网络交换共用原 6
-  秒期限。连接已被对端关闭时，只读查询最多按原路由重建一次；首次连接失败、无效回复、证书错误不会触发这种重试。
+  秒期限。连接已被对端关闭时，只读查询最多按原路由重建一次。$version 还处理复用 TCP / TLS
+  连接静默无响应的情况：在原期限内最多发起一次同路径备用查询，仍保留慢但有效的原响应，返回后取消并释放未使用的连接。
+</p>
+<p>
+  正常新连接、短期限、DNS 更新和区域传输不主动发起这类备用请求。畸形回复不会靠换个上游继续尝试；证书校验、DNS
+  上游与代理出口保持原设置。
 </p>
 <ul>
   <li><code>dns_overloaded</code>：DNS 查询同时执行及等待的数量已满，检查是否有大量客户端请求或上游长时间无响应。</li>

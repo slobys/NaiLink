@@ -28,6 +28,11 @@
       "title": "设置与管理",
       "pages": [
         {
+          "id": "cores",
+          "title": "内核与接管方式",
+          "description": "了解三个内核的区别，保留配置切换 TPROXY 或 TUN。"
+        },
+        {
           "id": "nodes",
           "title": "节点与订阅",
           "description": "导入、自动命名、订阅更新和节点测试。"

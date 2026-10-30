@@ -26,6 +26,8 @@ Windows 使用 `python`。浏览器打开 <http://localhost:4173>；请通过 HT
 
 构建自动检查图片、站内链接、锚点、搜索目标。CI 还检查版本同步、输出范围和损坏链接拒绝。发布目录固定为 `.build/docs-site`，不上传仓库根目录。
 
+`content/cores.html` 是面向使用者的内核与接管教程，`docs/core-switching.md` 保留参数、构建组件等参考细节。内核功能改变时，同时核对两处，避免把仅 TUN 的早期限制写成当前限制。
+
 ```sh
 python3 -m unittest discover -s tests/docs -p "test_*.py"
 ```

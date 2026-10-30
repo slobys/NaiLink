@@ -38,6 +38,13 @@
     <p>下载失败、测试超时、连接正常却没有流量。</p></a
   >
 </div>
+<h2 id="current">v$version 更新说明</h2>
+<p>本版重点处理 DNS 复用连接失效后的恢复，以及三个内核启动超时、取消和失败清理。现有节点、配置及接管方式继续保留。</p>
+<ul>
+  <li><a href="cores.html#switch">切换内核与非 TUN / TUN 模式</a>，区分已选择目标和实际运行状态。</li>
+  <li><a href="troubleshooting.html#first-open">排查首次打开慢</a>，结合 DNS、线路和分流记录判断。</li>
+  <li><a href="maintenance.html#current-version">查看当前版本的更新与验证范围</a>，再决定是否升级。</li>
+</ul>
 <h2 id="workflow">从安装到使用</h2>
 <ol class="steps">
   <li>
@@ -67,6 +74,10 @@
       </tr>
     </thead>
     <tbody>
+      <tr>
+        <td>选择内核、切换非 TUN / TUN、失败恢复</td>
+        <td><a href="cores.html">内核与接管方式</a></td>
+      </tr>
       <tr>
         <td>导入节点、更新订阅、看测试结果</td>
         <td><a href="nodes.html">节点与订阅</a></td>

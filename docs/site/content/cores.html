@@ -1,0 +1,209 @@
+<p>
+  这篇教程帮助你选择 dae、sing-box 或 mihomo，并在保留节点与配置的前提下切换接管方式。首次安装使用
+  dae；升级沿用当前内核和模式。已经稳定联网时，可以继续使用当前选择。
+</p>
+
+<h2 id="choose">三个内核怎么选</h2>
+<p>NaiLink 负责管理节点、订阅、群组和配置，当前内核负责实际连接。外置内核按需安装，每次只运行一个代理内核。</p>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>内核</th>
+        <th>接管方式</th>
+        <th>选择依据</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>dae</td>
+        <td>eBPF，由 Linux 内核中的程序接管流量</td>
+        <td>NaiLink 内置，保留 dae 的分流与节点选择行为；需要安装检查通过的 eBPF / BTF 能力。</td>
+      </tr>
+      <tr>
+        <td>sing-box</td>
+        <td>非 TUN / TUN</td>
+        <td>需要 sing-box 已适配协议或受限的原生出站 JSON 时选择；Naive、WireGuard、Tor 需按提示安装扩展组件。</td>
+      </tr>
+      <tr>
+        <td>mihomo</td>
+        <td>非 TUN / TUN</td>
+        <td>需要 mihomo 已适配的节点实现时选择；仍使用 NaiLink 的群组、DNS 与路由，不导入另一套完整 Clash 配置。</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+<p>
+  三个内核的协议实现和自动选择算法不同，不能保证同一节点显示相同延迟。sing-box、mihomo 目前限 x86_64 / ARM64；ARMv7 /
+  MIPS 仍为实验构建，不能靠切换内核绕过安装检查。
+</p>
+
+<h2 id="flow">切换后流量怎样走</h2>
+<p>电脑和手机仍将流量发给这台路由器。改变的是接管和连接实现，直连或走哪个群组仍由已应用的分流配置决定：</p>
+<pre><code class="language-text">dae：局域网设备 → eBPF 接管 → dae 分流 → 直连或代理节点 → 网站
+非 TUN：局域网设备 → 防火墙及策略路由 → 当前内核 → 分流出口
+TUN：局域网设备 → nailink0 虚拟网卡 → 当前内核 → 分流出口</code></pre>
+<p>
+  DNS 先按当前 DNS 规则选择上游，业务连接再按路由选择出口。两类规则需要配合；仅创建 AI 群组或更换内核，不会自动把所有 AI
+  网站分配到该群组。
+</p>
+<p>
+  Clash YAML / JSON 订阅先被提取为 NaiLink 节点，再转换给目标内核。因此 Clash 订阅可以在 sing-box 下使用；这不表示
+  sing-box 在直接执行整份 Clash 配置。详见<a href="nodes.html#clash">订阅导入范围</a>。
+</p>
+
+<h2 id="modes">非 TUN 与 TUN 怎么选</h2>
+<p>
+  sing-box、mihomo 的两种模式都用于路由器透明代理，设备无需逐台填写代理地址。NaiLink 的非 TUN
+  仍会接管流量，与电脑客户端只启用系统代理是两种用法。
+</p>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>模式</th>
+        <th>使用条件</th>
+        <th>需要注意</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>非 TUN · TPROXY</td>
+        <td>firewall4、nftables 和固件匹配的 kmod-nft-tproxy</td>
+        <td>首次选择外置内核时预选此模式。桥接过滤还需匹配的 kmod-nft-bridge 和 broute 能力。</td>
+      </tr>
+      <tr>
+        <td>TUN · 备用</td>
+        <td>firewall4、nftables 和固件匹配的 kmod-tun</td>
+        <td>非 TUN 与当前拓扑不兼容时，可检查此模式；已有 TUN 配置继续保留。</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+<p>
+  两种模式均支持 TCP / UDP、IPv4 / IPv6，以及路由器自身流量。NaiLink 会排除内核自身出站、管理地址和私网，防止循环；DNS
+  继续使用原有分流。
+</p>
+<p>
+  桥接过滤结合 VLAN、桥接端口反向路径检查等拓扑目前需使用 TUN，Tor 子进程也暂需
+  TUN。缺少能力时，先查看兼容性报告；不要强装其他固件的模块。详细条件见<a href="network.html#interception"
+    >接口与接管限制</a
+  >。
+</p>
+<div class="callout">
+  <strong>按实际联网结果选择</strong>
+  <p>非 TUN 不是带宽加速开关。换模式后，用同一节点、同一网络和同一测试目标比较速度，再决定是否保留。</p>
+</div>
+
+<h2 id="switch">在面板中完成切换</h2>
+<p>
+  先确认当前代理可用，再按以下步骤操作。选择按钮的高亮表示待切换目标，窗口上方的<strong>当前内核</strong>和<strong>当前接管</strong>才表示正在运行的选择。
+</p>
+<ol class="steps">
+  <li>
+    <strong>打开顶部“内核”</strong>
+    <p>记录当前内核和接管方式。等待节点测试、保存和其他维护任务结束。</p>
+  </li>
+  <li>
+    <strong>选择目标内核</strong>
+    <p>尚未安装时点击<strong>下载并安装</strong>。下载或校验失败，原代理继续运行；网络恢复后可以重试。</p>
+  </li>
+  <li>
+    <strong>选择接管方式并检查</strong>
+    <p>
+      sing-box、mihomo 可选非 TUN 或
+      TUN。点击<strong>检查兼容性</strong>；若提示缺少模块，按需点击<strong>安装接管依赖</strong>，完成后重新检查。
+    </p>
+  </li>
+  <li>
+    <strong>阅读全部问题与差异</strong>
+    <p>报告针对当前已应用的运行配置。修正不兼容项后重新检查；切换不会顺带应用尚未生效的编辑。</p>
+  </li>
+  <li>
+    <strong>点击切换按钮并等待结果</strong>
+    <p>同一内核也可只换模式。切换会短暂断连；关闭窗口不会取消后台任务，不要断电或连续重复提交。</p>
+  </li>
+  <li>
+    <strong>核对运行状态并验证联网</strong>
+    <p>
+      确认上方显示目标内核、目标模式和<strong>运行就绪</strong>，再实际访问直连和代理网站。必要时使用群组的<strong>查看生效出口</strong>，核对网站流量所走的节点。
+    </p>
+  </li>
+</ol>
+<p>
+  切换耗时受设备、规则规模和网络影响，可能需要数十秒。已有 TCP 连接不能无缝迁移；自动选择群组也可能重新选择出口。AI
+  网站的登录或 VPN 提示还取决于出口 IP、账户与网站策略。
+</p>
+
+<h2 id="protocols">确认节点与扩展协议支持</h2>
+<p>
+  导入窗口按当前内核显示已适配协议。先看协议提示，再保留完整认证、TLS、SNI、传输路径和混淆参数；上游支持的协议不等于
+  NaiLink 已适配全部参数。
+</p>
+<ul>
+  <li>
+    <strong>常见分享链接：</strong>SS、VMess、VLESS / REALITY、Trojan、Hysteria2、AnyTLS、TUIC
+    等，以当前内核提示和兼容性报告为准。
+  </li>
+  <li>
+    <strong>sing-box 原生节点：</strong>可导入受限单出站或封闭组合
+    JSON；不是完整系统配置，也不会执行其中的命令或任意文件引用。
+  </li>
+  <li>
+    <strong>sing-box 扩展包：</strong>Naive、WireGuard、Tor 按需安装；需先切到其他内核。仅 x86_64 /
+    ARM64，按窗口要求预留存储，Tor 首次引导可能需要数分钟。
+  </li>
+  <li>
+    <strong>切回限制：</strong>若运行配置引用目标内核不支持的节点或策略，检查会列出问题并阻止切换，原始节点继续保留。
+  </li>
+</ul>
+<p>
+  协议与参数的完整范围见<a href="https://github.com/slobys/NaiLink/blob/main/docs/core-switching.md">内核支持参考</a
+  >。配置检查通过表示可以生成目标配置，不保证节点服务器或公网线路一定可用。
+</p>
+
+<h2 id="recovery">切换失败后如何处理</h2>
+<p>
+  切换前保存原运行配置与选择。目标启动后还需通过 DNS、连接和接管检查；失败先清理目标资源，再尝试恢复原内核和原模式。
+</p>
+<ul>
+  <li><strong>检查不通过：</strong>原内核继续运行，先处理报告中的参数或系统能力问题。</li>
+  <li>
+    <strong>启动或连接失败：</strong
+    >等待恢复结果，重新打开窗口或点<strong>重新读取状态</strong>；不要把选中按钮当成切换成功。
+  </li>
+  <li><strong>回退或清理也失败：</strong>保留错误分类、日志与备份，再按提示恢复服务；不要先卸载或清空配置。</li>
+</ul>
+<p>
+  $version 统一启动完成检查，拒绝已超时或取消的成功结果，失败清理使用独立时限。非 TUN 模式会检查 NaiLink
+  自己的策略路由，补回缺失条目；遇到其他服务占用时停止自动修改，保留其他服务的资源。
+</p>
+<p>SSH 只读诊断命令如下，不会更换节点或模式：</p>
+<pre><code class="language-sh">nailink --check-network</code></pre>
+<p>
+  网络故障、磁盘异常或回退失败时，自动恢复仍可能无法完成。详见<a href="troubleshooting.html#core-switch">切换异常排查</a
+  >和<a href="maintenance.html#backup">备份与恢复边界</a>。
+</p>
+
+<h2 id="resources">存储、内存与长期运行</h2>
+<p>
+  安装可选内核占用存储，不代表它们同时驻留内存。dae 内嵌在管理服务里；使用 sing-box 或 mihomo
+  时，运行管理服务和当前原生内核。批量测试可能短时增加私有进程，Tor 仅在使用时启动。
+</p>
+<p>
+  窗口的<strong>常驻内存</strong>是管理服务与当前内核的 RSS
+  近似合计，共享页可能重复计算。应结合整机可用内存和运行时长判断，不能把虚拟地址空间或可回收缓存都算成 NaiLink
+  实际占用。
+</p>
+<p>
+  可选普通内核安装预检要求额外 180 MiB 可用存储，建议设备有 1 GiB 以上内存；扩展协议包按窗口要求预留 400
+  MiB。安装器仍会检查临时空间、固件 ABI 和内核能力，不能只根据 CPU 名称判断兼容。
+</p>
+<p>
+  排查高占用时，参见<a href="troubleshooting.html#memory">实际内存检查</a>；排查速度时，参见<a
+    href="troubleshooting.html#speed"
+    >与其他客户端比较速度</a
+  >。本版的实测环境与限制记录在<a href="https://github.com/slobys/NaiLink/blob/main/openwrt/VALIDATION.md"
+    >发布验证记录</a
+  >。
+</p>

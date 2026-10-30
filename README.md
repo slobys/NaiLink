@@ -9,6 +9,7 @@
 <p align="center">
   <a href="https://slobys.github.io/NaiLink/">在线文档</a> ·
   <a href="https://slobys.github.io/NaiLink/quick-start.html">首次设置</a> ·
+  <a href="https://slobys.github.io/NaiLink/cores.html">内核与接管方式</a> ·
   <a href="https://github.com/slobys/NaiLink/releases">下载安装包</a> ·
   <a href="https://slobys.github.io/NaiLink/troubleshooting.html">常见问题</a>
 </p>
