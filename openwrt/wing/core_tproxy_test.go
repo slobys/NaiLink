@@ -14,6 +14,25 @@ import (
 	"testing"
 )
 
+func TestRouterTProxyBridgeRPF(t *testing.T) {
+	for _, tc := range []struct{ all, port, want string }{
+		{"0\n", "0\n", ""},
+		{"1", "0", "tproxy_bridge_rpf"},
+		{"0", "1", "tproxy_bridge_rpf"},
+		{"2", "0", "tproxy_bridge_rpf"},
+		{"0", "2", "tproxy_bridge_rpf"},
+		{"2", "2", "tproxy_bridge_rpf"},
+		{"", "0", "core_network_check_failed"},
+		{"0", "-1", "core_network_check_failed"},
+		{"0", "3", "core_network_check_failed"},
+	} {
+		err := routerTPBridgeRPF([]byte(tc.all), []byte(tc.port))
+		if tc.want == "" && err != nil || tc.want != "" && (err == nil || err.Error() != tc.want) {
+			t.Fatalf("all=%q port=%q: %v; want %q", tc.all, tc.port, err, tc.want)
+		}
+	}
+}
+
 func TestRouterTProxyModeSwitchAndRollback(t *testing.T) {
 	for _, fail := range []bool{false, true} {
 		conf, dirs := coreFixtureConfig(t)

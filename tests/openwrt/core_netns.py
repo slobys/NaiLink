@@ -161,6 +161,9 @@ subprocess.run(['nft','-f','-'],input=body.encode(),check=True)
     if args.bridge:
         assert Path('/proc/sys/net/bridge/bridge-nf-call-iptables').exists(), 'Bridge netfilter is required for this fixture'
         run('sysctl','-w','net.bridge.bridge-nf-call-iptables=1','net.bridge.bridge-nf-call-ip6tables=1')
+        # This isolated supported topology emulates OpenWrt's bridge ports.
+        # No host/router sysctl is changed. Nonzero RPF is tested below.
+        run('sysctl','-w','net.ipv4.conf.lan-port.rp_filter=0')
         run('nft','add','table','bridge','unrelated_bridge_sentinel')
     if args.ipv6:
         for iface,space,local,remote in [('lan0','core-client','fd81:81::1/64','fd81:81::2/64'),('wan0','core-wan','fd81:82::1/64','fd81:82::2/64')]:
@@ -259,11 +262,13 @@ subprocess.run(['nft','-f','-'],input=body.encode(),check=True)
         if args.bridge and args.mode=='tproxy':
             keys=['net.ipv4.conf.all.rp_filter','net.ipv4.conf.lan-port.rp_filter']
             previous={key:run('sysctl','-n',key).strip() for key in keys}
-            run('sysctl','-w',*(key+'=1' for key in keys))
-            blocked=json.loads(gql('{corePlan(target:"'+args.target_core+'")}')['corePlan'])
-            assert not blocked['compatible'] and 'tproxy_bridge_rpf' in blocked['problems'],blocked
-            assert json.loads(gql('{coreStatus}')['coreStatus'])['current']=='dae'
-            assert all(run('sysctl','-n',key).strip()=='1' for key in keys)
+            for value in ['1','2']:
+                run('sysctl','-w',keys[0]+'=0',keys[1]+'='+value)
+                blocked=json.loads(gql('{corePlan(target:"'+args.target_core+'")}')['corePlan'])
+                assert not blocked['compatible'] and 'tproxy_bridge_rpf' in blocked['problems'],blocked
+                assert json.loads(gql('{coreStatus}')['coreStatus'])['current']=='dae'
+                assert run('sysctl','-n',keys[0]).strip()=='0'
+                assert run('sysctl','-n',keys[1]).strip()==value
             run('sysctl','-w',*(key+'='+value for key,value in previous.items()))
         plan=json.loads(gql('{corePlan(target:"'+args.target_core+'")}')["corePlan"]);assert plan["compatible"],plan
         gql('mutation{switchCore(target:"'+args.target_core+'",revision:'+json.dumps(plan["revision"])+')}')
@@ -352,7 +357,7 @@ subprocess.run(['nft','-f','-'],input=body.encode(),check=True)
     finally:
         if 'trace_process' in locals():
             trace_process.terminate();trace_process.wait(timeout=5);trace_output.close()
-        if args.bridge:
+        if args.bridge and sys.exc_info()[0] is not None:
             for command in [('nft','list','ruleset'),('ip','-d','link'),('ip','neigh'),('sysctl','net.ipv4.conf.all.rp_filter','net.ipv4.conf.lan-port.rp_filter','net.ipv4.conf.all.src_valid_mark','net.ipv4.conf.lan-port.src_valid_mark')]:
                 try:print('BRIDGE DIAGNOSTIC',command,run(*command),flush=True)
                 except subprocess.CalledProcessError:pass

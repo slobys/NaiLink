@@ -29,6 +29,20 @@ func routerTPFlag(path string) bool {
 	return strings.TrimSpace(string(b)) == "1"
 }
 
+func routerTPBridgeRPF(all, port []byte) error {
+	a, err := strconv.Atoi(strings.TrimSpace(string(all)))
+	p, perr := strconv.Atoi(strings.TrimSpace(string(port)))
+	if err != nil || perr != nil || a < 0 || a > 2 || p < 0 || p > 2 {
+		return errors.New("core_network_check_failed")
+	}
+	// A bridge port has no independent IPv4 address. fib_validate_source can
+	// reject the broute path even with loose RPF, before socket delivery.
+	if a != 0 || p != 0 {
+		return errors.New("tproxy_bridge_rpf")
+	}
+	return nil
+}
+
 // br_netfilter discards the TPROXY socket association before IP delivery.
 // Route only public traffic addressed to this LAN bridge's own MAC before
 // that hook. Docker/guest bridging and global bridge sysctls remain untouched.
@@ -70,15 +84,13 @@ func routerTPBridgeTopology(lan []string) ([]routerTPBridge, error) {
 				continue
 			}
 			// Do not weaken reverse-path protection to make a mode work.
-			all, _ := os.ReadFile("/proc/sys/net/ipv4/conf/all/rp_filter")
-			value, _ := os.ReadFile(filepath.Join("/proc/sys/net/ipv4/conf", port.Attrs().Name, "rp_filter"))
-			a, _ := strconv.Atoi(strings.TrimSpace(string(all)))
-			p, _ := strconv.Atoi(strings.TrimSpace(string(value)))
-			if a > p {
-				p = a
+			all, aerr := os.ReadFile("/proc/sys/net/ipv4/conf/all/rp_filter")
+			value, perr := os.ReadFile(filepath.Join("/proc/sys/net/ipv4/conf", port.Attrs().Name, "rp_filter"))
+			if aerr != nil || perr != nil {
+				return nil, errors.New("core_network_check_failed")
 			}
-			if p == 1 || p != 0 && routerTPFlag("/proc/sys/net/ipv4/conf/all/src_valid_mark") {
-				return nil, errors.New("tproxy_bridge_rpf")
+			if err := routerTPBridgeRPF(all, value); err != nil {
+				return nil, err
 			}
 			item.Ports = append(item.Ports, port.Attrs().Name)
 		}
