@@ -14,6 +14,7 @@ import (
 type routerDNSFlowFilter struct {
 	port     uint16
 	entering bool
+	tun      bool
 	locals   []net.IP
 	lanIPs   []net.IP
 	lan      []*net.IPNet
@@ -35,6 +36,11 @@ func (f *routerDNSFlowFilter) MatchConntrackFlow(flow *netlink.ConntrackFlow) bo
 	// Retire only an original DNS query DNATed to this claimed local listener.
 	if flow.Reverse.SrcPort == f.port && routerDNSHasIP(f.locals, flow.Reverse.SrcIP) {
 		return !f.entering // Keep requests already using the new live listener.
+	}
+	// Both native TUN adapters redirect DNS to the peer of our fixed /30 or
+	// /126 interface. The interface may already be gone at cleanup time.
+	if f.tun && !f.entering && flow.Reverse.SrcPort == 53 && !flow.Forward.DstIP.Equal(flow.Reverse.SrcIP) && (flow.Reverse.SrcIP.Equal(net.ParseIP("198.19.255.2")) || flow.Reverse.SrcIP.Equal(net.ParseIP("fdfe:daed::2"))) {
+		return true
 	}
 	if !f.entering || routerDNSHasIP(f.locals, flow.Forward.SrcIP) {
 		return false
@@ -58,7 +64,7 @@ func routerDNSClearConntrack(owner routerCoreNetworkOwner, entering bool) error 
 	if owner.DNSPort < 1024 || owner.DNSPort > 65535 {
 		return errors.New("core_network_ownership_failed")
 	}
-	filter := &routerDNSFlowFilter{port: uint16(owner.DNSPort), entering: entering}
+	filter := &routerDNSFlowFilter{port: uint16(owner.DNSPort), entering: entering, tun: owner.Mode != "tproxy"}
 	addresses, err := net.InterfaceAddrs()
 	if err != nil {
 		return errors.New("core_dns_session_failed")

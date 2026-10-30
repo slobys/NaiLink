@@ -239,7 +239,8 @@ subprocess.run(['nft','-f','-'],input=body.encode(),check=True)
             destinations=[("probe.test","203.0.113.80"),("ai.test","203.0.113.81")]
             if args.ipv6:destinations.extend([('probe6.test','2001:db8:83::80'),('ai6.test','2001:db8:83::81')])
             for name,expected in destinations:
-                got=run("ip","netns","exec","core-client",sys.executable,Path(__file__).resolve(),"--client-dns","198.51.100.53",name).strip();assert got==expected,(label,name,got)
+                for resolver in ('198.51.100.53','10.81.0.1'):
+                    got=run("ip","netns","exec","core-client",sys.executable,Path(__file__).resolve(),"--client-dns",resolver,name).strip();assert got==expected,(label,resolver,name,got)
                 resolved='['+expected+']' if ':' in expected else expected
                 body=run("ip","netns","exec","core-client","curl","--noproxy","*","--resolve",f"{name}:8080:{resolved}","-fsS","-m","10",f"http://{name}:8080/identity")
                 assert json.loads(body)["peer"] not in ("10.81.0.2","10.82.0.1",'fd81:81::2','fd81:82::1'),(label,"traffic bypassed proxy",body)

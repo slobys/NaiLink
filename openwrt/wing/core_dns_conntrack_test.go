@@ -66,3 +66,36 @@ func TestRouterDNSConntrackOwnership(t *testing.T) {
 		t.Fatal("selected LAN's link-local DNS was not retired")
 	}
 }
+
+func TestRouterDNSTUNConntrackOwnership(t *testing.T) {
+	f := &routerDNSFlowFilter{port: 42000, tun: true}
+	for _, peer := range []string{"198.19.255.2", "fdfe:daed::2"} {
+		flow := netlink.ConntrackFlow{Forward: netlink.IPTuple{Protocol: syscall.IPPROTO_UDP, SrcIP: net.ParseIP("192.0.2.3"), DstIP: net.ParseIP("192.0.2.1"), DstPort: 53}, Reverse: netlink.IPTuple{SrcIP: net.ParseIP(peer), SrcPort: 53}}
+		if !f.MatchConntrackFlow(&flow) {
+			t.Fatal("owned TUN DNS mapping was not retired", peer)
+		}
+		flow.Forward.Protocol = syscall.IPPROTO_TCP
+		if !f.MatchConntrackFlow(&flow) {
+			t.Fatal("owned TCP TUN DNS mapping was not retired", peer)
+		}
+		for _, mutate := range []func(*netlink.ConntrackFlow){
+			func(c *netlink.ConntrackFlow) { c.Forward.DstPort = 443 },
+			func(c *netlink.ConntrackFlow) { c.Reverse.SrcPort = 5353 },
+			func(c *netlink.ConntrackFlow) { c.Reverse.SrcIP = net.ParseIP("198.19.255.3") },
+			func(c *netlink.ConntrackFlow) { c.Forward.DstIP = c.Reverse.SrcIP },
+			func(c *netlink.ConntrackFlow) { c.Zone = 1 },
+			func(c *netlink.ConntrackFlow) { c.Forward.DstIP = net.ParseIP("100.100.100.100") },
+		} {
+			other := flow
+			mutate(&other)
+			if f.MatchConntrackFlow(&other) {
+				t.Fatal("unrelated flow matched TUN DNS retirement", other)
+			}
+		}
+		f.tun = false
+		if f.MatchConntrackFlow(&flow) {
+			t.Fatal("TPROXY claim matched a TUN-only mapping")
+		}
+		f.tun = true
+	}
+}
