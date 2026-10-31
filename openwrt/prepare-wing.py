@@ -255,6 +255,47 @@ def replace_go_function(text, signature, body):
     return text[:brace] + '\n' + body + text[end:]
 
 
+def router_apply_transactions(text):
+    text = text.replace('d.Model(&sys).Association("RunningGroups").Replace(groups)',
+                        'routerRecordRunningGroups(d, sys.ID, groups)')
+    if 'routerApplyReload(' in text:
+        return text
+    begin = text.index('func Run(d *gorm.DB, noLoad bool)')
+    prefix, run = text[:begin], text[begin:]
+    run = run.replace('the last request didn\'t complete; make a cup of tea and take a break',
+                      '正在应用或启停代理，请等待当前操作完成后再试')
+    run = run.replace('defer runLock.Unlock()', '''defer runLock.Unlock()
+    requestCtx := d.Statement.Context
+    ctx, cancel := routerApplyContext(requestCtx)
+    defer cancel()
+    if err = requestCtx.Err(); err != nil { return 0, err }''', 1)
+    begin = run.index('\t\tch := make(chan error)')
+    end = run.index('\n\t\tif err != nil', begin)
+    run = run[:begin] + '\t\terr = routerApplyReload(requestCtx, ctx, dae.EmptyConfig)' + run[end:]
+    run = run.replace('// Running -> false', '''// No database transaction spans a core operation.
+        d = db.BeginTx(ctx)
+        if d.Error != nil { return 0, d.Error }
+        defer db.FinishTransaction(d, &err)
+        // Running -> false''', 1)
+    run = run.replace('//// Run selected global+dns+routing.', '''// Read a consistent snapshot, then release it before waiting for the core.
+    // Later edits stay pending and are detected by the captured versions.
+    d = db.BeginReadOnlyTx(requestCtx)
+    if d.Error != nil { return 0, d.Error }
+    defer d.Rollback()
+    //// Run selected global+dns+routing.''', 1)
+    begin = run.index('\tchReloadCallback := make(chan error)')
+    end = run.index('\n\tif errReload != nil', begin)
+    run = run[:begin] + '''if err = d.Commit().Error; err != nil { return 0, err }
+    errReload := routerApplyReload(requestCtx, ctx, c)''' + run[end:]
+    run = run.replace('// Save running status', '''// Persist only the successfully loaded snapshot, in a new short transaction.
+    // Never write current edits back over the captured running versions.
+    d = db.BeginTx(ctx)
+    if d.Error != nil { return 0, d.Error }
+    defer db.FinishTransaction(d, &err)
+    // Save running status''', 1)
+    return prefix + run
+
+
 def router_bootstrap(text):
     text = replace_go_function(text, 'func (c *ControlPlane) resolveIp46WithBootstrapResolvers(',
                                '\treturn c.routerResolveBootstrap(ctx, host, network, race, resolve)')
@@ -487,6 +528,8 @@ type Mutation {
 ''')
         if relative.endswith("group/mutation_utils.go"):
             value = replace_go_function(value, 'func AddNodes(', (HERE / 'wing/group_add_nodes.txt').read_text(encoding='utf-8'))
+        if relative.endswith("config/mutation_utils.go"):
+            value = router_apply_transactions(value)
         if relative.endswith("node/schema.go") and 'steadyMs: Int' not in value:
             value = value.replace('source: String!', 'source: String!\n    steadyMs: Int')
         destination.write_text(value, encoding="utf-8", newline="\n")
@@ -511,9 +554,11 @@ type Mutation {
     mutation_text = mutation_text.replace(TRANSACTION_DEFER, 'defer db.FinishTransaction(tx, &err)')
     mutation_text = mutation_text.replace('\ttx.Commit()\n\treturn result, nil', '\tif err := tx.Commit().Error; err != nil { return nil, err }\n\treturn result, nil')
     begin, end = mutation_text.index('func (r *MutationResolver) Run('), mutation_text.index('func (r *MutationResolver) CreateDns(')
-    run = mutation_text[begin:end]
-    run = run.replace('tx := db.BeginTx(context.TODO())\n', 'tx := db.BeginTx(context.TODO())\n\tif tx.Error != nil { return 0, tx.Error }\n\tdefer tx.Rollback()\n') if 'defer tx.Rollback()' not in run else run
-    run = run.replace('\ttx.Commit()\n', '\tif err := tx.Commit().Error; err != nil { return 0, err }\n')
+    run = '''func (r *MutationResolver) Run(ctx context.Context, args *struct { Dry bool }) (int32, error) {
+    return config.Run(db.DB(ctx), args.Dry)
+}
+
+'''
     mutation_text = mutation_text[:begin] + run + mutation_text[end:]
     schema_file = root / "graphql/root_schema.go"
     schema_text = schema_file.read_text(encoding="utf-8")
@@ -595,6 +640,8 @@ type Mutation {
         ("dae/router_core_manager_test.go", "core_manager_test.go"),
         ("dae/router_core_api_test.go", "core_api_test.go"),
         ("graphql/router_core_mutations.go", "core_mutations.go"),
+        ("graphql/service/config/router_apply.go", "config_apply.go"),
+        ("graphql/service/config/router_apply_test.go", "config_apply_test.go"),
         ("graphql/router_geodata_mutation.go", "geodata_mutation.go"),
         ("graphql/router_geodata_mutation_test.go", "geodata_mutation_test.go"),
         ("dae/router_restart_state.go", "restart_state.go"),
@@ -674,6 +721,13 @@ type Mutation {
         generated[relative] = digest(data)
     cmd_file = root / "cmd/run.go"
     cmd_text = cmd_file.read_text(encoding="utf-8")
+    begin, end = cmd_text.index('func restoreRunningState('), cmd_text.index('func shouldReload(')
+    restore = cmd_text[begin:end]
+    restore = restore.replace('\ttx := db.BeginTx(context.TODO())\n', '')
+    restore = restore.replace('config.Run(tx, false)', 'config.Run(db.DB(context.Background()), false)')
+    restore = restore.replace('\t\ttx.Rollback()\n', '').replace('\ttx.Commit()\n', '')
+    restore = restore.replace('return tx.Commit().Error', 'return nil')
+    cmd_text = cmd_text[:begin] + restore + cmd_text[end:]
     if 'dae.InitializeRouterCores(cfgDir)' not in cmd_text:
         cmd_text = cmd_text.replace('// Read config from --config cfgDir.', 'if err := dae.InitializeRouterCores(cfgDir); err != nil { logrus.Fatal("Core state unavailable: ", err) }\n\n\t\t\t// Read config from --config cfgDir.', 1)
     if 'if dae.RouterCoreRecovered()' not in cmd_text:

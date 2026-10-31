@@ -132,7 +132,7 @@ func TestRouterMutationCommitFailureIsReported(t *testing.T) {
 			dae.ChReloadConfigs = make(chan *dae.ReloadMessage)
 			done := make(chan struct{})
 			go func() { defer close(done); message := <-dae.ChReloadConfigs; message.Callback <- nil }()
-			_, err := (&MutationResolver{}).Run(&struct{ Dry bool }{true})
+			_, err := (&MutationResolver{}).Run(context.Background(), &struct{ Dry bool }{true})
 			<-done
 			dae.ChReloadConfigs = previous
 			return err

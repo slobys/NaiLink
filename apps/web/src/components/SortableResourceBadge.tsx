@@ -14,6 +14,7 @@ export function SortableResourceBadge({
   protocol,
   address,
   meta,
+  disabled = false,
   onRemove,
   children,
 }: {
@@ -23,6 +24,7 @@ export function SortableResourceBadge({
   protocol?: string | null
   address?: string | null
   meta?: React.ReactNode
+  disabled?: boolean
   onRemove?: () => void
   children?: React.ReactNode
 }) {
@@ -68,6 +70,8 @@ export function SortableResourceBadge({
         <Button
           variant="ghost"
           size="xs"
+          disabled={disabled}
+          title={disabled ? '正在应用配置，完成后可移除群组成员' : undefined}
           aria-label={`${t('actions.remove')} ${name}`}
           className="group-member-remove h-7 w-6 p-0 shrink-0 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10"
           onClick={(e) => {
@@ -83,7 +87,7 @@ export function SortableResourceBadge({
   )
 
   return (
-    <Draggable draggableId={id} index={index}>
+    <Draggable draggableId={id} index={index} isDragDisabled={disabled}>
       {(provided, snapshot) => {
         const cardElement = card(provided, snapshot)
         if (children) {

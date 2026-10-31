@@ -29,6 +29,76 @@ async function waitText(locator, pattern) {
   }
   assert.match(await locator.textContent(), pattern)
 }
+async function checkApplyMemberGuard(page, context, gql, config, touch) {
+  const label = touch ? 'ApplyMobileFixture' : 'ApplyDesktopFixture'
+  const group = (await gql(`mutation{createGroup(name:${JSON.stringify(label)},policy:random){id}}`)).createGroup.id
+  const node = (
+    await gql(
+      `mutation{importNodes(rollbackError:true,args:[{tag:${JSON.stringify(label)},link:"socks5://127.0.0.1:19092#apply"}]){node{id}}}`,
+    )
+  ).importNodes[0].node.id
+  await gql(
+    `mutation{groupAddNodes(id:${JSON.stringify(group)},nodeIDs:[${JSON.stringify(node)}]) updateConfig(id:${JSON.stringify(config)},global:{checkInterval:"32s"}){id}}`,
+  )
+  await page.goto(`${base}/cgi-bin/luci/admin/services/daed/dashboard`)
+  const frame = page.frameLocator('iframe')
+  await frame.locator('[data-workspace="dashboard"]').waitFor({ timeout: 45000 })
+  await frame.getByRole('button', { name: new RegExp(`展开.*${label}`) }).click()
+  const remove = frame
+    .locator('[data-group-member]')
+    .filter({ hasText: label })
+    .getByRole('button', { name: new RegExp(label) })
+  await remove.waitFor()
+  let release,
+    entered,
+    edits = 0
+  const held = new Promise((resolve) => {
+    release = resolve
+  })
+  const started = new Promise((resolve) => {
+    entered = resolve
+  })
+  const intercept = async (route) => {
+    const body = route.request().postDataJSON()
+    if (/mutation Run\(/.test(body?.query || '')) {
+      entered()
+      await held
+    }
+    if (/mutation GroupDelNodes\(/.test(body?.query || '')) edits++
+    await route.continue()
+  }
+  await page.route('**/cgi-bin/daed-router/graphql', intercept)
+  try {
+    await frame.getByRole('button', { name: '应用配置', exact: true }).click()
+    await Promise.race([
+      started,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Apply never started')), 5000)),
+    ])
+    await frame.getByText('正在应用配置，完成后可移除群组成员。', { exact: true }).waitFor()
+    assert.equal(await remove.isDisabled(), true, 'Member removal is disabled during apply')
+    await remove.evaluate((button) => button.click())
+    assert.equal(edits, 0, 'Disabled member button must not submit a mutation')
+    release()
+    for (let i = 0; i < 200 && (await remove.isDisabled()); i++) await new Promise((r) => setTimeout(r, 100))
+    assert.equal(await remove.isEnabled(), true, 'Member removal recovers without reboot')
+    if (touch) await remove.tap()
+    else await remove.click()
+    await remove.waitFor({ state: 'detached', timeout: 15000 })
+    assert.equal(edits, 1)
+    const nodes = (await gql(`{groups{id nodes{id}}}`)).groups.find((g) => g.id === group).nodes
+    assert.deepEqual(nodes, [])
+    await page.screenshot({
+      path: path.join(output, touch ? 'mobile-apply-guard.png' : 'desktop-apply-guard.png'),
+      fullPage: true,
+    })
+  } finally {
+    release()
+    await page.unrouteAll({ behavior: 'wait' })
+  }
+  await gql(
+    `mutation{removeGroup(id:${JSON.stringify(group)}) removeNodes(ids:[${JSON.stringify(node)}]) updateConfig(id:${JSON.stringify(config)},global:{checkInterval:"31s"}){id}}`,
+  )
+}
 async function checkHorizontalChoices(dialog, selected) {
   // Measure the settled dialog, not the 95% opening-scale animation.
   await new Promise((resolve) => setTimeout(resolve, 250))
@@ -187,6 +257,19 @@ async function checkManualLatency(page, context, touch, screenshot) {
       'mutation{importNodes(rollbackError:true,args:[{tag:"Preserved node",link:"socks5://127.0.0.1:19092#preserved"}]){error node{id}}}',
     )
     await gql(`mutation{updateConfig(id:${JSON.stringify(config)},global:{checkInterval:"31s"}){id}}`)
+    await checkApplyMemberGuard(page, context, gql, config, false)
+    const applyMobile = await browser.newContext({
+      storageState: await context.storageState(),
+      viewport: { width: 390, height: 844 },
+      isMobile: true,
+      hasTouch: true,
+    })
+    const applyPhone = await applyMobile.newPage()
+    await checkApplyMemberGuard(applyPhone, applyMobile, gql, config, true)
+    await applyMobile.close()
+    await page.reload()
+    frame = page.frameLocator('iframe')
+    await frame.locator('[data-workspace="dashboard"]').waitFor({ timeout: 45000 })
     await control('snapshot')
     await frame.getByRole('button', { name: /代理内核 dae/ }).click()
     let dialog = frame.getByRole('dialog')
@@ -333,6 +416,7 @@ async function checkManualLatency(page, context, touch, screenshot) {
     assert.deepEqual(errors, [])
     const result = {
       realLuCI: true,
+      desktopMobileApplyMemberGuard: true,
       realRPC: true,
       realProcd: true,
       pinnedCompatibilityCoreInstall: true,

@@ -901,6 +901,7 @@ export function useRunMutation() {
   const queryClient = useQueryClient()
 
   return useMutation({
+    mutationKey: ['apply-config'],
     mutationFn: (dry: boolean) => {
       return gqlClient.request(
         graphql(`

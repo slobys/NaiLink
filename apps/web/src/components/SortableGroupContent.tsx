@@ -163,6 +163,7 @@ export function SortableGroupContent({
   onOpenAddNodes,
   onOpenAddSubscriptions,
   showAddButtons = true,
+  disabled = false,
 }: {
   groupId: string
   nodes: GroupNode[]
@@ -177,6 +178,7 @@ export function SortableGroupContent({
   onOpenAddNodes: () => void
   onOpenAddSubscriptions: () => void
   showAddButtons?: boolean
+  disabled?: boolean
 }) {
   const { t } = useTranslation()
   const groupSortOrders = useStore(groupSortOrdersAtom)
@@ -266,6 +268,7 @@ export function SortableGroupContent({
       >
         {sortedNodes.map(({ id: nodeId, tag, name, protocol, address, subscriptionID }, index) => (
           <SortableResourceBadge
+            disabled={disabled}
             key={nodeId}
             id={`${groupId}-node-${nodeId}`}
             index={columns === 2 ? index % Math.ceil(sortedNodes.length / 2) : index}
@@ -299,6 +302,7 @@ export function SortableGroupContent({
       >
         {sortedSubscriptions.map(({ subscription, nameFilterRegex, matchedCount, matchedNodes }, index) => (
           <SortableResourceBadge
+            disabled={disabled}
             key={subscription.id}
             id={`${groupId}-sub-${subscription.id}`}
             index={columns === 2 ? index % Math.ceil(sortedSubscriptions.length / 2) : index}

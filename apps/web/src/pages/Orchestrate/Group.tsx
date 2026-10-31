@@ -7,6 +7,7 @@ import type { DraggingResource } from '~/constants'
 import type { GroupsQuery, NodesQuery, SubscriptionsQuery } from '~/schemas/gql/graphql'
 import { Draggable, Droppable } from '@hello-pangea/dnd'
 import { useStore } from '@nanostores/react'
+import { useIsMutating } from '@tanstack/react-query'
 
 import { Plus, Settings2, Table2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -57,6 +58,7 @@ export function GroupResource({
   quickAdd?: boolean
 }) {
   const { t } = useTranslation()
+  const applying = useIsMutating({ mutationKey: ['apply-config'] }) > 0
   const groupsRequest = useGroupsQuery()
   const groupsQuery = groupsRequest.data
   const { data: nodesQuery } = useNodesQuery()
@@ -336,6 +338,7 @@ export function GroupResource({
         }
       >
         <SortableGroupContent
+          disabled={applying}
           showAddButtons={!quickAdd}
           groupId={groupId}
           nodes={groupNodes}
@@ -385,6 +388,11 @@ export function GroupResource({
       className="panel-side-section"
       contentClassName="min-h-0 flex-1 overflow-y-auto overscroll-contain panel-side-scroll"
     >
+      {applying && (
+        <p role="status" className="text-xs text-muted-foreground">
+          正在应用配置，完成后可移除群组成员。
+        </p>
+      )}
       <Droppable droppableId={GROUP_DROPPABLE_ID} type="GROUP">
         {(provided) => (
           <div ref={provided.innerRef} {...provided.droppableProps} className="flex flex-col gap-3">

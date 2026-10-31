@@ -39,7 +39,10 @@
   >
 </div>
 <h2 id="current">v$version 更新说明</h2>
-<p>本版重点处理 DNS 复用连接失效后的恢复，以及三个内核启动超时、取消和失败清理。现有节点、配置及接管方式继续保留。</p>
+<p>
+  本版修复应用配置期间移除群组节点可能阻塞页面的问题，并保留已有 DNS
+  恢复与内核切换保护。现有节点、配置及接管方式继续保留。
+</p>
 <ul>
   <li><a href="cores.html#switch">切换内核与非 TUN / TUN 模式</a>，区分已选择目标和实际运行状态。</li>
   <li><a href="troubleshooting.html#first-open">排查首次打开慢</a>，结合 DNS、线路和分流记录判断。</li>
