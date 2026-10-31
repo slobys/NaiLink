@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/daeuniverse/dae-wing/routercore"
 	daeConfig "github.com/daeuniverse/dae/config"
@@ -22,6 +23,32 @@ type coreFakeSession struct {
 	readyErr, stopErr error
 	done              chan error
 	stopped           bool
+}
+
+func TestRouterCoreStartupBudgetIncludesNativePreparation(t *testing.T) {
+	for _, core := range []string{"dae", "sing-box", "mihomo"} {
+		t.Run(core, func(t *testing.T) {
+			conf, dirs := coreFixtureConfig(t)
+			live := 0
+			m := &routerCoreManager{root: dirs[0], conf: conf}
+			m.factory = func(ctx context.Context, _ string, _ *daeConfig.Config) (routerCoreSession, error) {
+				deadline, ok := ctx.Deadline()
+				remaining := time.Until(deadline)
+				if !ok || remaining < 80*time.Second || remaining > 90*time.Second {
+					t.Fatalf("large rule preparation has no bounded verification budget: %v", remaining)
+				}
+				live++
+				return &coreFakeSession{live: &live, done: make(chan error)}, nil
+			}
+			session, err := m.start(context.Background(), core, conf)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = routerStopSession(session); err != nil || live != 0 {
+				t.Fatal("session cleanup failed", err)
+			}
+		})
+	}
 }
 
 type coreDeadlineSession struct {

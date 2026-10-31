@@ -299,11 +299,16 @@ func (m *routerCoreManager) start(ctx context.Context, name string, conf *daeCon
 	}
 	ctx, cancel := context.WithTimeout(ctx, routerCoreStartTimeout(conf))
 	defer cancel()
+	started := time.Now()
 	session, err := m.factory(ctx, name, conf)
 	if err != nil {
 		return nil, err
 	}
+	prepared := time.Now()
 	if err = routerSessionReady(ctx, session); err != nil {
+		if m.log != nil {
+			m.log.WithFields(logrus.Fields{"core": name, "prepare_ms": prepared.Sub(started).Milliseconds(), "verify_ms": time.Since(prepared).Milliseconds()}).Warn("Core startup readiness failed")
+		}
 		if stopErr := routerStopSession(session); stopErr != nil {
 			return nil, errors.New("core_cleanup_failed")
 		}

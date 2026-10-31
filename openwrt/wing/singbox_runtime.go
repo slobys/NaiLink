@@ -868,7 +868,11 @@ func routerCoreStartTimeout(conf *daeConfig.Config) time.Duration {
 			}
 		}
 	}
-	return 45 * time.Second
+	// This budget includes configuration generation, native `check`, process
+	// startup and real DNS/HTTP verification. On ARM, a large local rule database
+	// can consume most of 45 seconds before the listeners become available.
+	// Keep the whole operation bounded while leaving time to verify the new core.
+	return 90 * time.Second
 }
 
 // The controller can bind before DNS and mixed listeners (notably on ARM).
