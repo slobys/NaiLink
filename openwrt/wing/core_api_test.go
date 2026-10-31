@@ -151,7 +151,7 @@ func TestRouterCoreAPIBoundsIgnoredResponseBodies(t *testing.T) {
 		_, _ = w.Write([]byte(strings.Repeat(" ", (2<<20)+2)))
 	})
 	err := s.api(context.Background(), "/version", nil)
-	if err == nil || err.Error() != "core_api_invalid" {
+	if err == nil || err.Error() != "core_api_response_too_large" {
 		t.Fatal("accepted excessive response", err)
 	}
 	if err = s.api(context.Background(), "/invalid", &map[string]string{}); err == nil || err.Error() != "core_api_invalid" {

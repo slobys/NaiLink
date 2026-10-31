@@ -14,7 +14,7 @@ on:
     inputs:
       version:
         description: 'Package version (X.Y.Z), must match source'
-        default: '0.6.61'
+        default: '0.6.62'
         required: true
       publish:
         description: 'After all checks, upload to a release draft (main only)'

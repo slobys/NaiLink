@@ -5,6 +5,13 @@ import { cancellableGraphQLClient, graphQLNotice } from './graphql-client'
 describe('router graphQL notices', () => {
   it('keeps transient overview failures local while translating real core failures', () => {
     expect(graphQLNotice({ message: 'core_not_ready', path: ['general', 'runtimeOverview'] }, true)).toBeUndefined()
+    for (const message of ['core_api_invalid', 'core_api_response_too_large', 'unrelated statistics failure']) {
+      expect(graphQLNotice({ message, path: ['general', 'runtimeOverview'] }, true)).toBeUndefined()
+    }
+    expect(
+      graphQLNotice({ message: 'statistics field failed', path: ['general', 'runtimeOverview', 'samples'] }, true),
+    ).toBeUndefined()
+    expect(graphQLNotice({ message: 'core_api_invalid', path: ['switchCore'] }, true)).toContain('异常数据')
     expect(graphQLNotice({ message: 'core_not_ready', path: ['switchCore'] }, true)).toContain('就绪')
     expect(graphQLNotice({ message: 'core_rolled_back', path: ['switchCore'] }, true)).toContain('恢复')
     expect(graphQLNotice({ message: 'unrelated failure' }, true)).toBe('unrelated failure')

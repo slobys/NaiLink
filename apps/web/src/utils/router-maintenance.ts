@@ -166,6 +166,7 @@ export const maintenanceMessages: Record<string, string> = {
   core_network_check_failed: '透明代理的防火墙或策略路由检查失败，请查看恢复结果与运行日志；原配置保留。',
   core_network_ownership_failed: '接管资源与 NaiLink 的记录不一致，已停止自动修改以保护其他服务；原配置保留。',
   core_api_invalid: '内核管理接口返回异常数据，请重新读取状态并查看运行日志；原配置保留。',
+  core_api_response_too_large: '内核管理接口响应超出采集上限，请查看运行日志；现有配置保留。',
   core_recovery_snapshot_missing: '缺少内核恢复快照，已停止自动恢复；节点和配置保留，请查看日志后修复服务。',
   core_recovery_snapshot_invalid: '内核恢复快照无法读取，已停止自动恢复；节点和配置保留，请查看日志后修复服务。',
   core_rolled_back: '目标内核未能就绪，已恢复原内核、节点和运行配置。',

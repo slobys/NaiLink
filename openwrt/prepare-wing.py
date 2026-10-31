@@ -628,6 +628,7 @@ type Mutation {
         ("dae/router_core_dns_conntrack.go", "core_dns_conntrack.go"),
         ("dae/router_core_dns_conntrack_test.go", "core_dns_conntrack_test.go"),
         ("dae/router_core_overview.go", "core_overview.go"),
+        ("dae/router_core_overview_test.go", "core_overview_test.go"),
         ("dae/router_core_config_test.go", "core_config_test.go"),
         ("dae/router_core_protocol_interop_test.go", "core_protocol_interop_test.go"),
         ("dae/router_core_extra_test.go", "core_extra_test.go"),

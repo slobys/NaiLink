@@ -4,11 +4,10 @@ import { coreProblemLabel, maintenanceMessages } from './router-maintenance'
 
 export function graphQLNotice(error: { message: string; path?: readonly (string | number)[] }, router: boolean) {
   if (/^latency_job_|^test_job_|^core_changed$|^invalid_test_job$/.test(error.message)) return undefined
-  // A statistics request already in flight can lose its core during a switch.
-  // Its observer owns the unavailable state; never turn this into a global
-  // failure toast. Mutations and other queries still report genuine failures.
-  if (router && error.message === 'core_not_ready' && error.path?.join('.') === 'general.runtimeOverview')
-    return undefined
+  // This polling observer already shows failures and stale data inline. Neither
+  // a switch nor a persistently unavailable statistics endpoint may flood the
+  // page with toasts. Mutations and other queries still report their failures.
+  if (router && error.path?.[0] === 'general' && error.path[1] === 'runtimeOverview') return undefined
   if (router && /^core_[a-z_]+$/.test(error.message))
     return maintenanceMessages[error.message] || coreProblemLabel(error.message)
   return error.message

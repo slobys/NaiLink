@@ -292,6 +292,9 @@ type routerSingBoxSession struct {
 	apiClosed     bool
 	statsMu       sync.Mutex
 	stats         *RuntimeOverview
+	statsNextAt   time.Time
+	statsLogAt    time.Time
+	statsError    error
 	samples       []RuntimeTrafficSample
 }
 
@@ -507,6 +510,21 @@ func (s *routerSingBoxSession) closeControlAPI() {
 	}
 }
 func (s *routerSingBoxSession) api(ctx context.Context, path string, value any) error {
+	return s.readAPI(ctx, path, 2<<20, func(reader io.Reader) error {
+		if value == nil {
+			return nil
+		}
+		decoder := json.NewDecoder(reader)
+		if err := decoder.Decode(value); err != nil {
+			return err
+		}
+		return routerJSONEnd(decoder)
+	})
+}
+
+// Response limits remain endpoint-specific. Statistics reduce each connection
+// as it arrives instead of allocating the entire connection list in memory.
+func (s *routerSingBoxSession) readAPI(ctx context.Context, path string, limit int64, consume func(io.Reader) error) error {
 	client, lifetime, err := s.controlAPIClient()
 	if err != nil {
 		return err
@@ -527,18 +545,23 @@ func (s *routerSingBoxSession) api(ctx context.Context, path string, value any) 
 	if response.StatusCode != 200 {
 		return errors.New("core_not_ready")
 	}
-	reader := &io.LimitedReader{R: response.Body, N: (2 << 20) + 1}
-	if value != nil && json.NewDecoder(reader).Decode(value) != nil {
-		if ctx.Err() != nil || lifetime.Err() != nil {
-			return errors.New("core_not_ready")
-		}
-		return errors.New("core_api_invalid")
+	if response.ContentLength > limit {
+		return errors.New("core_api_response_too_large")
 	}
+	reader := &io.LimitedReader{R: response.Body, N: limit + 1}
+	err = consume(reader)
 	// Reading to EOF permits bounded keep-alive reuse, including /version calls
 	// that do not consume JSON. A cancelled/stopped session can never reopen it.
-	if _, err := io.Copy(io.Discard, reader); err != nil || reader.N == 0 {
-		if ctx.Err() != nil || lifetime.Err() != nil {
+	if err == nil {
+		_, err = io.Copy(io.Discard, reader)
+	}
+	if err != nil || reader.N == 0 {
+		var networkError net.Error
+		if ctx.Err() != nil || lifetime.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.As(err, &networkError) && networkError.Timeout() {
 			return errors.New("core_not_ready")
+		}
+		if reader.N == 0 {
+			return errors.New("core_api_response_too_large")
 		}
 		return errors.New("core_api_invalid")
 	}

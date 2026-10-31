@@ -29,6 +29,33 @@ async function waitText(locator, pattern) {
   }
   assert.match(await locator.textContent(), pattern)
 }
+async function checkStatisticsFailureRecovery(page) {
+  const frame = page.frameLocator('iframe')
+  let failures = 0
+  await page.route('**/cgi-bin/daed-router/graphql', async (route) => {
+    const body = route.request().postDataJSON()
+    if (/query TrafficOverview\b/.test(body?.query || '')) {
+      failures++
+      return route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ errors: [{ message: 'core_api_invalid', path: ['general', 'runtimeOverview'] }] }),
+      })
+    }
+    await route.continue()
+  })
+  try {
+    const warning = frame.getByText('暂时无法获取运行数据，已显示的数值可能不是最新状态。', { exact: true })
+    await warning.waitFor({ timeout: 25000 })
+    assert.ok(failures >= 2, 'Must observe repeated failures, not just one response')
+    const message = '内核管理接口返回异常数据，请重新读取状态并查看运行日志；原配置保留。'
+    assert.equal(await frame.getByText(message, { exact: true }).count(), 0, 'Polling must not create repeated toasts')
+    assert.equal(await page.getByText(message, { exact: true }).count(), 0)
+    await page.unrouteAll({ behavior: 'wait' })
+    await warning.waitFor({ state: 'detached', timeout: 25000 })
+  } finally {
+    await page.unrouteAll({ behavior: 'wait' })
+  }
+}
 async function checkApplyMemberGuard(page, context, gql, config, touch) {
   const label = touch ? 'ApplyMobileFixture' : 'ApplyDesktopFixture'
   const group = (await gql(`mutation{createGroup(name:${JSON.stringify(label)},policy:random){id}}`)).createGroup.id
@@ -258,6 +285,7 @@ async function checkManualLatency(page, context, touch, screenshot) {
     )
     await gql(`mutation{updateConfig(id:${JSON.stringify(config)},global:{checkInterval:"31s"}){id}}`)
     await checkApplyMemberGuard(page, context, gql, config, false)
+    await checkStatisticsFailureRecovery(page)
     const applyMobile = await browser.newContext({
       storageState: await context.storageState(),
       viewport: { width: 390, height: 844 },
@@ -266,6 +294,7 @@ async function checkManualLatency(page, context, touch, screenshot) {
     })
     const applyPhone = await applyMobile.newPage()
     await checkApplyMemberGuard(applyPhone, applyMobile, gql, config, true)
+    await checkStatisticsFailureRecovery(applyPhone)
     await applyMobile.close()
     await page.reload()
     frame = page.frameLocator('iframe')
@@ -417,6 +446,7 @@ async function checkManualLatency(page, context, touch, screenshot) {
     const result = {
       realLuCI: true,
       desktopMobileApplyMemberGuard: true,
+      desktopMobileStatisticsRecovery: true,
       realRPC: true,
       realProcd: true,
       pinnedCompatibilityCoreInstall: true,
