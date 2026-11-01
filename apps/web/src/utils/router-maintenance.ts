@@ -1,4 +1,6 @@
 export type MaintenanceAction =
+  | 'config_apply'
+  | 'config_stop'
   | 'check'
   | 'update'
   | 'geodata'
@@ -91,6 +93,8 @@ export function geodataVersionState(
 }
 
 export const maintenanceMessages: Record<string, string> = {
+  configuration_apply_failed: '配置应用未完成，请查看运行日志；节点、订阅与配置保留。',
+  configuration_result_unconfirmed: '应用结果暂未确认，请重新读取状态并查看日志，请勿重复提交；节点与配置保留。',
   invalid_core_mode: '接管模式无效，请重新选择。',
   core_tun_unavailable: 'TUN 设备不可用。可安装固件匹配的 kmod-tun，或选择非 TUN；现有代理保留。',
   tproxy_fw4_required: '非 TUN 接管需要 firewall4；当前旧式防火墙不会被自动改造，请使用兼容固件或原有模式。',
@@ -225,6 +229,7 @@ export function coreProblemLabel(value: string) {
 }
 
 export class MaintenanceAccessError extends Error {}
+export class MaintenanceRejectedError extends Error {}
 export function maintenanceAccessExpired(error: unknown) {
   return error instanceof MaintenanceAccessError
 }
@@ -238,7 +243,11 @@ export function newerVersion(next: string, current: string) {
   return false
 }
 
-async function maintenanceRPC(method: 'maintenance' | 'maintain', action?: string): Promise<MaintenanceStatus> {
+async function maintenanceRPC(
+  method: 'maintenance' | 'maintain',
+  action?: string,
+  requestID?: string,
+): Promise<MaintenanceStatus> {
   const host = window.parent as Window & {
     L?: {
       require: (
@@ -253,11 +262,12 @@ async function maintenanceRPC(method: 'maintenance' | 'maintain', action?: strin
     result = await rpc.declare({
       object: 'daed-router',
       method,
-      params: method === 'maintain' ? ['action'] : action ? ['check_geodata'] : [],
+      params:
+        method === 'maintain' ? (requestID ? ['action', 'request_id'] : ['action']) : action ? ['check_geodata'] : [],
       expect: {},
       raise: true,
       reject: true,
-    })(...(action ? [action] : []))
+    })(...(action ? (requestID ? [action, requestID] : [action]) : []))
   } catch (error) {
     const failure = error as { code?: number; name?: string; message?: string }
     if (
@@ -270,7 +280,8 @@ async function maintenanceRPC(method: 'maintenance' | 'maintain', action?: strin
     throw new Error('维护接口暂时不可用，请稍后重试；持续失败时重新登录后台。')
   }
   if (!result || typeof result.success !== 'boolean') throw new Error('维护接口不可用，请更新插件并重新登录后台。')
-  if (!result.success) throw new Error(maintenanceMessages[result.code || ''] || maintenanceMessages.operation_failed)
+  if (!result.success)
+    throw new MaintenanceRejectedError(maintenanceMessages[result.code || ''] || maintenanceMessages.operation_failed)
   return result
 }
 export const readMaintenance = () => maintenanceRPC('maintenance')
@@ -280,3 +291,5 @@ export const checkGeodataVersion = async () => {
   return result
 }
 export const startMaintenance = (action: MaintenanceAction) => maintenanceRPC('maintain', action)
+export const startConfigurationMaintenance = (action: MaintenanceAction, requestID: string) =>
+  maintenanceRPC('maintain', action, requestID)

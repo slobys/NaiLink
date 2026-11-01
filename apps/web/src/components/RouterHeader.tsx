@@ -1,6 +1,6 @@
-import { useIsMutating } from '@tanstack/react-query'
+import { useIsMutating, useQueryClient } from '@tanstack/react-query'
 import { Activity, Power } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -10,7 +10,10 @@ import { RouterCore } from '~/components/RouterCore'
 import { RouterGeodata, RouterVersion } from '~/components/RouterMaintenance'
 import { ThemePicker } from '~/components/ThemePicker'
 import { Button } from '~/components/ui/button'
+import { QUERY_KEY_GENERAL } from '~/constants'
 import { useRouterMaintenance } from '~/hooks/useRouterMaintenance'
+import { configurationJob, ConfigurationPendingError } from '~/utils/configuration-apply'
+import { jobActive, maintenanceMessages } from '~/utils/router-maintenance'
 
 export function RouterHeader() {
   const { t } = useTranslation()
@@ -29,21 +32,40 @@ export function RouterHeader() {
     predicate: (mutation) =>
       !['node-latency-test', 'geodata-version-check'].includes(String(mutation.options.mutationKey?.[0])),
   })
-  const { busy: maintenanceBusy } = useRouterMaintenance()
+  const { busy: maintenanceBusy, query: maintenance } = useRouterMaintenance()
+  const client = useQueryClient()
+  const job = configurationJob(maintenance.data?.job) ? maintenance.data?.job : undefined
+  const configuring = jobActive(job)
+  const [failed, setFailed] = useState<Error>()
+  // A reopened page did not own the original mutation. Its durable task receipt
+  // must still refresh general/running-group state when the worker finishes.
+  useEffect(() => {
+    if (job && !jobActive(job)) {
+      client.invalidateQueries({ queryKey: QUERY_KEY_GENERAL })
+      client.invalidateQueries({ queryKey: ['core-runtime-groups'] })
+      if (failed instanceof ConfigurationPendingError && failed.operation === job.id) {
+        setFailed(undefined)
+        if (job.state === 'success')
+          toast.success(job.action === 'config_stop' ? t('panel.stopped') : t('panel.applied'))
+      }
+    }
+  }, [client, job?.id, job?.state, failed, t])
   const saving = mutations > 0 || maintenanceBusy
   const [operation, setOperation] = useState<'apply' | 'toggle'>('toggle')
-  const [failed, setFailed] = useState(false)
+  const failure =
+    failed?.message ||
+    (job?.state === 'error' ? maintenanceMessages[job.code || ''] || t('panel.runFailed') : undefined)
   const running = query.data?.general.dae.running ?? false
   const modified = query.data?.general.dae.modified ?? false
   const invoke = async (action: 'apply' | 'toggle') => {
     if (saving) return
     setOperation(action)
-    setFailed(false)
+    setFailed(undefined)
     try {
       await run.mutateAsync(action === 'apply' ? false : running)
       toast.success(action === 'apply' ? t('panel.applied') : running ? t('panel.stopped') : t('panel.running'))
-    } catch {
-      setFailed(true)
+    } catch (error) {
+      setFailed(error instanceof Error ? error : new Error(t('panel.runFailed')))
     }
   }
   return (
@@ -98,19 +120,29 @@ export function RouterHeader() {
                 : t('panel.start')}
           </Button>
         </div>
-        {(failed || query.isError) && (
+        {configuring && (
+          <div role="status" className="col-span-full rounded-lg bg-primary/5 px-3 py-2 text-sm text-muted-foreground">
+            {job?.action === 'config_stop' ? '正在停止代理' : '正在应用配置'}
+            ，关闭页面后后台任务仍会继续，请勿重复提交。
+          </div>
+        )}
+        {!configuring && !run.isPending && (failure || query.isError) && (
           <div
             role="alert"
             className="col-span-full flex w-full flex-wrap items-center gap-3 rounded-lg border border-destructive/25 bg-destructive/5 p-3 text-sm"
           >
-            <span>{failed ? t('panel.runFailed') : t('panel.loadFailed')}</span>
+            <span>{failure || t('panel.loadFailed')}</span>
             <Button
               size="sm"
               variant="outline"
-              onClick={() => (failed ? invoke(operation) : query.refetch())}
+              onClick={() => {
+                setFailed(undefined)
+                query.refetch()
+                maintenance.refetch()
+              }}
               disabled={saving}
             >
-              {t('panel.retry')}
+              重新读取状态
             </Button>
           </div>
         )}

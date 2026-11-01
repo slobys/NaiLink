@@ -34,9 +34,13 @@ import { Button } from '~/components/ui/button'
 import { SimpleTooltip } from '~/components/ui/tooltip'
 import { DraggableResourceType } from '~/constants'
 import { useDisclosure } from '~/hooks'
+import { useRouterMaintenanceQuery } from '~/hooks/useRouterMaintenance'
 import { cn } from '~/lib/utils'
 import { appStateAtom, defaultResourcesAtom } from '~/store'
 import { getInstantDropStyle } from '~/utils'
+import { configurationJob } from '~/utils/configuration-apply'
+import { jobActive } from '~/utils/router-maintenance'
+import { routerMode } from '~/utils/router-mode'
 
 const GROUP_DROPPABLE_ID = 'group-list'
 
@@ -58,7 +62,12 @@ export function GroupResource({
   quickAdd?: boolean
 }) {
   const { t } = useTranslation()
-  const applying = useIsMutating({ mutationKey: ['apply-config'] }) > 0
+  const applyMutations = useIsMutating({ mutationKey: ['apply-config'] })
+  const maintenance = useRouterMaintenanceQuery(routerMode)
+  const applying =
+    applyMutations > 0 ||
+    (routerMode && maintenance.isPending) ||
+    (configurationJob(maintenance.data?.job) && jobActive(maintenance.data?.job))
   const groupsRequest = useGroupsQuery()
   const groupsQuery = groupsRequest.data
   const { data: nodesQuery } = useNodesQuery()

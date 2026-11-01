@@ -15,6 +15,7 @@ import {
 } from '~/constants'
 import { useGQLQueryClient } from '~/contexts'
 import { graphql } from '~/schemas/gql'
+import { applyRouterConfiguration } from '~/utils/configuration-apply'
 import { latencyResultFields } from '~/utils/latency'
 import { routerMode } from '~/utils/router-mode'
 import { subscriptionUpdateFailure } from '~/utils/subscription-update'
@@ -902,7 +903,16 @@ export function useRunMutation() {
 
   return useMutation({
     mutationKey: ['apply-config'],
+    retry: false,
     mutationFn: (dry: boolean) => {
+      if (routerMode) {
+        return applyRouterConfiguration(dry, (status) => {
+          queryClient.setQueryData(['router-maintenance'], (previous: typeof status | undefined) => ({
+            ...previous,
+            ...status,
+          }))
+        })
+      }
       return gqlClient.request(
         graphql(`
           mutation Run($dry: Boolean!) {
@@ -914,7 +924,8 @@ export function useRunMutation() {
         },
       )
     },
-    onSuccess: () => {
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['router-maintenance'] })
       queryClient.invalidateQueries({ queryKey: QUERY_KEY_GENERAL })
       queryClient.invalidateQueries({ queryKey: ['core-runtime-groups'] })
     },

@@ -76,9 +76,9 @@ async function checkApplyMemberGuard(page, context, gql, config, touch) {
     .filter({ hasText: label })
     .getByRole('button', { name: new RegExp(label) })
   await remove.waitFor()
-  let release,
-    entered,
-    edits = 0
+  let release
+  let entered
+  let edits = 0
   const held = new Promise((resolve) => {
     release = resolve
   })
@@ -87,14 +87,29 @@ async function checkApplyMemberGuard(page, context, gql, config, touch) {
   })
   const intercept = async (route) => {
     const body = route.request().postDataJSON()
-    if (/mutation Run\(/.test(body?.query || '')) {
+    const requests = Array.isArray(body) ? body : [body]
+    if (
+      requests.some(
+        (request) =>
+          request?.params?.[1] === 'daed-router' &&
+          request.params[2] === 'maintain' &&
+          request.params[3]?.action === 'config_apply',
+      )
+    ) {
+      // On touch, lose the initial response after the real procd worker has
+      // accepted it. The client must recover its exact ID without resubmitting.
+      const accepted = touch ? await route.fetch() : undefined
       entered()
       await held
+      if (accepted) return route.abort('connectionreset')
     }
     if (/mutation GroupDelNodes\(/.test(body?.query || '')) edits++
     await route.continue()
   }
-  await page.route('**/cgi-bin/daed-router/graphql', intercept)
+  await page.route(
+    (url) => /^\/ubus(?:\/|$)/.test(url.pathname) || url.pathname === '/cgi-bin/daed-router/graphql',
+    intercept,
+  )
   try {
     await frame.getByRole('button', { name: '应用配置', exact: true }).click()
     await Promise.race([
@@ -118,6 +133,8 @@ async function checkApplyMemberGuard(page, context, gql, config, touch) {
       path: path.join(output, touch ? 'mobile-apply-guard.png' : 'desktop-apply-guard.png'),
       fullPage: true,
     })
+    await page.unrouteAll({ behavior: 'wait' })
+    await checkApplicationRefresh(page)
   } finally {
     release()
     await page.unrouteAll({ behavior: 'wait' })
@@ -125,6 +142,41 @@ async function checkApplyMemberGuard(page, context, gql, config, touch) {
   await gql(
     `mutation{removeGroup(id:${JSON.stringify(group)}) removeNodes(ids:[${JSON.stringify(node)}]) updateConfig(id:${JSON.stringify(config)},global:{checkInterval:"31s"}){id}}`,
   )
+}
+
+async function checkApplicationRefresh(page) {
+  let pending = true
+  let starts = 0
+  await page.route(
+    (url) => /^\/ubus(?:\/|$)/.test(url.pathname),
+    async (route) => {
+      const body = route.request().postDataJSON()
+      const requests = Array.isArray(body) ? body : [body]
+      starts += requests.filter((r) => r?.params?.[1] === 'daed-router' && r.params[2] === 'maintain').length
+      if (!requests.some((r) => r?.params?.[1] === 'daed-router' && r.params[2] === 'maintenance'))
+        return route.continue()
+      const response = await route.fetch()
+      const json = await response.json()
+      for (const reply of Array.isArray(json) ? json : [json]) {
+        const result = reply?.result?.[1]
+        if (pending && result?.job?.action === 'config_apply') result.job.state = 'running'
+      }
+      await route.fulfill({ response, json })
+    },
+  )
+  try {
+    await page.reload()
+    const frame = page.frameLocator('iframe')
+    const progress = frame.getByText('正在应用配置，关闭页面后后台任务仍会继续，请勿重复提交。', { exact: true })
+    await progress.waitFor({ timeout: 20000 })
+    assert.equal(await frame.getByRole('button', { name: '停止代理', exact: true }).isDisabled(), true)
+    pending = false
+    await progress.waitFor({ state: 'detached', timeout: 20000 })
+    assert.equal(starts, 0, 'Refreshing a task must only read status, never submit again')
+    assert.equal(await frame.getByText('操作失败，请查看运行日志后重试。', { exact: true }).count(), 0)
+  } finally {
+    await page.unrouteAll({ behavior: 'wait' })
+  }
 }
 async function checkHorizontalChoices(dialog, selected) {
   // Measure the settled dialog, not the 95% opening-scale animation.

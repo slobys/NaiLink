@@ -44,6 +44,104 @@ func maintenanceFixture(t *testing.T) *maintenanceManager {
 	}
 	return m
 }
+
+func TestConfigurationTaskSurvivesBrowserAndRejectsDuplicate(t *testing.T) {
+	for _, action := range []string{"config_apply", "config_stop"} {
+		t.Run(action, func(t *testing.T) {
+			m := maintenanceFixture(t)
+			entered, release, finished := make(chan string, 1), make(chan struct{}), make(chan error, 1)
+			m.graph = func(ctx context.Context, query string, value any) error {
+				entered <- query
+				select {
+				case <-release:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+				return json.Unmarshal([]byte(`{"run":1}`), value)
+			}
+			accepted := m.start(action)
+			if !accepted.Success || accepted.Job == nil {
+				t.Fatalf("start: %+v", accepted)
+			}
+			go func() { finished <- m.worker(context.Background(), accepted.Job.ID) }()
+			select {
+			case query := <-entered:
+				want := "mutation {run(dry:false)}"
+				if action == "config_stop" {
+					want = "mutation {run(dry:true)}"
+				}
+				if query != want {
+					t.Errorf("query = %q", query)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("worker not started")
+			}
+			// A new CGI process sees the same durable running task. No browser
+			// connection or database lock is needed to query its status.
+			copy := *m
+			active := copy.status()
+			if active.Job == nil || active.Job.ID != accepted.Job.ID || active.Job.State != "running" {
+				t.Errorf("active = %+v", active.Job)
+			}
+			if duplicate := copy.start(action); duplicate.Success || duplicate.Code != "busy" {
+				t.Errorf("duplicate accepted: %+v", duplicate)
+			}
+			close(release)
+			if err := <-finished; err != nil {
+				t.Fatal(err)
+			}
+			completed := copy.status()
+			if completed.Job == nil || completed.Job.ID != accepted.Job.ID || completed.Job.State != "success" {
+				t.Fatalf("receipt = %+v", completed.Job)
+			}
+		})
+	}
+}
+
+func TestConfigurationTaskDoesNotMisreportUnconfirmedAsFailed(t *testing.T) {
+	for _, fixture := range []struct {
+		err  error
+		code string
+	}{
+		{errors.New("backend_unavailable"), "configuration_result_unconfirmed"},
+		{errors.New("apply_failed"), "configuration_apply_failed"},
+		{nil, "configuration_result_unconfirmed"},
+	} {
+		m := maintenanceFixture(t)
+		m.graph = func(context.Context, string, any) error { return fixture.err }
+		result := runFixtureJob(t, m, "config_apply")
+		if result.Job.State != "error" || result.Job.Code != fixture.code {
+			t.Fatalf("receipt = %+v", result.Job)
+		}
+	}
+}
+
+func TestConfigurationRequestIDIsIdempotentAndValidated(t *testing.T) {
+	m := maintenanceFixture(t)
+	starts := 0
+	m.run = func(context.Context, ...string) ([]byte, error) { starts++; return nil, nil }
+	m.graph = func(_ context.Context, _ string, value any) error { return json.Unmarshal([]byte(`{"run":1}`), value) }
+	for _, id := range []string{"../invalid", strings.Repeat("a", 25), strings.Repeat("g", 24)} {
+		if result := m.startTask("config_apply", id); result.Success {
+			t.Fatal("invalid ID accepted")
+		}
+	}
+	id := strings.Repeat("a", 24)
+	first := m.startTask("config_apply", id)
+	if !first.Success || first.Job.ID != id {
+		t.Fatalf("start = %+v", first)
+	}
+	if err := m.worker(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	replay := m.startTask("config_apply", id)
+	if !replay.Success || replay.Job.State != "success" || starts != 1 {
+		t.Fatalf("replayed task: %+v, starts=%d", replay, starts)
+	}
+	if result := m.startTask("geodata", id); result.Success {
+		t.Fatal("configuration ID accepted for unrelated action")
+	}
+}
 func releaseFixture(tag string, draft bool) map[string]any {
 	return map[string]any{"tag_name": tag, "draft": draft, "assets": []map[string]string{{"name": "install.sh"}, {"name": "SHA256SUMS"}, {"name": "manifest.tsv"}}}
 }

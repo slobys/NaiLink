@@ -241,6 +241,11 @@ func (m *maintenanceManager) status() maintenanceStatus {
 				var fresh maintenanceJob
 				if readMaintenanceJSON(filepath.Join(m.stateDir, "job.json"), &fresh) == nil && fresh.ID == job.ID && (fresh.State == "running" || fresh.State == "queued" && queuedMaintenanceStale(fresh.Updated, m.now().Unix()) || fresh.Code == "apply_unconfirmed" || uncertainCoreJob(fresh)) {
 					job.State, job.Code, job.Phase = "error", "interrupted", "finished"
+					if configurationAction(job.Action) {
+						// A killed worker cannot prove that the accepted backend
+						// operation failed. Never replay it or report success.
+						job.Code = "configuration_result_unconfirmed"
+					}
 					if strings.HasPrefix(job.Action, "core_switch_") {
 						m.reconcileCoreJob(&job)
 					}
@@ -273,11 +278,21 @@ func (m *maintenanceManager) save(job *maintenanceJob, phase string) error {
 	return writeMaintenanceJSON(filepath.Join(m.stateDir, "job.json"), job)
 }
 func (m *maintenanceManager) start(action string) maintenanceStatus {
-	if action != "check" && action != "update" && action != "geodata" && !coreMaintenanceAction(action) {
+	return m.startTask(action, "")
+}
+func (m *maintenanceManager) startTask(action, requestID string) maintenanceStatus {
+	if action != "check" && action != "update" && action != "geodata" && !configurationAction(action) && !coreMaintenanceAction(action) {
+		return maintenanceStatus{Code: "invalid_action"}
+	}
+	if requestID != "" && (!configurationAction(action) || !regexp.MustCompile(`^[a-f0-9]{24}$`).MatchString(requestID)) {
 		return maintenanceStatus{Code: "invalid_action"}
 	}
 	lock, err := maintenanceLock(m.lockFile, false)
 	if err != nil {
+		var previous maintenanceJob
+		if requestID != "" && readMaintenanceJSON(filepath.Join(m.stateDir, "job.json"), &previous) == nil && previous.ID == requestID && previous.Action == action {
+			return maintenanceStatus{Success: true, Current: m.current(), Job: &previous}
+		}
 		return maintenanceStatus{Code: "busy"}
 	}
 	defer lock.Close()
@@ -285,6 +300,9 @@ func (m *maintenanceManager) start(action string) maintenanceStatus {
 		return maintenanceStatus{Code: "unsafe_state"}
 	}
 	var previous maintenanceJob
+	if requestID != "" && readMaintenanceJSON(filepath.Join(m.stateDir, "job.json"), &previous) == nil && previous.ID == requestID && previous.Action == action {
+		return maintenanceStatus{Success: true, Current: m.current(), Job: &previous}
+	}
 	if core := m.coreStatus(); core.Phase == "switching" {
 		return maintenanceStatus{Code: "busy"}
 	}
@@ -314,6 +332,9 @@ func (m *maintenanceManager) start(action string) maintenanceStatus {
 		return maintenanceStatus{Code: "state_failed"}
 	}
 	job.ID = hex.EncodeToString(id)
+	if requestID != "" {
+		job.ID = requestID
+	}
 	if err = m.save(&job, "queued"); err != nil {
 		return maintenanceStatus{Code: "state_failed"}
 	}
@@ -341,6 +362,8 @@ func (m *maintenanceManager) worker(ctx context.Context, expectedID string) erro
 		return err
 	}
 	switch job.Action {
+	case "config_apply", "config_stop":
+		err = m.maintainConfiguration(ctx, &job)
 	case "check":
 		err = m.checkRelease(ctx, &job)
 	case "update":
@@ -361,7 +384,49 @@ func (m *maintenanceManager) worker(ctx context.Context, expectedID string) erro
 	}
 	return m.save(&job, "finished")
 }
+
+func configurationAction(action string) bool {
+	return action == "config_apply" || action == "config_stop"
+}
+
+// LuCI requests return a durable task ID immediately. The procd worker waits
+// for the real reload acknowledgement and metadata commit over loopback,
+// independently of the browser and its CGI/reverse-proxy time limits.
+func (m *maintenanceManager) maintainConfiguration(ctx context.Context, job *maintenanceJob) error {
+	lock, err := maintenanceLock(m.installLock, false)
+	if err != nil {
+		return errors.New("busy")
+	}
+	defer lock.Close()
+	if err = m.save(job, "applying"); err != nil {
+		return err
+	}
+	dry := "false"
+	if job.Action == "config_stop" {
+		dry = "true"
+	}
+	var result struct {
+		Run *int32 `json:"run"`
+	}
+	if err = m.graph(ctx, "mutation {run(dry:"+dry+")}", &result); err != nil {
+		if err.Error() == "apply_failed" {
+			return errors.New("configuration_apply_failed")
+		}
+		if err.Error() == "backend_unavailable" {
+			return errors.New("configuration_result_unconfirmed")
+		}
+		return err
+	}
+	if result.Run == nil {
+		return errors.New("configuration_result_unconfirmed")
+	}
+	return nil
+}
+
 func maintenanceCode(err error) string {
+	if err.Error() == "configuration_apply_failed" || err.Error() == "configuration_result_unconfirmed" {
+		return err.Error()
+	}
 	for _, code := range downloadFailureCodes {
 		if err.Error() == code {
 			return code
@@ -827,7 +892,13 @@ func (m *maintenanceManager) graphQL(ctx context.Context, query string, value an
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Authorization", "Bearer "+token)
-	response, err := (&http.Client{Timeout: 300 * time.Second, Transport: &http.Transport{Proxy: nil}}).Do(request)
+	timeout := 300 * time.Second
+	if query == "mutation {run(dry:false)}" || query == "mutation {run(dry:true)}" {
+		// The backend owns a ten-minute accepted-operation lifetime. Do not
+		// abandon its acknowledgement at the ordinary maintenance deadline.
+		timeout = 11 * time.Minute
+	}
+	response, err := (&http.Client{Timeout: timeout, Transport: &http.Transport{Proxy: nil}}).Do(request)
 	if err != nil {
 		return errors.New("backend_unavailable")
 	}
@@ -871,8 +942,8 @@ func maintenanceCLI(command, configDir, jobID string) {
 		json.NewEncoder(os.Stdout).Encode(manager.checkGeodataLatest(context.Background()))
 	case "status":
 		json.NewEncoder(os.Stdout).Encode(manager.status())
-	case "check", "update", "geodata", "core_check_dae", "core_check_singbox", "core_check_mihomo", "core_install_singbox", "core_install_mihomo", "core_install_extra", "core_switch_dae", "core_switch_singbox", "core_switch_mihomo":
-		json.NewEncoder(os.Stdout).Encode(manager.start(command))
+	case "config_apply", "config_stop", "check", "update", "geodata", "core_check_dae", "core_check_singbox", "core_check_mihomo", "core_install_singbox", "core_install_mihomo", "core_install_extra", "core_switch_dae", "core_switch_singbox", "core_switch_mihomo":
+		json.NewEncoder(os.Stdout).Encode(manager.startTask(command, jobID))
 	case "worker":
 		if !regexp.MustCompile(`^[a-f0-9]{24}$`).MatchString(jobID) {
 			return
