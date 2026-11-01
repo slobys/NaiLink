@@ -214,7 +214,7 @@ func TestMaintenanceInstallerPreparationFailuresStaySpecific(t *testing.T) {
 }
 
 func TestMaintenancePreparationBudgetIncludesInitialDownloads(t *testing.T) {
-	for _, minutes := range []int{4, 8, 20} {
+	for _, minutes := range []int{4, 6, 8, 20} {
 		t.Run(strconv.Itoa(minutes), func(t *testing.T) {
 			m := maintenanceFixture(t)
 			writeMaintenanceJSON(filepath.Join(m.stateDir, "latest.json"), releaseInfo{"0.6.50", "openwrt-v0.6.50", m.now().Unix()})
@@ -231,7 +231,7 @@ func TestMaintenancePreparationBudgetIncludesInitialDownloads(t *testing.T) {
 					t.Fatal("missing preparation budget")
 				}
 				seconds, err := strconv.Atoi(args[len(args)-1])
-				if err != nil || seconds <= 0 || seconds > 900 || seconds > (minutes-5)*60 {
+				if err != nil || seconds <= 0 || seconds > 900 || seconds > (minutes-7)*60 {
 					t.Fatal("installer deadline leaves no recovery reserve", seconds)
 				}
 				installed = true
@@ -244,7 +244,7 @@ func TestMaintenancePreparationBudgetIncludesInitialDownloads(t *testing.T) {
 				t.Fatal(err)
 			}
 			result := m.status()
-			if minutes <= 5 {
+			if minutes <= 7 {
 				if installed || result.Job.Code != "preparation_timeout" || m.current() != "0.6.32-1" {
 					t.Fatal("late preparation started an install", result.Job)
 				}

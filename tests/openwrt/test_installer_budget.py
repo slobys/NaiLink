@@ -15,6 +15,39 @@ class InstallerBudgetTests(unittest.TestCase):
         self.router.setUp()
         self.addCleanup(self.router.tearDown)
 
+    def management_wait(self, ready_at=None, request_seconds=0, backward_clock=False):
+        source = (test_router.OPENWRT/'install.sh').read_text().split('\ninstall_latest() {')[0]
+        self.router.write('/fixtures/download-functions', source)
+        self.router.write('/proc/uptime', '1000.0 0.0\n')
+        self.router.write('/tmp/daemon-running', '')
+        self.router.script('/bin/date', 'echo 1')
+        self.router.script('/bin/sleep', '''read -r seconds rest </proc/uptime
+echo "$((${seconds%%.*} + 1)).0 0.0" >/proc/uptime''')
+        self.router.script('/bin/uclient-fetch', '''read -r seconds rest </proc/uptime
+seconds=${seconds%%.*}
+echo probe >>/tmp/http-probes
+echo "$((seconds + REQUEST_SECONDS)).0 0.0" >/proc/uptime
+[ "$seconds" -ge READY_AT ]'''.replace('REQUEST_SECONDS', str(request_seconds)).replace('READY_AT', str(ready_at or 100000)))
+        if backward_clock:
+            self.router.script('/bin/sleep', 'echo "1.0 0.0" >/proc/uptime')
+        return self.router.run_router('/bin/sh', '-c', '. /fixtures/download-functions; wait_management_http 127.0.0.1:2023')
+
+    def test_slow_management_startup_is_not_prematurely_rolled_back(self):
+        result = self.management_wait(ready_at=1060)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertGreater(len((self.router.root/'tmp/http-probes').read_text().splitlines()), 20)
+
+    def test_management_http_timeouts_share_one_monotonic_budget(self):
+        result = self.management_wait(request_seconds=2)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((self.router.root/'proc/uptime').read_text().split()[0], '1120.0')
+        self.assertEqual(len((self.router.root/'tmp/http-probes').read_text().splitlines()), 40)
+
+    def test_management_wait_is_bounded_even_if_clock_goes_backwards(self):
+        result = self.management_wait(backward_clock=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(len((self.router.root/'tmp/http-probes').read_text().splitlines()), 120)
+
     def test_retries_share_deadline_and_clean_partial_downloads(self):
         source = (test_router.OPENWRT/'install.sh').read_text().split('\ninstall_latest() {')[0]
         self.router.write('/fixtures/download-functions', source)

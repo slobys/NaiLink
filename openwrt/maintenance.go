@@ -506,9 +506,10 @@ func (m *maintenanceManager) installUpdate(ctx context.Context, job *maintenance
 	prepareSeconds := 900
 	if deadline, limited := ctx.Deadline(); limited {
 		// Initial script/checksum downloads already consumed worker time. Keep
-		// five minutes for installing and recovering, rather than resetting the
+		// seven minutes for installing and recovering, including both management
+		// startup waits and package rollback, rather than resetting the
 		// preparation clock when the shell starts.
-		remaining := int(time.Until(deadline).Seconds()) - 300
+		remaining := int(time.Until(deadline).Seconds()) - 420
 		if remaining <= 0 {
 			return errors.New("preparation_timeout")
 		}

@@ -87,6 +87,20 @@ download_clock() {
 		date +%s
 	fi
 }
+wait_management_http() {
+	# Restoring a large native profile can take the whole bounded core startup
+	# budget before management HTTP opens. Share one monotonic deadline across
+	# retries; neither HTTP timeouts nor clock corrections reset that budget.
+	wm_address=$1
+	wm_deadline=$(($(download_clock) + 120))
+	wm_attempts=0
+	while [ "$wm_attempts" -lt 120 ] && [ "$(download_clock)" -lt "$wm_deadline" ]; do
+		if pidof daed >/dev/null 2>&1 && uclient-fetch -T 2 -O /dev/null "http://$wm_address/" >/dev/null 2>&1; then return 0; fi
+		wm_attempts=$((wm_attempts + 1))
+		sleep 1
+	done
+	return 1
+}
 download_remaining() {
 	dl_remaining=$((dl_deadline - $(download_clock)))
 	[ "$dl_remaining" -le "$dl_timeout" ] || dl_remaining=$dl_timeout
@@ -343,11 +357,7 @@ restore_previous_install() {
 	if [ "$was_running" = 1 ]; then
 		/etc/init.d/daed start || return 1
 		listen=$(/usr/libexec/daed/check --listen) || return 1
-		waited=0
-		until pidof daed >/dev/null 2>&1 && uclient-fetch -T 2 -O /dev/null "http://$listen/" >/dev/null 2>&1; do
-			[ "$waited" -lt 20 ] || return 1
-			sleep 1; waited=$((waited + 1))
-		done
+		wait_management_http "$listen" || return 1
 	fi
 	return 0
 }
@@ -658,12 +668,7 @@ fi
 if [ "$was_running" = 1 ]; then
 	/etc/init.d/daed start
 	listen=$(/usr/libexec/daed/check --listen) || fail 'Installed listen address is invalid.'
-	waited=0
-	until /usr/libexec/daed/check | jsonfilter -e '@.running' | grep -q '^true$' && \
-		uclient-fetch -T 2 -O /dev/null "http://$listen/" >/dev/null 2>&1; do
-		[ "$waited" -lt 20 ] || { /etc/init.d/daed stop; fail 'Management HTTP did not become ready. Check Services > NaiLink > Logs.'; }
-		sleep 1; waited=$((waited + 1))
-	done
+	wait_management_http "$listen" || { /etc/init.d/daed stop; fail 'Management HTTP did not become ready. Check Services > NaiLink > Logs.'; }
 	# Management HTTP does not imply that restored domain routes, listeners and
 	# the DNS upstream are ready. Keep the new service running if WAN/DNS is
 	# still recovering: a readiness warning must not undo a successful upgrade.
