@@ -519,6 +519,146 @@ func TestRouterMihomoDNSPreservesPolicyAndQuestion(t *testing.T) {
 		t.Fatal("lost negation")
 	}
 }
+func mihomoDNSRejectFixture(t *testing.T) (sbObject, *mhDNSBridge) {
+	t.Helper()
+	packet, err := net.ListenPacket("udp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	upstream := &dnsmessage.Server{PacketConn: packet, Net: "udp", Handler: dnsmessage.HandlerFunc(func(w dnsmessage.ResponseWriter, q *dnsmessage.Msg) {
+		r := new(dnsmessage.Msg)
+		r.SetReply(q)
+		name := strings.ToLower(q.Question[0].Name)
+		if strings.HasSuffix(name, "ads.example.test.") {
+			t.Error("rejected query escaped to upstream")
+		} else if name == "failure.example.test." {
+			r.SetRcode(q, dnsmessage.RcodeServerFailure)
+		} else {
+			kind, address := "A", "192.0.2.44"
+			if q.Question[0].Qtype == dnsmessage.TypeAAAA {
+				kind, address = "AAAA", "2001:db8::44"
+			}
+			rr, e := dnsmessage.NewRR(q.Question[0].Name + " 30 IN " + kind + " " + address)
+			if e != nil {
+				t.Error(e)
+			} else {
+				r.Answer = []dnsmessage.RR{rr}
+			}
+		}
+		_ = w.WriteMsg(r)
+	})}
+	go upstream.ActivateAndServe()
+	t.Cleanup(func() { _ = upstream.Shutdown() })
+	canonical := sbObject{
+		"route": sbObject{"default_domain_resolver": sbObject{"server": "fixture"}},
+		"dns": sbObject{
+			"servers": []sbObject{{"tag": "fixture", "type": "udp", "server": "127.0.0.1", "server_port": packet.LocalAddr().(*net.UDPAddr).Port}},
+			"final":   "fixture", "rules": []sbObject{{"domain_suffix": []string{"ads.example.test"}, "action": "reject"}},
+		},
+	}
+	profile := sbObject{"mode": "rule", "allow-lan": false, "geo-auto-update": false, "rules": []string{"MATCH,DIRECT"},
+		"_nailink_dns": canonical, "listeners": []sbObject{},
+		"dns": sbObject{"enable": true, "ipv6": true, "enhanced-mode": "redir-host"}}
+	bridge, err := startMihomoDNS(profile, sbPorts{Secret: "fixture-only"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(bridge.Close)
+	return profile, bridge
+}
+
+func assertMihomoDNSRejectAnswers(t *testing.T, address string) {
+	t.Helper()
+	for _, protocol := range []string{"udp", "tcp"} {
+		for _, kind := range []uint16{dnsmessage.TypeA, dnsmessage.TypeAAAA} {
+			for _, test := range []struct {
+				name           string
+				rcode, answers int
+			}{{"ads.example.test.", dnsmessage.RcodeNameError, 0}, {"sub.ads.example.test.", dnsmessage.RcodeNameError, 0},
+				{"allowed.example.test.", dnsmessage.RcodeSuccess, 1}, {"failure.example.test.", dnsmessage.RcodeServerFailure, 0}} {
+				q := new(dnsmessage.Msg)
+				q.SetQuestion(test.name, kind)
+				a, _, err := (&dnsmessage.Client{Net: protocol, Timeout: time.Second}).Exchange(q, address)
+				if err != nil || !mhValidDNSAnswer(q, a) || a.Rcode != test.rcode || len(a.Answer) != test.answers {
+					t.Fatalf("%s %s %d: answer=%v error=%v; want rcode=%d answers=%d", protocol, test.name, kind, a, err, test.rcode, test.answers)
+				}
+			}
+		}
+	}
+}
+
+func TestRouterMihomoDNSRejectIsStableNegativeResponse(t *testing.T) {
+	profile, _ := mihomoDNSRejectFixture(t)
+	address := strings.TrimPrefix(mhStrings(profile["dns"].(sbObject)["nameserver"])[0], "udp://")
+	assertMihomoDNSRejectAnswers(t, address)
+}
+
+func TestRouterMihomoDNSRejectThroughNativeCore(t *testing.T) {
+	binary := os.Getenv("DAED_TEST_MIHOMO")
+	if binary == "" {
+		t.Skip("fixed optional Mihomo required")
+	}
+	profile, _ := mihomoDNSRejectFixture(t)
+	tcp, udp, err := routerLoopbackPair(net.Listen, net.ListenPacket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	address := tcp.Addr().String()
+	_ = tcp.Close()
+	_ = udp.Close()
+	profile["dns"].(sbObject)["listen"] = address
+	dir := t.TempDir()
+	raw, err := json.Marshal(profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := filepath.Join(dir, "fixture.json")
+	if err := os.WriteFile(config, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	logfile, err := os.Create(filepath.Join(dir, "mihomo.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(binary, "-d", dir, "-f", config)
+	cmd.Stdout, cmd.Stderr = logfile, logfile
+	if err := cmd.Start(); err != nil {
+		_ = logfile.Close()
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() { _ = cmd.Wait(); close(done) }()
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		select {
+		case <-done:
+		case <-time.After(3 * time.Second):
+			t.Error("fixture Mihomo did not exit")
+		}
+		_ = logfile.Close()
+	})
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		q := new(dnsmessage.Msg)
+		q.SetQuestion("allowed.example.test.", dnsmessage.TypeA)
+		a, _, e := (&dnsmessage.Client{Timeout: 200 * time.Millisecond}).Exchange(q, address)
+		if e == nil && a.Rcode == dnsmessage.RcodeSuccess && len(a.Answer) == 1 {
+			break
+		}
+		select {
+		case <-done:
+			raw, _ := os.ReadFile(filepath.Join(dir, "mihomo.log"))
+			t.Fatalf("fixture Mihomo exited: %s", raw)
+		default:
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("fixture DNS not ready: answer=%v error=%v", a, e)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	assertMihomoDNSRejectAnswers(t, address)
+}
+
 func TestRouterMihomoSessionLifecycle(t *testing.T) {
 	binary := os.Getenv("DAED_TEST_MIHOMO")
 	if binary == "" {

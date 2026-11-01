@@ -318,7 +318,10 @@ func startMihomoDNSWithPolicies(profile sbObject, ports sbPorts, policies router
 							return
 						}
 						if r.action == "reject" {
-							reply.SetRcode(q, dnsmessage.RcodeRefused)
+							// Mihomo treats REFUSED from a regular upstream as a
+							// resolver failure. Keep an explicit policy denial terminal
+							// instead of exposing it as SERVFAIL or triggering retries.
+							reply.SetRcode(q, dnsmessage.RcodeNameError)
 							_ = w.WriteMsg(reply)
 							return
 						}
