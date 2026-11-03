@@ -562,6 +562,8 @@ type Mutation {
     mutation_text = mutation_text[:begin] + run + mutation_text[end:]
     schema_file = root / "graphql/root_schema.go"
     schema_text = schema_file.read_text(encoding="utf-8")
+    if 'connectivityStatus(' not in schema_text:
+        schema_text = schema_text.replace('type Query {', 'type Query {\n    connectivityStatus(refresh: Boolean, force: Boolean): String! @hasRole(role: ADMIN)', 1)
     if 'coreRuntimeGroups: String!' not in schema_text:
         schema_text = schema_text.replace('type Query {', 'type Query {\n    coreRuntimeGroups: String! @hasRole(role: ADMIN)', 1)
     if 'corePlan(target:' not in schema_text:
@@ -609,6 +611,8 @@ type Mutation {
         ("dae/router_singbox_config.go", "singbox_config.go"),
         ("dae/router_core_node_dns.go", "core_node_dns.go"),
         ("dae/router_core_group_runtime.go", "core_group_runtime.go"),
+        ("dae/router_connectivity.go", "connectivity.go"),
+        ("dae/router_connectivity_test.go", "connectivity_test.go"),
         ("dae/router_performance_test.go", "performance_test.go"),
         ("dae/router_live_performance_test.go", "live_performance_test.go"),
         ("db/router_node_dns.go", "db_node_dns.go"),

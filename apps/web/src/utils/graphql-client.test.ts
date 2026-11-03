@@ -12,6 +12,8 @@ describe('router graphQL notices', () => {
       graphQLNotice({ message: 'statistics field failed', path: ['general', 'runtimeOverview', 'samples'] }, true),
     ).toBeUndefined()
     expect(graphQLNotice({ message: 'core_api_invalid', path: ['switchCore'] }, true)).toContain('异常数据')
+    expect(graphQLNotice({ message: 'core_not_ready', path: ['connectivityStatus'] }, true)).toBeUndefined()
+    expect(graphQLNotice({ message: 'Cannot query field "connectivityStatus" on type "Query".' }, true)).toBeUndefined()
     expect(graphQLNotice({ message: 'core_not_ready', path: ['switchCore'] }, true)).toContain('就绪')
     expect(graphQLNotice({ message: 'core_rolled_back', path: ['switchCore'] }, true)).toContain('恢复')
     expect(graphQLNotice({ message: 'unrelated failure' }, true)).toBe('unrelated failure')

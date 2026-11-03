@@ -38,6 +38,7 @@ import { NODE_DROPPABLE_ID, NodeResource } from './Node'
 import { Routing } from './Routing'
 import { SubscriptionResource } from './Subscription'
 import { TrafficOverview } from './TrafficOverview'
+import { ConnectivityOverview } from '~/components/ConnectivityOverview'
 
 function arrayMove<T>(array: T[], from: number, to: number): T[] {
   const newArray = [...array]
@@ -674,6 +675,7 @@ export function OrchestratePage({ area = 'all' }: { area?: 'all' | 'dashboard' |
   return (
     <div className="panel-workspace flex flex-col gap-5" data-workspace={area}>
       {area === 'logs' && <RouterLogs />}
+      {area === 'dashboard' && <ConnectivityOverview />}
       {area === 'dashboard' && (
         <section id="panel-monitor">
           <TrafficOverview compact />

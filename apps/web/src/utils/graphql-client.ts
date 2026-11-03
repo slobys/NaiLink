@@ -8,6 +8,11 @@ export function graphQLNotice(error: { message: string; path?: readonly (string 
   // a switch nor a persistently unavailable statistics endpoint may flood the
   // page with toasts. Mutations and other queries still report their failures.
   if (router && error.path?.[0] === 'general' && error.path[1] === 'runtimeOverview') return undefined
+  if (
+    router &&
+    (error.path?.[0] === 'connectivityStatus' || /Cannot query field "connectivityStatus"/.test(error.message))
+  )
+    return undefined
   if (router && /^core_[a-z_]+$/.test(error.message))
     return maintenanceMessages[error.message] || coreProblemLabel(error.message)
   return error.message

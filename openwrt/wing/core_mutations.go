@@ -8,6 +8,9 @@ import (
 )
 
 func (r *queryResolver) CoreStatus() string { return dae.RouterCoreStatus() }
+func (r *queryResolver) ConnectivityStatus(ctx context.Context, args struct{ Refresh, Force *bool }) string {
+	return dae.RouterConnectivityStatus(ctx, args.Refresh != nil && *args.Refresh, args.Force != nil && *args.Force)
+}
 func (r *queryResolver) CoreRuntimeGroups(ctx context.Context) string {
 	return dae.RouterCoreGroups(ctx)
 }
