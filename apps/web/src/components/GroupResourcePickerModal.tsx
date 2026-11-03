@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 
 import { LatencyBadge } from '~/components/LatencyBadge'
 import { LatencyStatus } from '~/components/LatencyStatus'
+import { NodeActiveMark } from '~/components/NodeActiveMark'
 import { NodeName } from '~/components/NodeName'
 import { Button } from '~/components/ui/button'
 import { Checkbox } from '~/components/ui/checkbox'
@@ -17,7 +18,9 @@ import {
   ScrollableDialogFooter,
   ScrollableDialogHeader,
 } from '~/components/ui/scrollable-dialog'
+import { useRuntimeNodes } from '~/hooks/useRuntimeNodes'
 import { cn } from '~/lib/utils'
+import { nodeLatencyRank } from '~/utils/node-library'
 import { nodeProtocolLabel } from '~/utils/node-protocol-label'
 import { summarizePickerLatencies } from '~/utils/picker-latency'
 
@@ -120,6 +123,7 @@ const PickerNodeCard = memo(
     busy,
     onToggle,
     onTest,
+    activeGroups,
   }: {
     item: GroupPickerItem
     checked: boolean
@@ -128,6 +132,7 @@ const PickerNodeCard = memo(
     busy: boolean
     onToggle: (id: string) => void
     onTest: (ids: string[]) => Promise<void>
+    activeGroups?: string[]
   }) => {
     const { t } = useTranslation()
     const [expandedName, setExpandedName] = useState(false)
@@ -136,6 +141,7 @@ const PickerNodeCard = memo(
         data-name-card
         data-picker-node={item.id}
         data-selected={checked}
+        data-active={!!activeGroups?.length}
         className={cn('picker-node-row', checked && 'picker-node-selected', expandedName && 'picker-name-expanded')}
         onClick={(event) => {
           if (!(event.target as Element).closest('button,[role="checkbox"]')) onToggle(item.id)
@@ -154,7 +160,10 @@ const PickerNodeCard = memo(
           aria-label={`${t('actions.select')} ${item.title}`}
           onClick={() => onToggle(item.id)}
         >
-          <NodeName name={item.title} showRegion />
+          <span className="node-title-line">
+            <NodeName name={item.title} showRegion />
+            <NodeActiveMark groups={activeGroups} />
+          </span>
         </button>
         <span className="picker-node-meta">
           {item.badge && (
@@ -220,6 +229,8 @@ export function GroupAddNodesModal({
   const [submitError, setSubmitError] = useState('')
   const [source, setSource] = useState('all')
   const [onlySelected, setOnlySelected] = useState(false)
+  const [sort, setSort] = useState<'custom' | 'latency'>('custom')
+  const runtime = useRuntimeNodes(opened)
   const scope = `group-picker:${resetKey}:nodes`
   const pickerTests = usePickerTests(tests, scope)
   useEffect(() => {
@@ -228,10 +239,11 @@ export function GroupAddNodesModal({
     setSubmitError('')
     setSource('all')
     setOnlySelected(false)
+    setSort('custom')
   }, [opened, resetKey])
   const filteredItems = useMemo(() => {
     const normalized = query.trim().toLowerCase()
-    return items.filter(
+    const result = items.filter(
       (item) =>
         (source === 'all' || (item.sourceId || 'manual') === source) &&
         (!onlySelected || selectedIds.includes(item.id)) &&
@@ -240,7 +252,14 @@ export function GroupAddNodesModal({
             value?.toLowerCase().includes(normalized),
           )),
     )
-  }, [items, query, source, onlySelected, selectedIds])
+    if (sort === 'latency')
+      result.sort((a, b) => {
+        const first = nodeLatencyRank(latencies?.[a.id]);
+          const second = nodeLatencyRank(latencies?.[b.id])
+        return first === second ? 0 : first - second
+      })
+    return result
+  }, [items, query, source, onlySelected, selectedIds, sort, latencies])
   const sources = useMemo(
     () => [
       ...new Map(
@@ -343,6 +362,15 @@ export function GroupAddNodesModal({
                 </option>
               ))}
             </select>
+            <select
+              className="panel-select picker-sort-select"
+              aria-label={t('panel.sort')}
+              value={sort}
+              onChange={(event) => setSort(event.target.value as typeof sort)}
+            >
+              <option value="custom">{t('panel.defaultSort')}</option>
+              <option value="latency">{t('panel.latencySort')}</option>
+            </select>
             <Button
               type="button"
               variant={onlySelected ? 'secondary' : 'ghost'}
@@ -365,6 +393,7 @@ export function GroupAddNodesModal({
                 key={item.id}
                 item={item}
                 checked={selected.has(item.id)}
+                activeGroups={runtime.active.get(item.id)}
                 result={latencies?.[item.id]}
                 pending={tests.pending.has(item.id)}
                 busy={tests.busy}

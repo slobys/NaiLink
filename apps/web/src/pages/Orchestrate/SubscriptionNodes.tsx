@@ -8,6 +8,7 @@ import { memo, useCallback, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { LatencyBadge } from '~/components/LatencyBadge'
 import { LatencyStatus } from '~/components/LatencyStatus'
+import { NodeActiveMark } from '~/components/NodeActiveMark'
 import { NodeName } from '~/components/NodeName'
 import { NodeUDPTest } from '~/components/NodeUDPTest'
 import { QRCodeModal } from '~/components/QRCodeModal'
@@ -16,6 +17,7 @@ import { Button } from '~/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '~/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '~/components/ui/dropdown-menu'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '~/components/ui/sheet'
+import { useRuntimeNodes } from '~/hooks/useRuntimeNodes'
 import { buildNodeLibrary, defaultNodeFilters, filterNodeLibrary } from '~/utils/node-library'
 import { nodeProtocolLabel } from '~/utils/node-protocol-label'
 
@@ -31,6 +33,7 @@ const SubscriptionNodeTile = memo(
     onDetails,
     onJoin,
     onQR,
+    activeGroups,
   }: {
     node: SubscriptionNode
     latency?: NodeLatencyProbeResult
@@ -40,11 +43,18 @@ const SubscriptionNodeTile = memo(
     onDetails: (node: SubscriptionNode) => void
     onJoin: (node: SubscriptionNode) => void
     onQR: (node: SubscriptionNode) => void
+    activeGroups?: string[]
   }) => {
     const { t } = useTranslation()
     const name = node.tag || node.name || node.id
     return (
-      <article role="listitem" data-name-card data-subscription-node={node.id} className="subscription-node-tile">
+      <article
+        role="listitem"
+        data-name-card
+        data-subscription-node={node.id}
+        data-active={!!activeGroups?.length}
+        className="subscription-node-tile"
+      >
         <div className="subscription-node-heading">
           <button
             type="button"
@@ -53,7 +63,10 @@ const SubscriptionNodeTile = memo(
             aria-label={`${t('panel.nodeDetails')} ${name}`}
             onClick={() => onDetails(node)}
           >
-            <NodeName name={name} showRegion />
+            <span className="node-title-line">
+              <NodeName name={name} showRegion />
+              <NodeActiveMark groups={activeGroups} />
+            </span>
           </button>
           <span className="subscription-node-protocol" title={node.protocol}>
             {nodeProtocolLabel(node.protocol)}
@@ -132,6 +145,7 @@ export function SubscriptionNodes({
 }) {
   const { t } = useTranslation()
   const scope = `subscription:${subscription.id}`
+  const runtime = useRuntimeNodes()
   const test = useCallback((ids: string[]) => tests.test(ids, scope), [tests.test, scope])
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<'custom' | 'latency'>('custom')
@@ -251,6 +265,7 @@ export function SubscriptionNodes({
               <SubscriptionNodeTile
                 key={node.id}
                 node={node}
+                activeGroups={runtime.active.get(node.id)}
                 latency={latencies[node.id]}
                 pending={tests.pending.has(node.id)}
                 busy={tests.busy}

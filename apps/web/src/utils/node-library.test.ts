@@ -5,11 +5,24 @@ import {
   buildNodeLibrary,
   defaultNodeFilters,
   filterNodeLibrary,
+  nodeLatencyRank,
   orderNodeLibrary,
   reorderVisibleNodes,
 } from './node-library'
 
 describe('node library', () => {
+  it('sorts only valid successful measurements ahead of untested and failed nodes', () => {
+    const probe = (latencyMs: number, alive = true): NodeLatencyProbeResult => ({
+      id: 'x',
+      latencyMs,
+      alive,
+      testedAt: '',
+    })
+    expect(nodeLatencyRank(probe(0))).toBe(0)
+    expect(nodeLatencyRank(probe(25))).toBe(25)
+    for (const value of [undefined, probe(0, false), probe(-1), probe(NaN), probe(Infinity)])
+      expect(nodeLatencyRank(value)).toBe(Infinity)
+  })
   it('keeps manual and subscription views separate without copying subscription nodes', () => {
     const manual = buildNodeLibrary(mockNodes.nodes.edges, [])
     const subscription = buildNodeLibrary([], [mockSubscriptions.subscriptions[0]])

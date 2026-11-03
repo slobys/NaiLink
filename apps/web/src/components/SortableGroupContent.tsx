@@ -270,6 +270,7 @@ export function SortableGroupContent({
           <SortableResourceBadge
             disabled={disabled}
             key={nodeId}
+            nodeId={nodeId}
             id={`${groupId}-node-${nodeId}`}
             index={columns === 2 ? index % Math.ceil(sortedNodes.length / 2) : index}
             name={tag || name}

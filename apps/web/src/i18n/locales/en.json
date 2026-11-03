@@ -587,6 +587,7 @@
     "statsUnavailable": "Updates unavailable",
     "coreSwitching": "Switching cores; updates resume automatically",
     "appliedOutlet": "View applied outlet",
+    "currentOutlet": "Current outlet",
     "loadingOutlet": "Reading runtime configuration…",
     "outletReadFailed": "Could not read runtime; retry",
     "outletNotReady": "Proxy is not ready",

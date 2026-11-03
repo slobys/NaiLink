@@ -13,6 +13,12 @@ export interface NodeFilters {
 }
 export const defaultNodeFilters: NodeFilters = { search: '', source: 'all', sort: 'custom' }
 
+export function nodeLatencyRank(probe?: NodeLatencyProbeResult): number {
+  return probe?.alive && probe.latencyMs != null && Number.isFinite(probe.latencyMs) && probe.latencyMs >= 0
+    ? probe.latencyMs
+    : Infinity
+}
+
 export function buildNodeLibrary(
   nodes: NodesQuery['nodes']['edges'],
   subscriptions: SubscriptionsQuery['subscriptions'],
@@ -56,10 +62,7 @@ export function filterNodeLibrary(
     )
   })
   const latency = (entry: LibraryNode) => {
-    const probe = latencies[entry.node.id]
-    return probe?.alive && probe.latencyMs != null && Number.isFinite(probe.latencyMs) && probe.latencyMs >= 0
-      ? probe.latencyMs
-      : Infinity
+    return nodeLatencyRank(latencies[entry.node.id])
   }
   if (filters.sort === 'latency') result.sort((a, b) => (latency(a) === latency(b) ? 0 : latency(a) - latency(b)))
   return result

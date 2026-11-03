@@ -587,6 +587,7 @@
     "statsUnavailable": "数据暂不可用",
     "coreSwitching": "内核切换中，完成后自动恢复更新",
     "appliedOutlet": "查看生效出口",
+    "currentOutlet": "当前出口",
     "loadingOutlet": "正在读取运行配置…",
     "outletReadFailed": "读取失败，请重试",
     "outletNotReady": "代理尚未就绪",

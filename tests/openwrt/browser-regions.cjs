@@ -96,7 +96,7 @@ const output = process.env.DAED_REGION_OUTPUT || '.build/region-browser'
     await page.addStyleTag({ content: '.container{width:1500px!important;max-width:calc(100vw - 40px)!important}' })
     await f.locator(`[data-group-card-id="${group}"]`).getByRole('button', { name: '添加节点', exact: true }).click()
     const picker = f.locator('[data-node-picker]')
-    await picker.getByRole('combobox').selectOption('manual')
+    await picker.getByRole('combobox', { name: '节点来源', exact: true }).selectOption('manual')
     for (const [index, [, region]] of examples.entries()) {
       const card = picker.locator(`[data-picker-node="${imported[index]}"]`)
       assert.equal(await card.locator('[data-node-region]').getAttribute('data-node-region'), region)

@@ -2,9 +2,11 @@ import type { DraggableProvided, DraggableStateSnapshot } from '@hello-pangea/dn
 import { Draggable } from '@hello-pangea/dnd'
 import { GripVertical, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { NodeActiveMark } from '~/components/NodeActiveMark'
 import { NodeRegionIcon } from '~/components/NodeRegionIcon'
 import { Button } from '~/components/ui/button'
 import { SimpleTooltip } from '~/components/ui/tooltip'
+import { useRuntimeNodes } from '~/hooks/useRuntimeNodes'
 import { cn } from '~/lib/utils'
 import { getInstantDropStyle } from '~/utils'
 import { nodeRegion, nodeRegionDisplayName } from '~/utils/node-region'
@@ -19,6 +21,7 @@ export function SortableResourceBadge({
   disabled = false,
   onRemove,
   children,
+  nodeId,
 }: {
   id: string
   index: number
@@ -29,12 +32,16 @@ export function SortableResourceBadge({
   disabled?: boolean
   onRemove?: () => void
   children?: React.ReactNode
+  nodeId?: string
 }) {
   const { t } = useTranslation()
+  const runtime = useRuntimeNodes(!!nodeId)
+  const activeGroups = nodeId ? runtime.active.get(nodeId) : undefined
   const region = protocol ? nodeRegion(name) : undefined
   const card = (provided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
     <div
       data-group-member
+      data-active={!!activeGroups?.length}
       ref={provided.innerRef}
       {...provided.draggableProps}
       style={getInstantDropStyle(provided, snapshot)}
@@ -60,6 +67,7 @@ export function SortableResourceBadge({
         >
           {protocol && <NodeRegionIcon region={region} />}
           <span className="min-w-0">{protocol ? nodeRegionDisplayName(name, region) : name}</span>
+          <NodeActiveMark groups={activeGroups} />
         </span>
         <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted-foreground">
           {protocol && <span className="shrink-0 font-medium uppercase text-primary">{protocol}</span>}

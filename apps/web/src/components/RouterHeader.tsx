@@ -12,6 +12,7 @@ import { ThemePicker } from '~/components/ThemePicker'
 import { Button } from '~/components/ui/button'
 import { QUERY_KEY_GENERAL } from '~/constants'
 import { useRouterMaintenance } from '~/hooks/useRouterMaintenance'
+import { useRuntimeNodes } from '~/hooks/useRuntimeNodes'
 import { configurationJob, ConfigurationPendingError } from '~/utils/configuration-apply'
 import { jobActive, maintenanceMessages } from '~/utils/router-maintenance'
 
@@ -35,6 +36,7 @@ export function RouterHeader() {
       ),
   })
   const { busy: maintenanceBusy, query: maintenance } = useRouterMaintenance()
+  useRuntimeNodes(pathname !== '/logs' && pathname !== '/advanced', true)
   const client = useQueryClient()
   const job = configurationJob(maintenance.data?.job) ? maintenance.data?.job : undefined
   const configuring = jobActive(job)

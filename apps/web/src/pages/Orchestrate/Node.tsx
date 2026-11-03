@@ -25,6 +25,7 @@ import { EditNodeFormModal } from '~/components/EditNodeFormModal'
 import { ImportResourceFormModal } from '~/components/ImportResourceFormModal'
 import { LatencyBadge } from '~/components/LatencyBadge'
 import { LatencyStatus } from '~/components/LatencyStatus'
+import { NodeActiveMark } from '~/components/NodeActiveMark'
 import { NodeName } from '~/components/NodeName'
 import { NodeUDPTest } from '~/components/NodeUDPTest'
 import { QRCodeModal } from '~/components/QRCodeModal'
@@ -42,6 +43,7 @@ import {
 } from '~/components/ui/dropdown-menu'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '~/components/ui/sheet'
 import { SimpleTooltip } from '~/components/ui/tooltip'
+import { useRuntimeNodes } from '~/hooks/useRuntimeNodes'
 import { cn } from '~/lib/utils'
 import { getInstantDropStyle } from '~/utils'
 import { defaultNodeFilters } from '~/utils/node-library'
@@ -58,6 +60,7 @@ function NodeRow({
   latency,
   onAction,
   tests,
+  activeGroups,
 }: {
   tests: LatencyTests
   entry: LibraryNode
@@ -65,6 +68,7 @@ function NodeRow({
   snapshot: DraggableStateSnapshot
   latency?: NodeLatencyProbeResult
   onAction: (entry: LibraryNode, action: NodeAction) => void
+  activeGroups?: string[]
 }) {
   const { t } = useTranslation()
   const { node, sources, editable } = entry
@@ -77,6 +81,7 @@ function NodeRow({
       className={cn('panel-node-row', snapshot.isDragging && 'panel-node-dragging')}
       data-node-id={node.id}
       data-name-card
+      data-active={!!activeGroups?.length}
       role="listitem"
     >
       <div
@@ -95,7 +100,10 @@ function NodeRow({
           data-node-details={node.id}
           onClick={() => onAction(entry, 'details')}
         >
-          <NodeName name={name} showRegion />
+          <span className="node-title-line">
+            <NodeName name={name} showRegion />
+            <NodeActiveMark groups={activeGroups} />
+          </span>
           <span className="panel-node-meta" title={sources.map((source) => source.name).join(' · ')}>
             <span className="panel-node-protocol">{node.protocol}</span>
             <span className="truncate">
@@ -196,6 +204,7 @@ export function NodeResource({
   dragging: boolean
 }) {
   const { t } = useTranslation()
+  const runtime = useRuntimeNodes()
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [scrollTop, setScrollTop] = useState(0)
   const [viewportHeight, setViewportHeight] = useState(456)
@@ -388,6 +397,7 @@ export function NodeResource({
                   renderClone={(provided, snapshot, rubric) => (
                     <NodeRow
                       entry={entries[rubric.source.index]}
+                      activeGroups={runtime.active.get(entries[rubric.source.index].node.id)}
                       provided={provided}
                       snapshot={snapshot}
                       latency={nodeLatencies?.[entries[rubric.source.index].node.id]}
@@ -418,6 +428,7 @@ export function NodeResource({
                             {(rowProvided, rowSnapshot) => (
                               <NodeRow
                                 entry={entries[index]}
+                                activeGroups={runtime.active.get(entries[index].node.id)}
                                 provided={rowProvided}
                                 snapshot={rowSnapshot}
                                 latency={nodeLatencies?.[entries[index].node.id]}

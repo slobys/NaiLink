@@ -611,6 +611,7 @@ type Mutation {
         ("dae/router_singbox_config.go", "singbox_config.go"),
         ("dae/router_core_node_dns.go", "core_node_dns.go"),
         ("dae/router_core_group_runtime.go", "core_group_runtime.go"),
+        ("dae/router_core_group_runtime_test.go", "core_group_runtime_test.go"),
         ("dae/router_connectivity.go", "connectivity.go"),
         ("dae/router_connectivity_test.go", "connectivity_test.go"),
         ("dae/router_performance_test.go", "performance_test.go"),

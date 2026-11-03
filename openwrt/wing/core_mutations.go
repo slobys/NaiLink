@@ -4,7 +4,9 @@ package graphql
 import (
 	"context"
 	"encoding/json"
+	"github.com/daeuniverse/dae-wing/common"
 	"github.com/daeuniverse/dae-wing/dae"
+	"github.com/daeuniverse/dae-wing/db"
 )
 
 func (r *queryResolver) CoreStatus() string { return dae.RouterCoreStatus() }
@@ -12,7 +14,18 @@ func (r *queryResolver) ConnectivityStatus(ctx context.Context, args struct{ Ref
 	return dae.RouterConnectivityStatus(ctx, args.Refresh != nil && *args.Refresh, args.Force != nil && *args.Force)
 }
 func (r *queryResolver) CoreRuntimeGroups(ctx context.Context) string {
-	return dae.RouterCoreGroups(ctx)
+	var nodes []db.Node
+	ids := map[string]string{}
+	if db.DB(ctx).Select("id", "link").Find(&nodes).Error == nil {
+		for _, node := range nodes {
+			if _, duplicate := ids[node.Link]; duplicate {
+				ids[node.Link] = ""
+			} else {
+				ids[node.Link] = string(common.EncodeCursor(node.ID))
+			}
+		}
+	}
+	return dae.RouterCoreGroups(ctx, ids)
 }
 func (r *queryResolver) CoreCapabilities() string { return dae.RouterCoreCapabilities() }
 func (r *queryResolver) CorePlan(ctx context.Context, args struct {
