@@ -232,6 +232,10 @@ func testSingleNodeLatency(ctx context.Context, option *dialer.GlobalOption, nod
 		return r
 	}
 	r.AliveVal, r.TestedAtV, r.SteadyMsV = result.Alive, result.Tested, result.SteadyMs
+	if dae.RouterServiceProfile(ctx) != "" {
+		message := result.Message
+		r.MessageV = &message
+	}
 	if result.Alive {
 		ms := result.Latency
 		r.LatencyMsV = &ms

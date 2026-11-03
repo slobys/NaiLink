@@ -444,6 +444,7 @@ func ProbeRouterHTTP(ctx context.Context, dialer proxy.ContextDialer, global dae
 	return routerProbeHTTP(ctx, dialer, global)
 }
 func routerProbeHTTPTimeout(ctx context.Context, dialer proxy.ContextDialer, global daeConfig.Global, timeout time.Duration) RouterCoreProbe {
+ if profile,ok:=ctx.Value(serviceProbeKey{}).(string);ok {return routerServiceHTTP(ctx,dialer,profile)}
 	result := RouterCoreProbe{Tested: time.Now(), Message: "check_target_failed"}
 	if len(global.TcpCheckUrl) == 0 {
 		return result

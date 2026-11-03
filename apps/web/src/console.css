@@ -5,7 +5,7 @@
   --console-hover: color-mix(in oklab, var(--primary) 7%, var(--card));
   --console-node-surface: color-mix(in oklab, var(--foreground) 9%, var(--card));
   --console-node-border: color-mix(in oklab, var(--foreground) 19%, var(--card));
-  --console-node-hover: color-mix(in oklab, var(--primary) 7%, var(--card));
+  --console-node-hover: color-mix(in oklab, var(--primary) 17%, var(--card));
   --console-selected: oklch(0.81 0.09 150);
   --console-selected-hover: oklch(0.84 0.075 150);
   --console-selected-text: oklch(0.26 0.045 155);
@@ -16,7 +16,7 @@
 .dark {
   --console-node-surface: color-mix(in oklab, var(--foreground) 12%, var(--card));
   --console-node-border: color-mix(in oklab, var(--foreground) 25%, var(--card));
-  --console-node-hover: color-mix(in oklab, var(--primary) 12%, var(--console-node-surface));
+  --console-node-hover: color-mix(in oklab, var(--primary) 24%, var(--console-node-surface));
   --console-selected: oklch(0.36 0.075 155);
   --console-selected-hover: oklch(0.4 0.075 155);
   --console-selected-text: oklch(0.96 0.015 150);
@@ -795,6 +795,180 @@
 }
 @media (prefers-reduced-motion: reduce) {
   :is(.picker-node-row, .subscription-node-tile, .router-panel .panel-node-row, .router-panel .group-member-card) {
+    transition: none;
+    translate: none;
+  }
+}
+
+/* The subscription picker shares the node picker's density and selection language. */
+.subscription-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  align-items: start;
+  gap: 10px;
+}
+.subscription-picker-tile {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--console-node-border);
+  border-radius: 10px;
+  background: var(--console-node-surface);
+  transition:
+    background-color 160ms ease-out,
+    translate 180ms ease-out,
+    box-shadow 180ms ease-out;
+}
+.subscription-picker-tile:hover {
+  background: var(--console-node-hover);
+}
+.subscription-picker-tile[data-selected='true'] {
+  background: var(--console-selected);
+  color: var(--console-selected-text);
+  border-color: var(--console-selected-border);
+}
+.subscription-picker-tile[data-selected='true'] .text-muted-foreground {
+  color: var(--console-selected-text);
+}
+.subscription-picker-tile [role='checkbox'][data-state='checked'] {
+  background: var(--console-selected-control);
+  color: var(--console-selected-control-ink);
+  border-color: var(--console-selected-control);
+}
+.subscription-picker-check {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+.subscription-picker-check [role='checkbox'] {
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+}
+.subscription-picker-advanced {
+  border-top: 1px solid var(--border);
+}
+.service-check-bar {
+  padding-block: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+.service-check-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.service-check-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.service-check-controls :is(select, button) {
+  min-height: 32px;
+  border-radius: 7px;
+  padding: 4px 8px;
+  background: var(--secondary);
+  color: var(--foreground);
+  cursor: pointer;
+}
+.service-check-controls :is(select, button):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.service-check-bar p {
+  margin-top: 5px;
+  color: var(--muted-foreground);
+  line-height: 1.5;
+}
+.service-result {
+  display: inline-block;
+  max-width: 100%;
+  padding: 3px 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  white-space: nowrap;
+  background: var(--secondary);
+  color: var(--foreground);
+}
+.service-result[data-state='pass'] {
+  background: var(--console-selected);
+  color: var(--console-selected-text);
+}
+.service-result[data-state='fail'] {
+  background: color-mix(in oklab, var(--destructive) 12%, var(--card));
+  color: var(--destructive);
+}
+.group-service-purpose {
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+@media (pointer: coarse), (max-width: 640px) {
+  .service-check-controls :is(select, button, label) {
+    min-height: 44px;
+  }
+}
+.subscription-picker-dialog [data-slot='dialog-footer'] {
+  padding: 12px 16px;
+}
+.traffic-overview-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+@media (min-width: 900px) and (min-height: 600px) {
+  .panel-workspace[data-workspace='dashboard'] #panel-monitor {
+    padding: 16px;
+  }
+  .traffic-overview-compact {
+    height: clamp(360px, calc(var(--monitor-room, 560px) - 34px), 580px);
+  }
+  .traffic-overview-compact #panel-traffic-trends {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    flex-direction: column;
+  }
+  .traffic-overview-compact .traffic-trend-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .traffic-overview-compact .traffic-trend-body > * {
+    margin-block: 0;
+  }
+  .traffic-overview-compact .traffic-chart {
+    flex: 1;
+    height: auto;
+    min-height: 100px;
+  }
+  .traffic-overview-compact .traffic-trend-body > dl {
+    flex-shrink: 0;
+    padding-top: 8px;
+  }
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .subscription-picker-tile:hover {
+    translate: 0 -2px;
+    box-shadow: 0 4px 10px -4px color-mix(in oklab, var(--foreground) 24%, transparent);
+  }
+}
+@media (pointer: coarse), (max-width: 640px) {
+  .subscription-picker-tile button:not([role='checkbox']) {
+    min-height: 44px;
+  }
+  .subscription-picker-check {
+    width: 44px;
+    height: 44px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .subscription-picker-tile {
     transition: none;
     translate: none;
   }

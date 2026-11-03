@@ -63,6 +63,11 @@ export function OrchestratePage({ area = 'all' }: { area?: 'all' | 'dashboard' |
       const height = `${Math.max(320, Math.min(760, window.innerHeight - top - 24))}px`
       if (element.style.getPropertyValue('--workspace-height') !== height)
         element.style.setProperty('--workspace-height', height)
+      const monitor = document.getElementById('panel-monitor')
+      if (area === 'dashboard' && monitor) {
+        const room = `${Math.max(360, window.innerHeight - monitor.getBoundingClientRect().top - 20)}px`
+        if (monitor.style.getPropertyValue('--monitor-room') !== room) monitor.style.setProperty('--monitor-room', room)
+      }
     }
     const observer = new ResizeObserver(resize)
     observer.observe(element.parentElement!)

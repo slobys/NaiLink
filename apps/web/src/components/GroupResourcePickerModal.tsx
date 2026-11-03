@@ -1,13 +1,15 @@
 import type { NodeLatencyProbeResult } from '~/apis'
 import type { LatencyTests } from '~/components/LatencyStatus'
+import type { ServiceResult } from '~/hooks/useServiceChecks'
 import { ChevronsUpDown, Gauge, Search } from 'lucide-react'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 
+import { useTranslation } from 'react-i18next'
 import { LatencyBadge } from '~/components/LatencyBadge'
 import { LatencyStatus } from '~/components/LatencyStatus'
 import { NodeActiveMark } from '~/components/NodeActiveMark'
 import { NodeName } from '~/components/NodeName'
+import { ServiceCheckBar, ServiceResultBadge } from '~/components/ServiceCheckBar'
 import { Button } from '~/components/ui/button'
 import { Checkbox } from '~/components/ui/checkbox'
 import { Dialog, DialogTitle } from '~/components/ui/dialog'
@@ -19,6 +21,7 @@ import {
   ScrollableDialogHeader,
 } from '~/components/ui/scrollable-dialog'
 import { useRuntimeNodes } from '~/hooks/useRuntimeNodes'
+import { useServiceChecks } from '~/hooks/useServiceChecks'
 import { cn } from '~/lib/utils'
 import { nodeLatencyRank } from '~/utils/node-library'
 import { nodeProtocolLabel } from '~/utils/node-protocol-label'
@@ -124,6 +127,8 @@ const PickerNodeCard = memo(
     onToggle,
     onTest,
     activeGroups,
+    serviceResult,
+    serviceEnabled,
   }: {
     item: GroupPickerItem
     checked: boolean
@@ -133,6 +138,8 @@ const PickerNodeCard = memo(
     onToggle: (id: string) => void
     onTest: (ids: string[]) => Promise<void>
     activeGroups?: string[]
+    serviceResult?: ServiceResult
+    serviceEnabled?: boolean
   }) => {
     const { t } = useTranslation()
     const [expandedName, setExpandedName] = useState(false)
@@ -176,14 +183,18 @@ const PickerNodeCard = memo(
           </span>
         </span>
         <div className="picker-node-actions">
-          <PickerLatencyButton
-            id={item.id}
-            name={item.title}
-            result={result}
-            pending={pending}
-            busy={busy}
-            onTest={onTest}
-          />
+          {serviceEnabled ? (
+            <ServiceResultBadge result={serviceResult} />
+          ) : (
+            <PickerLatencyButton
+              id={item.id}
+              name={item.title}
+              result={result}
+              pending={pending}
+              busy={busy}
+              onTest={onTest}
+            />
+          )}
           {item.title.length > 24 && (
             <Button
               type="button"
@@ -233,6 +244,12 @@ export function GroupAddNodesModal({
   const runtime = useRuntimeNodes(opened)
   const scope = `group-picker:${resetKey}:nodes`
   const pickerTests = usePickerTests(tests, scope)
+  const checks = useServiceChecks(
+    opened,
+    resetKey,
+    items.map((item) => item.id),
+    tests.busy,
+  )
   useEffect(() => {
     setQuery('')
     setSelectedIds([])
@@ -247,6 +264,7 @@ export function GroupAddNodesModal({
       (item) =>
         (source === 'all' || (item.sourceId || 'manual') === source) &&
         (!onlySelected || selectedIds.includes(item.id)) &&
+        (!checks.onlyPassed || !!checks.results[item.id]?.alive) &&
         (!normalized ||
           [item.title, item.description, item.meta, ...(item.keywords || [])].some((value) =>
             value?.toLowerCase().includes(normalized),
@@ -254,12 +272,12 @@ export function GroupAddNodesModal({
     )
     if (sort === 'latency')
       result.sort((a, b) => {
-        const first = nodeLatencyRank(latencies?.[a.id]);
-          const second = nodeLatencyRank(latencies?.[b.id])
+        const first = nodeLatencyRank(latencies?.[a.id])
+        const second = nodeLatencyRank(latencies?.[b.id])
         return first === second ? 0 : first - second
       })
     return result
-  }, [items, query, source, onlySelected, selectedIds, sort, latencies])
+  }, [items, query, source, onlySelected, selectedIds, sort, latencies, checks.onlyPassed, checks.results])
   const sources = useMemo(
     () => [
       ...new Map(
@@ -275,6 +293,7 @@ export function GroupAddNodesModal({
   const handleClose = () => {
     if (loading) return
     pickerTests.stop()
+    checks.cancel()
     onClose()
   }
   const handleSubmit = async () => {
@@ -330,7 +349,7 @@ export function GroupAddNodesModal({
               type="button"
               variant="outline"
               size="sm"
-              disabled={tests.busy || !filteredItems.length}
+              disabled={tests.busy || checks.busy || !filteredItems.length}
               onClick={() => pickerTests.test(filteredItems.map((item) => item.id))}
             >
               <Gauge />
@@ -341,7 +360,7 @@ export function GroupAddNodesModal({
                 type="button"
                 size="sm"
                 variant="secondary"
-                disabled={tests.busy}
+                disabled={tests.busy || checks.busy}
                 onClick={() => pickerTests.test(selectedIds)}
               >
                 {t('groupPicker.testSelected', { count: selectedIds.length })}
@@ -385,6 +404,17 @@ export function GroupAddNodesModal({
             </span>
           </div>
           <LatencyStatus tests={tests} scope={scope} />
+          <ServiceCheckBar
+            checks={checks}
+            onSelectPassed={() =>
+              setSelectedIds((previous) => [
+                ...new Set([
+                  ...previous,
+                  ...filteredItems.filter((item) => checks.results[item.id]?.alive).map((item) => item.id),
+                ]),
+              ])
+            }
+          />
         </div>
         <ScrollableDialogBody className="node-picker-body px-4 py-3">
           <div data-picker-list className="picker-node-grid">
@@ -396,7 +426,9 @@ export function GroupAddNodesModal({
                 activeGroups={runtime.active.get(item.id)}
                 result={latencies?.[item.id]}
                 pending={tests.pending.has(item.id)}
-                busy={tests.busy}
+                busy={tests.busy || checks.busy}
+                serviceEnabled={!!checks.profile}
+                serviceResult={checks.results[item.id]}
                 onTest={pickerTests.test}
                 onToggle={toggleItem}
               />
@@ -458,6 +490,7 @@ export function GroupAddSubscriptionsModal({
   onSubmit,
   tests,
   latencies,
+  onAddPassedNodes,
 }: {
   opened: boolean
   onClose: () => void
@@ -466,10 +499,17 @@ export function GroupAddSubscriptionsModal({
   loading?: boolean
   resetKey: string
   onSubmit: (values: { ids: string[]; nameFilterRegex?: string | null }) => Promise<void>
+  onAddPassedNodes?: (ids: string[]) => Promise<void>
 } & PickerLatencyProps) {
   const { t } = useTranslation()
   const scope = `group-picker:${resetKey}:subscriptions`
   const pickerTests = usePickerTests(tests, scope)
+  const checks = useServiceChecks(
+    opened,
+    resetKey,
+    items.flatMap((item) => (item.previewNodes || []).map((node) => node.id)),
+    tests.busy,
+  )
   const [query, setQuery] = useState('')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [nameFilterRegex, setNameFilterRegex] = useState('')
@@ -486,14 +526,15 @@ export function GroupAddSubscriptionsModal({
 
   const filteredItems = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
-    if (!normalizedQuery) return items
-
-    return items.filter((item) =>
-      [item.title, item.description, item.meta, ...(item.keywords || [])]
-        .filter(Boolean)
-        .some((value) => value!.toLowerCase().includes(normalizedQuery)),
+    return items.filter(
+      (item) =>
+        (!checks.onlyPassed || item.previewNodes?.some((node) => checks.results[node.id]?.alive)) &&
+        (!normalizedQuery ||
+          [item.title, item.description, item.meta, ...(item.keywords || [])]
+            .filter(Boolean)
+            .some((value) => value!.toLowerCase().includes(normalizedQuery))),
     )
-  }, [items, query])
+  }, [items, query, checks.onlyPassed, checks.results])
 
   const selectedItems = useMemo(() => items.filter((item) => selectedIds.includes(item.id)), [items, selectedIds])
 
@@ -527,6 +568,13 @@ export function GroupAddSubscriptionsModal({
   }, [regexError, selectedItems, trimmedRegex])
 
   const totalMatchedNodes = previewGroups.reduce((sum, group) => sum + group.matchedNodes.length, 0)
+  const passedNodeIds = [
+    ...new Set(
+      previewGroups.flatMap((group) =>
+        group.matchedNodes.filter((node) => checks.results[node.id]?.alive).map((node) => node.id),
+      ),
+    ),
+  ]
 
   const toggleItem = (id: string) => {
     setServerRegexError(null)
@@ -537,6 +585,7 @@ export function GroupAddSubscriptionsModal({
   const handleClose = () => {
     if (loading) return
     pickerTests.stop()
+    checks.cancel()
     onClose()
     setQuery('')
     setSelectedIds([])
@@ -578,6 +627,7 @@ export function GroupAddSubscriptionsModal({
       <ScrollableDialogContent
         size="xl"
         data-subscription-picker
+        className="subscription-picker-dialog node-picker-dialog"
         onEscapeKeyDown={(event) => {
           if (loading) event.preventDefault()
         }}
@@ -585,16 +635,18 @@ export function GroupAddSubscriptionsModal({
           if (loading) event.preventDefault()
         }}
       >
-        <ScrollableDialogHeader>
-          <div className="pr-8">
-            <DialogTitle>{t('groupPicker.addSubscriptionsTitle', { name: groupName })}</DialogTitle>
-            <p className="mt-2 text-sm text-muted-foreground">
+        <ScrollableDialogHeader className="px-4 py-3 text-left">
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 pr-8">
+            <DialogTitle className="text-base">
+              {t('groupPicker.addSubscriptionsTitle', { name: groupName })}
+            </DialogTitle>
+            <p className="node-picker-count text-xs text-muted-foreground">
               {t('groupPicker.selectedCount', { count: selectedIds.length })}
             </p>
           </div>
         </ScrollableDialogHeader>
 
-        <ScrollableDialogBody className="flex flex-col gap-4">
+        <ScrollableDialogBody className="subscription-picker-body flex flex-col gap-3 p-4">
           <Input
             value={query}
             onChange={(e) => {
@@ -606,7 +658,8 @@ export function GroupAddSubscriptionsModal({
           />
 
           <LatencyStatus tests={tests} scope={scope} />
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-3">
+          <ServiceCheckBar checks={checks} />
+          <div className="subscription-picker-grid">
             {filteredItems.map((item) => {
               const checked = selectedIds.includes(item.id)
               const match = trimmedRegex && !regexError ? new RegExp(trimmedRegex) : null
@@ -619,31 +672,37 @@ export function GroupAddSubscriptionsModal({
                 <article
                   key={item.id}
                   data-picker-subscription={item.id}
-                  className={cn('min-w-0 rounded-lg border p-3', checked && 'border-primary bg-primary/5')}
+                  data-selected={checked}
+                  data-name-card
+                  className="subscription-picker-tile"
                 >
                   <div className="flex items-center gap-2">
-                    <Checkbox
-                      checked={checked}
-                      aria-label={`${t('actions.select')} ${item.title}`}
-                      onCheckedChange={() => toggleItem(item.id)}
-                    />
+                    <label className="subscription-picker-check">
+                      <Checkbox
+                        checked={checked}
+                        aria-label={`${t('actions.select')} ${item.title}`}
+                        onCheckedChange={() => toggleItem(item.id)}
+                      />
+                    </label>
                     <button
                       type="button"
-                      className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-left"
+                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
                       aria-pressed={checked}
                       onClick={() => toggleItem(item.id)}
                     >
-                      <span className="truncate text-sm font-medium">{item.title}</span>
-                      <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">{item.meta}</span>
+                      <span className="min-w-0 flex-1 text-sm font-semibold">
+                        <NodeName name={item.title} showRegion={false} />
+                      </span>
+                      <span className="shrink-0 text-xs text-muted-foreground">{item.meta}</span>
                     </button>
                   </div>
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                     <Button
                       type="button"
                       size="sm"
-                      variant="outline"
+                      variant="ghost"
                       aria-label={`${t('groupPicker.testSubscription')} ${item.title}`}
-                      disabled={tests.busy || !!regexError || !nodes.length}
+                      disabled={tests.busy || checks.busy || !!regexError || !nodes.length}
                       onClick={() => pickerTests.test(nodes.map((node) => node.id))}
                     >
                       <Gauge />
@@ -665,6 +724,12 @@ export function GroupAddSubscriptionsModal({
                       })}
                     </p>
                   )}
+                  {!!checks.profile && (
+                    <p className="mt-1 text-xs" data-subscription-service-summary>
+                      用途检测：通过 {nodes.filter((node) => checks.results[node.id]?.alive).length} / {nodes.length} ·
+                      已测 {nodes.filter((node) => checks.results[node.id]).length}
+                    </p>
+                  )}
                 </article>
               )
             })}
@@ -675,99 +740,126 @@ export function GroupAddSubscriptionsModal({
             )}
           </div>
 
-          <div className="rounded-lg border border-border/70 bg-card/60 p-4">
-            <Input
-              label={t('groupPicker.subscriptionRegexLabel')}
-              value={nameFilterRegex}
-              onChange={(e) => {
-                setNameFilterRegex(e.target.value)
-                setServerRegexError(null)
-                setSubmitError(null)
-              }}
-              placeholder={t('groupPicker.subscriptionRegexPlaceholder')}
-              error={regexError || undefined}
-            />
-            <p className="mt-2 text-xs text-muted-foreground">{t('groupPicker.subscriptionRegexHint')}</p>
-          </div>
-
-          <div className="rounded-lg border border-border/70 bg-card/60 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium">{t('groupPicker.subscriptionPreviewTitle')}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {trimmedRegex
-                    ? t('groupPicker.subscriptionPreviewSummary', { count: totalMatchedNodes })
-                    : t('groupPicker.subscriptionPreviewUnfiltered')}
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={tests.busy || !!regexError || !totalMatchedNodes}
-                onClick={() =>
-                  pickerTests.test(previewGroups.flatMap((group) => group.matchedNodes.map((node) => node.id)))
-                }
-              >
-                <Gauge />
-                {t('groupPicker.testMatched')}
-              </Button>
+          <details className="subscription-picker-advanced">
+            <summary className="cursor-pointer py-2 text-sm font-medium">
+              {t('groupPicker.subscriptionRegexLabel')} · {t('groupPicker.subscriptionPreviewTitle')}
+            </summary>
+            <div className="py-3">
+              <Input
+                label={t('groupPicker.subscriptionRegexLabel')}
+                value={nameFilterRegex}
+                onChange={(e) => {
+                  setNameFilterRegex(e.target.value)
+                  setServerRegexError(null)
+                  setSubmitError(null)
+                }}
+                placeholder={t('groupPicker.subscriptionRegexPlaceholder')}
+                error={regexError || undefined}
+              />
+              <p className="mt-2 text-xs text-muted-foreground">{t('groupPicker.subscriptionRegexHint')}</p>
             </div>
 
-            {selectedItems.length === 0 ? (
-              <p className="mt-4 text-sm text-muted-foreground">{t('groupPicker.subscriptionPreviewSelectFirst')}</p>
-            ) : previewGroups.every((group) => group.matchedNodes.length === 0) ? (
-              <p className="mt-4 text-sm text-muted-foreground">
-                {trimmedRegex
-                  ? t('groupPicker.subscriptionPreviewEmpty')
-                  : t('groupPicker.subscriptionPreviewUnfiltered')}
-              </p>
-            ) : (
-              <div className="mt-4 flex flex-col gap-3">
-                {previewGroups.map(({ item, matchedNodes }) => (
-                  <div key={item.id} className="rounded-lg border border-border/60 bg-background/40 p-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-medium">{item.title}</p>
-                      <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                        {t('groupPicker.subscriptionPreviewMatchedCount', { count: matchedNodes.length })}
-                      </span>
-                    </div>
-
-                    {matchedNodes.length > 0 ? (
-                      <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))] gap-2">
-                        {matchedNodes.map((node) => (
-                          <div
-                            key={node.id}
-                            data-picker-preview-node={node.id}
-                            className="flex min-w-0 flex-wrap items-center justify-between gap-1 rounded-md border border-border/60 bg-background px-2 py-1 text-xs"
-                          >
-                            <span className="min-w-0 flex-1 basis-[100px] truncate" title={node.title}>
-                              {node.title}
-                            </span>
-                            <PickerLatencyButton
-                              id={node.id}
-                              name={node.title}
-                              result={latencies?.[node.id]}
-                              pending={tests.pending.has(node.id)}
-                              busy={tests.busy || !!regexError}
-                              onTest={pickerTests.test}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="mt-3 text-xs text-muted-foreground">
-                        {t('groupPicker.subscriptionPreviewNoMatchForItem')}
-                      </p>
-                    )}
-                  </div>
-                ))}
+            <div className="border-t py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">{t('groupPicker.subscriptionPreviewTitle')}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {trimmedRegex
+                      ? t('groupPicker.subscriptionPreviewSummary', { count: totalMatchedNodes })
+                      : t('groupPicker.subscriptionPreviewUnfiltered')}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={tests.busy || checks.busy || !!regexError || !totalMatchedNodes}
+                  onClick={() =>
+                    pickerTests.test(previewGroups.flatMap((group) => group.matchedNodes.map((node) => node.id)))
+                  }
+                >
+                  <Gauge />
+                  {t('groupPicker.testMatched')}
+                </Button>
               </div>
-            )}
-          </div>
+
+              {selectedItems.length === 0 ? (
+                <p className="mt-4 text-sm text-muted-foreground">{t('groupPicker.subscriptionPreviewSelectFirst')}</p>
+              ) : previewGroups.every((group) => group.matchedNodes.length === 0) ? (
+                <p className="mt-4 text-sm text-muted-foreground">
+                  {trimmedRegex
+                    ? t('groupPicker.subscriptionPreviewEmpty')
+                    : t('groupPicker.subscriptionPreviewUnfiltered')}
+                </p>
+              ) : (
+                <div className="mt-4 flex flex-col gap-3">
+                  {previewGroups.map(({ item, matchedNodes }) => (
+                    <div key={item.id} className="rounded-lg border border-border/60 bg-background/40 p-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-medium">{item.title}</p>
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                          {t('groupPicker.subscriptionPreviewMatchedCount', { count: matchedNodes.length })}
+                        </span>
+                      </div>
+
+                      {matchedNodes.length > 0 ? (
+                        <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))] gap-2">
+                          {matchedNodes
+                            .filter((node) => !checks.onlyPassed || checks.results[node.id]?.alive)
+                            .map((node) => (
+                              <div
+                                key={node.id}
+                                data-picker-preview-node={node.id}
+                                className="flex min-w-0 flex-wrap items-center justify-between gap-1 rounded-md border border-border/60 bg-background px-2 py-1 text-xs"
+                              >
+                                <span className="min-w-0 flex-1 basis-[100px] truncate" title={node.title}>
+                                  {node.title}
+                                </span>
+                                {checks.profile ? (
+                                  <ServiceResultBadge result={checks.results[node.id]} />
+                                ) : (
+                                  <PickerLatencyButton
+                                    id={node.id}
+                                    name={node.title}
+                                    result={latencies?.[node.id]}
+                                    pending={tests.pending.has(node.id)}
+                                    busy={tests.busy || !!regexError}
+                                    onTest={pickerTests.test}
+                                  />
+                                )}
+                              </div>
+                            ))}
+                        </div>
+                      ) : (
+                        <p className="mt-3 text-xs text-muted-foreground">
+                          {t('groupPicker.subscriptionPreviewNoMatchForItem')}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </details>
         </ScrollableDialogBody>
 
         <ScrollableDialogFooter>
           {submitError && <p className="mr-auto text-xs text-destructive">{submitError}</p>}
+          {!!checks.profile && onAddPassedNodes && (
+            <Button
+              variant="secondary"
+              disabled={loading || !!regexError || !passedNodeIds.length}
+              onClick={async () => {
+                try {
+                  await onAddPassedNodes(passedNodeIds)
+                  handleClose()
+                } catch {
+                  setSubmitError(t('panel.saveFailed'))
+                }
+              }}
+            >
+              仅添加通过的节点 ({passedNodeIds.length})
+            </Button>
+          )}
           <Button variant="ghost" onClick={handleClose} disabled={loading}>
             {t('actions.cancel')}
           </Button>

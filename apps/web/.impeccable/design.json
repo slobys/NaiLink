@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-03T10:43:34.247332+00:00",
+  "generatedAt": "2026-11-03T15:42:51.972969Z",
   "title": "Design System: NaiLink Compact Console",
   "extensions": {
     "colorMeta": {
@@ -370,6 +370,16 @@
         "name": "console-flat",
         "value": "none",
         "purpose": "连接卡片、普通区块及公共按钮保持平面；节点悬停允许轻量向下投影，弹窗保留库样式。"
+      },
+      {
+        "name": "node-hover",
+        "value": "0 3px 6px -3px color-mix(in oklab, var(--foreground) 18%, transparent)",
+        "purpose": "节点卡片的精细指针轻悬停；无额外整卡外圈。"
+      },
+      {
+        "name": "subscription-picker-hover",
+        "value": "0 4px 10px -4px color-mix(in oklab, var(--foreground) 24%, transparent)",
+        "purpose": "添加订阅卡片的精细指针轻悬停；触控和减少动态效果不依赖它。"
       }
     ],
     "motion": [
@@ -424,7 +434,26 @@
       "hover": "var(--console-node-hover)",
       "hoverLift": "0 -2px",
       "hoverOutline": "none",
-      "viewportGutter": "6px"
+      "viewportGutter": "6px",
+      "hoverLight": "color-mix(in oklab, var(--primary) 17%, var(--card))",
+      "hoverDark": "color-mix(in oklab, var(--primary) 24%, var(--console-node-surface))"
+    },
+    "subscriptionPicker": {
+      "grid": "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
+      "gap": "10px",
+      "checkboxLabelDesktop": "20px 20px",
+      "checkboxLabelTouch": "44px 44px",
+      "checkboxGlyph": "18px 18px",
+      "checkboxMinHeight": "18px",
+      "advancedDisclosure": "节点名称正则与匹配节点预览保留在可展开高级区。"
+    },
+    "trafficOverview": {
+      "desktopCondition": "(min-width: 900px) and (min-height: 600px)",
+      "room": "max(360px, viewportHeight - monitorTop - 20px)",
+      "height": "clamp(360px, calc(var(--monitor-room, 560px) - 34px), 580px)",
+      "chartMinHeight": "100px",
+      "totalsShrink": "0",
+      "rule": "保留顶部速率、连接、流量和底部累计上传、累计下载、UDP会话；其他视口自然布局。"
     }
   },
   "components": [
@@ -482,7 +511,7 @@
       "refersTo": "node-tile-selected",
       "description": "多选节点采用独立绿色填充、绿色边界与实心勾选，名称和次要信息保持可读。 悬停为柔和主题色与轻微上浮，不加整卡外圈。",
       "html": "<article class=\"ds-tile\"><button class=\"ds-tile-name\" aria-pressed=\"true\">示例节点</button><button class=\"ds-tile-check\" role=\"checkbox\" aria-checked=\"true\" aria-label=\"选择 示例节点\"><svg viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3\" aria-hidden=\"true\"><path d=\"m5 12 4 4L19 6\"/></svg></button><span class=\"ds-tile-meta\">SOCKS5 · 手动节点</span><button class=\"ds-tile-test\">测试</button></article>",
-      "css": ".ds-tile{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:24px 26px;align-items:center;gap:3px 6px;min-height:70px;max-width:260px;padding:8px 10px;border:1px solid var(--console-selected-border,oklch(0.48 0.11 150));border-radius:10px;background:var(--console-selected,oklch(0.81 0.09 150));font-family:'Fira Sans', system-ui, -apple-system, sans-serif;transition:background-color 160ms ease-out,translate 180ms ease-out,box-shadow 180ms ease-out}.ds-tile:hover{border-color:var(--console-selected-border,oklch(0.48 0.11 150))}.ds-tile-name,.ds-tile-test{padding:0;border:0;background:transparent;cursor:pointer;font-family:inherit}.ds-tile-name{grid-column:1;grid-row:1;min-width:0;text-align:left;color:var(--console-selected-text,oklch(0.26 0.045 155));font-size:13px;font-weight:600}.ds-tile-check{grid-column:2;grid-row:1;display:grid;place-content:center;width:18px;height:18px;padding:0;border:1px solid var(--console-selected-border,oklch(0.48 0.11 150));border-radius:5px;background:var(--console-selected-border,oklch(0.48 0.11 150));color:var(--primary-foreground,oklch(0.18 0.02 60));cursor:pointer}.ds-tile-meta{grid-column:1;grid-row:2;font-size:11px;line-height:16px;color:color-mix(in oklab,var(--console-selected-text,oklch(0.26 0.045 155)) 76%,var(--card,oklch(0.99 0.008 85)))}.ds-tile-test{grid-column:2;grid-row:2;min-height:26px;min-width:36px;font-size:12px;color:var(--console-selected-text,oklch(0.26 0.045 155))}.ds-tile-test:hover{background:var(--accent,oklch(0.94 0.02 85));border-radius:8px}.ds-tile button:focus-visible{outline:2px solid var(--ring,oklch(0.75 0.18 85));outline-offset:2px;}@media(max-width:640px),(pointer:coarse){.ds-tile{grid-template-rows:44px 44px;padding:4px 8px;gap:0 4px}.ds-tile-name,.ds-tile-test{min-height:44px}.ds-tile-test{min-width:44px}.ds-tile-check{width:22px;height:22px}}@media(prefers-reduced-motion:reduce){.ds-tile{transition:none}}@media(hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference){.ds-tile:hover{translate:0 -2px;box-shadow:0 3px 6px -3px color-mix(in oklab,var(--foreground) 18%,transparent)}}"
+      "css": ".ds-tile{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:24px 26px;align-items:center;gap:3px 6px;min-height:70px;max-width:260px;padding:8px 10px;border:1px solid var(--console-selected-border,oklch(0.48 0.11 150));border-radius:10px;background:var(--console-selected,oklch(0.81 0.09 150));font-family:'Fira Sans', system-ui, -apple-system, sans-serif;transition:background-color 160ms ease-out,translate 180ms ease-out,box-shadow 180ms ease-out}.ds-tile:hover{border-color:var(--console-selected-border,oklch(0.48 0.11 150));background:var(--console-selected-hover,oklch(0.84 0.075 150))}.ds-tile-name,.ds-tile-test{padding:0;border:0;background:transparent;cursor:pointer;font-family:inherit}.ds-tile-name{grid-column:1;grid-row:1;min-width:0;text-align:left;color:var(--console-selected-text,oklch(0.26 0.045 155));font-size:13px;font-weight:600}.ds-tile-check{grid-column:2;grid-row:1;display:grid;place-content:center;width:18px;height:18px;padding:0;border:1px solid var(--console-selected-border,oklch(0.48 0.11 150));border-radius:5px;background:var(--console-selected-border,oklch(0.48 0.11 150));color:var(--primary-foreground,oklch(0.18 0.02 60));cursor:pointer}.ds-tile-meta{grid-column:1;grid-row:2;font-size:11px;line-height:16px;color:color-mix(in oklab,var(--console-selected-text,oklch(0.26 0.045 155)) 76%,var(--card,oklch(0.99 0.008 85)))}.ds-tile-test{grid-column:2;grid-row:2;min-height:26px;min-width:36px;font-size:12px;color:var(--console-selected-text,oklch(0.26 0.045 155))}.ds-tile-test:hover{background:var(--accent,oklch(0.94 0.02 85));border-radius:8px}.ds-tile button:focus-visible{outline:2px solid var(--ring,oklch(0.75 0.18 85));outline-offset:2px;}@media(max-width:640px),(pointer:coarse){.ds-tile{grid-template-rows:44px 44px;padding:4px 8px;gap:0 4px}.ds-tile-name,.ds-tile-test{min-height:44px}.ds-tile-test{min-width:44px}.ds-tile-check{width:22px;height:22px}}@media(prefers-reduced-motion:reduce){.ds-tile{transition:none}}@media(hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference){.ds-tile:hover{translate:0 -2px;box-shadow:0 3px 6px -3px color-mix(in oklab,var(--foreground) 18%,transparent)}}"
     },
     {
       "name": "连接检测卡片",
@@ -504,14 +533,30 @@
       "name": "订阅节点瓷片",
       "kind": "custom",
       "refersTo": "node-tile",
-      "description": "同一表面与密度；名称详情、测试、加入和更多保持可见。 悬停为柔和主题色与轻微上浮，不加整卡外圈。",
+      "description": "同一表面与密度；名称详情、测试、加入和更多保持可见。悬停绑定新的明暗主题配方，不加整卡外圈。",
       "html": "<article class=\"ds-sub-node\"><div class=\"ds-sub-heading\"><button class=\"ds-sub-name\">示例订阅节点</button><span>VLESS</span></div><div class=\"ds-sub-actions\"><button class=\"ds-sub-test\">测试</button><button aria-label=\"加入群组\"><svg viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M12 5v14M5 12h14\"/></svg></button><button aria-label=\"更多操作\"><svg viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"currentColor\" aria-hidden=\"true\"><circle cx=\"5\" cy=\"12\" r=\"1.5\"/><circle cx=\"12\" cy=\"12\" r=\"1.5\"/><circle cx=\"19\" cy=\"12\" r=\"1.5\"/></svg></button></div></article>",
-      "css": ".ds-sub-node{display:flex;flex-direction:column;gap:4px;max-width:260px;padding:8px 10px;border:1px solid color-mix(in oklab,var(--border,oklch(0.92 0.015 85)) 65%,transparent);border-radius:10px;background:color-mix(in oklab,var(--muted,oklch(0.95 0.012 85)) 35%,var(--card,oklch(0.99 0.008 85)));font-family:'Fira Sans', system-ui, -apple-system, sans-serif;transition:background-color 160ms ease-out,translate 180ms ease-out,box-shadow 180ms ease-out}.ds-sub-node:hover{background:color-mix(in oklab,var(--primary,oklch(0.75 0.18 85)) 7%,var(--card,oklch(0.99 0.008 85)))}.ds-sub-heading{display:flex;align-items:center;gap:6px;min-width:0}.ds-sub-heading span{font-size:11px;color:var(--muted-foreground,oklch(0.5 0.02 60))}.ds-sub-node button{display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:8px;background:transparent;cursor:pointer;font-family:inherit;color:color-mix(in oklab,var(--foreground,oklch(0.18 0.02 60)) 76%,var(--card,oklch(0.99 0.008 85)))}.ds-sub-node .ds-sub-name{flex:1;justify-content:start;min-width:0;min-height:24px;padding:0;font-size:13px;line-height:20px;font-weight:500;color:var(--foreground,oklch(0.18 0.02 60))}.ds-sub-name:hover{color:var(--primary,oklch(0.75 0.18 85))}.ds-sub-actions{display:flex;align-items:center;gap:0}.ds-sub-actions button{min-width:26px;min-height:26px;padding:2px 4px;font-size:12px}.ds-sub-actions .ds-sub-test{flex:1;justify-content:start}.ds-sub-actions button:hover{background:var(--accent,oklch(0.94 0.02 85))}.ds-sub-node button:focus-visible{outline:2px solid var(--ring,oklch(0.75 0.18 85));outline-offset:2px;}@media(max-width:640px),(pointer:coarse){.ds-sub-node .ds-sub-name{min-height:44px}.ds-sub-actions button{min-width:44px;min-height:44px}}@media(prefers-reduced-motion:reduce){.ds-sub-node{transition:none}}@media(hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference){.ds-sub-node:hover{translate:0 -2px;box-shadow:0 3px 6px -3px color-mix(in oklab,var(--foreground) 18%,transparent)}}"
+      "css": ".ds-sub-node{display:flex;flex-direction:column;gap:4px;max-width:260px;padding:8px 10px;border:1px solid var(--console-node-border,color-mix(in oklab,var(--foreground,oklch(0.18 0.02 60)) 19%,var(--card,oklch(0.99 0.008 85))));border-radius:10px;background:var(--console-node-surface,color-mix(in oklab,var(--foreground,oklch(0.18 0.02 60)) 9%,var(--card,oklch(0.99 0.008 85))));font-family:'Fira Sans', system-ui, -apple-system, sans-serif;transition:background-color 160ms ease-out,translate 180ms ease-out,box-shadow 180ms ease-out}.ds-sub-node:hover{background:var(--console-node-hover,color-mix(in oklab,var(--primary,oklch(0.75 0.18 85)) 17%,var(--card,oklch(0.99 0.008 85))))}.ds-sub-heading{display:flex;align-items:center;gap:6px;min-width:0}.ds-sub-heading span{font-size:11px;color:var(--muted-foreground,oklch(0.5 0.02 60))}.ds-sub-node button{display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:8px;background:transparent;cursor:pointer;font-family:inherit;color:color-mix(in oklab,var(--foreground,oklch(0.18 0.02 60)) 76%,var(--card,oklch(0.99 0.008 85)))}.ds-sub-node .ds-sub-name{flex:1;justify-content:start;min-width:0;min-height:24px;padding:0;font-size:13px;line-height:20px;font-weight:500;color:var(--foreground,oklch(0.18 0.02 60))}.ds-sub-name:hover{color:var(--primary,oklch(0.75 0.18 85))}.ds-sub-actions{display:flex;align-items:center;gap:0}.ds-sub-actions button{min-width:26px;min-height:26px;padding:2px 4px;font-size:12px}.ds-sub-actions .ds-sub-test{flex:1;justify-content:start}.ds-sub-actions button:hover{background:var(--accent,oklch(0.94 0.02 85))}.ds-sub-node button:focus-visible{outline:2px solid var(--ring,oklch(0.75 0.18 85));outline-offset:2px;}@media(max-width:640px),(pointer:coarse){.ds-sub-node .ds-sub-name{min-height:44px}.ds-sub-actions button{min-width:44px;min-height:44px}}@media(prefers-reduced-motion:reduce){.ds-sub-node{transition:none}}@media(hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference){.ds-sub-node:hover{translate:0 -2px;box-shadow:0 3px 6px -3px color-mix(in oklab,var(--foreground) 18%,transparent)}}"
+    },
+    {
+      "name": "紧凑订阅选择卡片",
+      "kind": "card",
+      "refersTo": "subscription-picker-tile",
+      "description": "添加订阅窗口的来源卡，区别于订阅内节点瓷片；触控44×44px标签包裹固定18×18px勾选框。",
+      "html": "<article class=\"ds-source\" data-selected=\"true\"><div class=\"ds-source-heading\"><label class=\"ds-source-check\"><button role=\"checkbox\" aria-checked=\"true\" aria-label=\"选择 示例订阅\"><svg viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3\" aria-hidden=\"true\"><path d=\"m5 12 4 4L19 6\"/></svg></button></label><button class=\"ds-source-name\" aria-pressed=\"true\">示例订阅<span>72 节点</span></button></div><div class=\"ds-source-actions\"><button>测试</button></div><p>用途检测：尚未检测</p></article>",
+      "css": ".ds-source{max-width:360px;padding:10px 12px;border:1px solid var(--console-node-border,color-mix(in oklab,var(--foreground,oklch(0.18 0.02 60)) 19%,var(--card,oklch(0.99 0.008 85))));border-radius:10px;background:var(--console-node-surface,color-mix(in oklab,var(--foreground,oklch(0.18 0.02 60)) 9%,var(--card,oklch(0.99 0.008 85))));color:var(--foreground,oklch(0.18 0.02 60));font-family:'Fira Sans',system-ui,-apple-system,sans-serif;transition:background-color 160ms ease-out,translate 180ms ease-out,box-shadow 180ms ease-out}.ds-source:hover{background:var(--console-node-hover,color-mix(in oklab,var(--primary,oklch(0.75 0.18 85)) 17%,var(--card,oklch(0.99 0.008 85))))}.ds-source[data-selected=\"true\"]{background:var(--console-selected,oklch(0.81 0.09 150));color:var(--console-selected-text,oklch(0.26 0.045 155));border-color:var(--console-selected-border,oklch(0.48 0.11 150))}.ds-source-heading{display:flex;align-items:center;gap:8px;min-width:0}.ds-source-check{display:inline-flex;flex:none;align-items:center;justify-content:center;width:20px;height:20px;cursor:pointer}.ds-source-check button{display:grid;place-content:center;flex:none;width:18px;height:18px;min-height:18px;padding:0;border:1px solid var(--console-selected-control,oklch(0.4 0.1 155));border-radius:4px;background:var(--console-selected-control,oklch(0.4 0.1 155));color:var(--console-selected-control-ink,oklch(0.98 0.008 150))}.ds-source-name{display:flex;flex:1;align-items:center;justify-content:space-between;gap:8px;min-width:0;padding:0;border:0;background:transparent;color:inherit;text-align:left;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer}.ds-source-name span{flex:none;font-size:12px;font-weight:400}.ds-source-actions{display:flex;align-items:center;margin-top:8px}.ds-source-actions button{min-height:32px;padding:0 8px;border:0;border-radius:8px;background:transparent;color:inherit;font-family:inherit;font-size:14px;cursor:pointer}.ds-source-actions button:hover{background:var(--accent,oklch(0.94 0.02 85))}.ds-source p{margin:4px 0 0;font-size:12px;line-height:16px}.ds-source button:focus-visible{outline:2px solid var(--ring,oklch(0.75 0.18 85));outline-offset:2px}@media(hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference){.ds-source:hover{translate:0 -2px;box-shadow:0 4px 10px -4px color-mix(in oklab,var(--foreground) 24%,transparent)}}@media(pointer:coarse),(max-width:640px){.ds-source button:not([role=\"checkbox\"]){min-height:44px}.ds-source-check{width:44px;height:44px}}@media(prefers-reduced-motion:reduce){.ds-source{transition:none;translate:none}}"
+    },
+    {
+      "name": "用途检查工具栏",
+      "kind": "custom",
+      "refersTo": "service-check-control",
+      "description": "群组用途、进度和过滤为普通表单控件；自动检查及筛选不提交资源。普通失败原因复用现有中文延迟原因映射，不改变布局和表面。",
+      "html": "<section class=\"ds-check-bar\"><div class=\"ds-check-controls\"><label>群组用途<select aria-label=\"群组用途\"><option>AI · ChatGPT</option><option>常规连接</option><option>Netflix</option><option>不自动检测</option></select></label><span role=\"status\">已检测 0/0</span><button>重新检测</button><label><input type=\"checkbox\"/>只看通过</label><button>勾选通过</button></div><p>自动检查 ChatGPT 入口，不验证账号、登录和其他 AI 服务。</p><span class=\"ds-service-result\" data-state=\"unknown\">待检测</span></section>",
+      "css": ".ds-check-bar{padding:8px 0;border-top:1px solid var(--border,oklch(0.92 0.015 85));font-family:'Fira Sans',system-ui,-apple-system,sans-serif;font-size:12px;color:var(--foreground,oklch(0.18 0.02 60))}.ds-check-controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}.ds-check-controls label{display:inline-flex;align-items:center;gap:6px}.ds-check-controls select,.ds-check-controls button{min-height:32px;padding:4px 8px;border:0;border-radius:7px;background:var(--secondary,oklch(0.96 0.015 85));color:var(--foreground,oklch(0.18 0.02 60));font-family:inherit;font-size:12px;cursor:pointer}.ds-check-controls button:hover{background:var(--secondary,oklch(0.96 0.015 85))}.ds-check-controls select:focus-visible,.ds-check-controls button:focus-visible,.ds-check-controls input:focus-visible{outline:2px solid var(--ring,oklch(0.75 0.18 85));outline-offset:2px}.ds-check-bar p{margin:5px 0 0;color:var(--muted-foreground,oklch(0.5 0.02 60));line-height:1.5}.ds-service-result{display:inline-block;max-width:100%;margin-top:8px;padding:3px 6px;border-radius:6px;font-size:11px;white-space:nowrap;background:var(--secondary,oklch(0.96 0.015 85));color:var(--foreground,oklch(0.18 0.02 60))}.ds-service-result[data-state=\"pass\"]{background:var(--console-selected,oklch(0.81 0.09 150));color:var(--console-selected-text,oklch(0.26 0.045 155))}.ds-service-result[data-state=\"fail\"]{background:color-mix(in oklab,var(--destructive) 12%,var(--card));color:var(--destructive)}@media(pointer:coarse),(max-width:640px){.ds-check-controls select,.ds-check-controls button,.ds-check-controls label{min-height:44px}}"
     }
   ],
   "narrative": {
     "northStar": "紧凑控制台",
-    "overview": "系统沿用 NaiLink 的主题、字体和 LuCI 导航，以用户明确指定的 Zashboard / OpenClash 密度与选中反馈作为细节参考。名称、来源、协议和测试结果优先于留白；选中通过整卡填色、边界和实体勾选共同表达。\n\n本文件描述已实现的控制台、添加节点窗口与订阅节点浏览器。它不替换宿主 LuCI 的导航，也不把控制台的紧凑尺寸强加给配置编辑器等其他页面。依据为 `src/console.css`、`src/index.css`、`src/constants/themes.ts`、对应 React 组件和 `.impeccable/review/` 的实现截图；没有已批准的独立视觉稿。",
+    "overview": "系统沿用 NaiLink 的主题、字体和 LuCI 导航，以用户明确指定的 Zashboard / OpenClash 密度与选中反馈作为细节参考。名称、来源、协议和测试结果优先于留白；选中通过整卡填色、边界和实体勾选共同表达。\n\n本文件描述已实现的控制台、群组节点/订阅选择器与订阅节点浏览器。它不替换宿主 LuCI 的导航，也不把控制台的紧凑尺寸强加给配置编辑器等其他页面。依据为 `src/console.css`、`src/index.css`、`src/constants/themes.ts`、对应 React 组件、`.impeccable/review/` 与仓库根目录 `.build/service71/browser/` 的实现截图；没有已批准的独立视觉稿。本轮截图来自原生 LuCI / rpcd API-only 隔离夹具及受控服务响应，只证明相应界面和流程，不是实际服务解锁或实机手机证明。",
     "keyCharacteristics": [
       "主题变量决定表面和强调色，状态同时提供文字或勾选。",
       "两行节点瓷片与固定工具栏支持快速扫读。",
@@ -521,18 +566,13 @@
     "rules": [
       {
         "name": "The Theme Binding Rule",
-        "body": "控制台表面、选中、悬停与焦点始终引用当前主题变量；品牌原色与检测状态保留各自含义。",
+        "body": "普通表面、悬停与焦点继续绑定主题；节点多选使用与主题分开的深浅绿色语义，必须同时有勾选与可访问状态。地区旗帜保留标准图形颜色，不映射为主题色。",
         "section": "colors"
       },
       {
         "name": "The Name Access Rule",
         "body": "截断只控制布局，不取消完整名称：保留 `title`、名称按钮、展开或详情入口，以及完整可访问名称。",
         "section": "typography"
-      },
-      {
-        "body": "节点卡片采用柔和主题色和 2px 上浮，无额外外圈；手动虚拟列表留白 6px，步距保持 102px/122px。拖动、触控和减少动画设置不叠加上浮；键盘实际控件保留焦点。",
-        "name": "节点悬停与裁切",
-        "section": "components"
       }
     ],
     "dos": [
@@ -541,7 +581,9 @@
       "**Do** 在触控布局中保留 44px 主要操作目标和完整名称入口。",
       "**Do** 在最窄嵌入视口使用单列，并检查弹窗工具栏和提交区仍可到达。",
       "**Do** 使用已记录来源的本地官方 Logo，并保持原比例与颜色。",
-      "**Do** 将虚拟行的可见高度、尾间隔和滚动步距作为同一组计算验证。"
+      "**Do** 将虚拟行的可见高度、尾间隔和滚动步距作为同一组计算验证。",
+      "**Do** 将订阅勾选的 44×44px 触控容器与 18×18px 可见方框分开设置。",
+      "**Do** 收紧桌面运行概况时保留全部统计，并将通过筛选、勾选与提交分开。"
     ],
     "donts": [
       "**Don't** 用 70px 网格瓷片规则覆盖手动节点列表的 102px / 122px 虚拟步距。",
@@ -549,7 +591,8 @@
       "**Don't** 让悬停动画成为触控或键盘读取完整名称的唯一方式。",
       "**Don't** 把默认 Amber 色值硬编码为其他主题的运行时颜色。",
       "**Don't** 把品牌图片改成自动生成图、字符图标或运行时远程请求。",
-      "**Don't** 将旧全局发光、渐变、悬浮阴影工具类扩散到紧凑节点与连接卡片。"
+      "**Don't** 将旧全局发光、渐变或大幅悬浮工具类扩散到控制台；节点和订阅选择卡仅使用已授权的轻微悬停反馈。",
+      "**Don't** 把入口检测的通过结果描述为账号可用、Netflix 完整播放解锁或真实出口已切换。"
     ]
   }
 }

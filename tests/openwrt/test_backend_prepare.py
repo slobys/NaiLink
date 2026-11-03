@@ -31,6 +31,8 @@ SOURCES = (
     "dae/runtime.go",
     "db/node_utils.go",
     "db/subscription.go",
+    "db/group.go",
+    "db/routing.go",
     "dae/flat_desc.go",
     "graphql/service/config/global/schema.go",
     "dae-core/config/config.go",

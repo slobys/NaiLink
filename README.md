@@ -16,9 +16,9 @@
 
 管理节点、订阅和群组，测试节点延迟，查看实时流量，配置 DNS 与路由。支持电脑、手机和多种主题，沿用路由器 LuCI 登录，无需另设账户。
 
-基于 [daed](https://github.com/daeuniverse/daed) 二次开发，独立维护。当前版本为 **[0.6.70 测试版](https://github.com/slobys/NaiLink/releases/tag/openwrt-v0.6.70)**，提供 IPK / APK v3 安装包。
+基于 [daed](https://github.com/daeuniverse/daed) 二次开发，独立维护。当前版本为 **[0.6.71 测试版](https://github.com/slobys/NaiLink/releases/tag/openwrt-v0.6.71)**，提供 IPK / APK v3 安装包。
 
-**0.6.70 节点悬停优化**：去掉额外外圈，改用柔和主题色和轻微上浮，修复手动节点靠近列表边缘时的裁切。保留绿色当前出口与勾选、延迟排序、地区图标及现有配置；键盘焦点、触控和减少动画设置继续可用。
+**0.6.71 常用分流与用途检测**：新安装预设 proxy、AI、Netflix 群组和“分流”路由；已有安装可点击群组右上角“常用分流”添加，保留原路由。添加节点或订阅组时按用途自动检测，支持筛选通过项；入口可访问不等于账号可登录或 Netflix 可播放。订阅选择窗口、节点悬停和运行概况更紧凑。
 
 **0.6.64 运行统计与切换恢复**：修复 sing-box / mihomo 大连接列表被误报为接口异常的问题。逐条汇总统计、控制采集频率与重试，保留异常时的页面内提示，避免轮询反复弹窗；调整大规则库启动验证期限，不改变节点和分流。
 
@@ -51,7 +51,7 @@
 以 **root** 登录路由器 SSH，执行下面一行，打开中文菜单：
 
 ```sh
-uclient-fetch -O /tmp/nailink-install.sh https://github.com/slobys/NaiLink/releases/download/openwrt-v0.6.70/install.sh && sh /tmp/nailink-install.sh --menu --release openwrt-v0.6.70
+uclient-fetch -O /tmp/nailink-install.sh https://github.com/slobys/NaiLink/releases/download/openwrt-v0.6.71/install.sh && sh /tmp/nailink-install.sh --menu --release openwrt-v0.6.71
 ```
 
 选择 **1 安装 / 更新**。安装后运行 `nailink` 可再次打开菜单，也可选择 **2 卸载**、**3 检查环境** 或 **0 退出**。
@@ -66,7 +66,7 @@ uclient-fetch -O /tmp/nailink-install.sh https://github.com/slobys/NaiLink/relea
 
 保留 0.6.30 的代理就绪检查与有效 DNS 分流关联恢复，可用 `nailink --check-network` 查看诊断。[恢复机制与限制 →](https://slobys.github.io/NaiLink/maintenance.html#restart-recovery)
 
-旧版菜单遇到 Raw 下载失败时，可运行 `nailink --install --release openwrt-v0.6.70`。如果 GitHub 也无法解析，先检查路由器自身 DNS。[下载故障排查 →](https://slobys.github.io/NaiLink/troubleshooting.html#download)
+旧版菜单遇到 Raw 下载失败时，可运行 `nailink --install --release openwrt-v0.6.71`。如果 GitHub 也无法解析，先检查路由器自身 DNS。[下载故障排查 →](https://slobys.github.io/NaiLink/troubleshooting.html#download)
 
 **0.6.42 修复 Clash 订阅**：支持内嵌 `proxies` 的 YAML / JSON、SIP008 和普通 / Base64 节点列表；更新失败保留原节点，内容未变时保留节点 ID。仅提取节点，不导入订阅中的 DNS、路由或监听设置。[格式与限制 →](https://slobys.github.io/NaiLink/nodes.html#clash)
 
@@ -98,7 +98,7 @@ uclient-fetch -O /tmp/nailink-install.sh https://github.com/slobys/NaiLink/relea
 
 ## 源码与交流
 
-[完整源码包](https://github.com/slobys/NaiLink/releases/download/openwrt-v0.6.70/daed-openwrt-source.tar.gz) · [构建说明](openwrt/README.md#开发) · [验证记录](openwrt/VALIDATION.md) · [Logo](docs/site/assets/nailink-logo.png)
+[完整源码包](https://github.com/slobys/NaiLink/releases/download/openwrt-v0.6.71/daed-openwrt-source.tar.gz) · [构建说明](openwrt/README.md#开发) · [验证记录](openwrt/VALIDATION.md) · [Logo](docs/site/assets/nailink-logo.png)
 
 编译请使用完整源码包，或 `git clone --recurse-submodules https://github.com/slobys/NaiLink.git`。GitHub 的 Download ZIP 不包含后端子模块。
 

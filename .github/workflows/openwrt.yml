@@ -14,7 +14,7 @@ on:
     inputs:
       version:
         description: 'Package version (X.Y.Z), must match source'
-        default: '0.6.70'
+        default: '0.6.71'
         required: true
       publish:
         description: 'After all checks, upload to a release draft (main only)'
@@ -184,12 +184,12 @@ jobs:
           (cd wing/dae-core && go test -count=1 ./control -run '^TestRouterDNS|^TestRouterFirstDomain|^TestRouterConnection|^TestRouteDial|^TestDnsForwarder')
       - name: Transaction, node cancellation, subscription cron and failure preservation tests
         if: matrix.cpu == 'x86_64'
-        run: cd wing && go test -count=1 -v ./graphql ./graphql/service/node ./graphql/service/subscription ./webrender
+        run: cd wing && go test -count=1 -v ./graphql ./graphql/service/config ./graphql/service/node ./graphql/service/subscription ./db ./webrender
       - name: Backend concurrency regression
         if: matrix.cpu == 'x86_64'
         run: |
           cd wing
-          CGO_ENABLED=1 go test -race -count=1 ./graphql ./graphql/service/node ./graphql/service/subscription ./cmd ./dae ./webrender
+          CGO_ENABLED=1 go test -race -count=1 ./graphql ./graphql/service/config ./graphql/service/node ./graphql/service/subscription ./db ./cmd ./dae ./webrender
           CGO_ENABLED=1 go test -race -count=1 github.com/daeuniverse/dae/component -run '^TestRouterInterface'
           CGO_ENABLED=1 go test -race -count=1 github.com/daeuniverse/dae/control -run '^TestRouterDNS|^TestRouterFirstDomain|^TestRouterConnection|^TestRouterCore|^TestRouteDial|^TestDnsForwarder'
           CGO_ENABLED=1 go test -race -count=1 github.com/daeuniverse/dae/component/outbound/dialer -run '^TestRouter(ProtocolURIOptions|SSClose)'

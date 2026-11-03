@@ -35,6 +35,8 @@ import { SimpleTooltip } from '~/components/ui/tooltip'
 import { DraggableResourceType } from '~/constants'
 import { useDisclosure } from '~/hooks'
 import { useRouterMaintenanceQuery } from '~/hooks/useRouterMaintenance'
+import { useGroupServices } from '~/hooks/useServiceChecks'
+import { useServicePresets } from '~/hooks/useServicePresets'
 import { cn } from '~/lib/utils'
 import { appStateAtom, defaultResourcesAtom } from '~/store'
 import { getInstantDropStyle } from '~/utils'
@@ -69,6 +71,8 @@ export function GroupResource({
     (routerMode && maintenance.isPending) ||
     (configurationJob(maintenance.data?.job) && jobActive(maintenance.data?.job))
   const groupsRequest = useGroupsQuery()
+  const purposes = useGroupServices()
+  const presets = useServicePresets()
   const groupsQuery = groupsRequest.data
   const { data: nodesQuery } = useNodesQuery()
   const appState = useStore(appStateAtom)
@@ -290,6 +294,23 @@ export function GroupResource({
             <span>{t('groupPicker.nodesCount', { count: groupNodes.length })}</span>
             <span>{t('groupPicker.subscriptionGroupsCount', { count: groupSubscriptions.length })}</span>
             <GroupRuntimeSummary name={name} />
+            {!!purposes.data?.find((item) => item.id === groupId)?.profile && (
+              <span className="group-service-purpose">
+                用途：
+                {
+                  { proxy: '常规', ai: 'AI', netflix: 'Netflix' }[
+                    purposes.data.find((item) => item.id === groupId)!.profile as 'proxy' | 'ai' | 'netflix'
+                  ]
+                }
+              </span>
+            )}
+            {!groupNodes.length &&
+              !groupSubscriptions.length &&
+              purposes.data?.find((item) => item.id === groupId)?.fallbackName && (
+                <span className="basis-full text-xs">
+                  暂用 {purposes.data.find((item) => item.id === groupId)!.fallbackName} 的节点，可单独添加
+                </span>
+              )}
             {!!groupNodes.length && !expandedGroupIds.has(groupId) && (
               <span
                 className="max-w-full basis-full whitespace-normal [overflow-wrap:anywhere]"
@@ -392,6 +413,20 @@ export function GroupResource({
       onRetry={() => groupsRequest.refetch()}
       icon={<Table2 className="h-5 w-5" />}
       onCreate={openCreateGroupFormModal}
+      actions={
+        routerMode &&
+        defaultGroupID && (
+          <Button
+            variant="ghost"
+            size="sm"
+            loading={presets.isPending}
+            disabled={applying || presets.isPending}
+            onClick={() => presets.mutate({ proxy: defaultGroupID })}
+          >
+            常用分流
+          </Button>
+        )
+      }
       highlight={highlight}
       bordered
       className="panel-side-section"
@@ -400,6 +435,16 @@ export function GroupResource({
       {applying && (
         <p role="status" className="text-xs text-muted-foreground">
           正在应用配置，完成后可移除群组成员。
+        </p>
+      )}
+      {presets.isSuccess && (
+        <p role="status" className="text-xs text-muted-foreground">
+          AI、Netflix 与“{presets.data.name}”预设已就绪。现有路由保持不变，可在高级设置中选择分流并应用。
+        </p>
+      )}
+      {presets.isError && (
+        <p role="alert" className="text-xs text-destructive">
+          暂时无法添加常用分流，现有配置已保留。
         </p>
       )}
       <Droppable droppableId={GROUP_DROPPABLE_ID} type="GROUP">
@@ -479,8 +524,13 @@ export function GroupResource({
         onClose={() => setAddingSubscriptionsGroupId(null)}
         groupName={addingSubscriptionsGroup?.name || t('group')}
         items={addableSubscriptionItems}
-        loading={groupAddSubscriptionsMutation.isPending}
+        loading={groupAddSubscriptionsMutation.isPending || groupAddNodesMutation.isPending}
         resetKey={addingSubscriptionsGroupId || ''}
+        onAddPassedNodes={async (nodeIDs) => {
+          if (!addingSubscriptionsGroupId) return
+          await groupAddNodesMutation.mutateAsync({ id: addingSubscriptionsGroupId, nodeIDs })
+          setGroupExpanded(addingSubscriptionsGroupId, true)
+        }}
         onSubmit={async ({ ids: subscriptionIDs, nameFilterRegex }) => {
           if (!addingSubscriptionsGroupId) return
 

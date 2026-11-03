@@ -534,6 +534,8 @@ export function useRenameGroupMutation() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEY_GROUP })
       queryClient.invalidateQueries({ queryKey: QUERY_KEY_GENERAL })
+      queryClient.invalidateQueries({ queryKey: QUERY_KEY_ROUTING })
+      queryClient.invalidateQueries({ queryKey: ['group-services'] })
     },
   })
 }

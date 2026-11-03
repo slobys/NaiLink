@@ -234,7 +234,7 @@ export function TrafficOverview({ compact = false }: { compact?: boolean }) {
   const sessionTraffic = splitFormattedBytes(latestSample.uploadTotal + latestSample.downloadTotal)
   const available = !!runtimeOverview
   return (
-    <div className="space-y-4">
+    <div className={cn('traffic-overview', compact ? 'traffic-overview-compact' : 'space-y-4')}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">{t('panel.monitor')}</h2>
         {compact ? (
@@ -340,7 +340,7 @@ export function TrafficOverview({ compact = false }: { compact?: boolean }) {
               ))}
             </div>
           </div>
-          <CardContent className="space-y-3 p-3">
+          <CardContent className="traffic-trend-body space-y-3 p-3">
             <div className="flex items-center gap-4 text-xs text-muted-foreground">
               {(['upload', 'download'] as const).map((key, index) => (
                 <span key={key} className="flex items-center gap-1.5">
