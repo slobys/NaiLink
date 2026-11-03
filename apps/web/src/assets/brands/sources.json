@@ -1,0 +1,32 @@
+{
+  "retrieved": "2026-11-03",
+  "purpose": "Provider identification in connectivity checks. Trademarks remain with their owners. Logos are not generated or redrawn.",
+  "assets": [
+    {
+      "file": "google.svg",
+      "source": "https://fonts.gstatic.com/s/i/productlogos/googleg/v6/24px.svg",
+      "sha256": "ed9087d76cdc6d1c53698f6068f79872e77e87c8d012c0cfdad13b05b6ccb37c"
+    },
+    {
+      "file": "openai.svg",
+      "source": "https://openai.com/favicon.svg",
+      "sha256": "ca4d2e8563a2d35ae04c7b63aba15f3b63ed5ccebf5a69bdf0c6d4faa27d134d",
+      "modification": "Added viewBox matching the original 180 by 180 viewport; logo paths unchanged."
+    },
+    {
+      "file": "aliyun.ico",
+      "source": "https://img.alicdn.com/tfs/TB1_ZXuNcfpK1RjSZFOXXa6nFXa-32-32.ico",
+      "sha256": "a79cc4c0c10ae94fb5d6a56daf3f187b869e32f20a5bba1eaddad36ac3e21328"
+    },
+    {
+      "file": "github-black.svg",
+      "source": "https://brand.github.com/GitHub_Logos.zip#GitHub%20Logos/SVG/GitHub_Invertocat_Black.svg",
+      "sha256": "693d7abe6f899646cc2e96856723b45e95f71885a54910b2749f6decdf7e1ee1"
+    },
+    {
+      "file": "github-white.svg",
+      "source": "https://brand.github.com/GitHub_Logos.zip#GitHub%20Logos/SVG/GitHub_Invertocat_White.svg",
+      "sha256": "ccd84c89b1056345608fc3489357f8acc7397e49a3cdc2d418b6c8016911d47b"
+    }
+  ]
+}

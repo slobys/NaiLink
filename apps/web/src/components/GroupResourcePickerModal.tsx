@@ -18,6 +18,7 @@ import {
   ScrollableDialogHeader,
 } from '~/components/ui/scrollable-dialog'
 import { cn } from '~/lib/utils'
+import { nodeProtocolLabel } from '~/utils/node-protocol-label'
 import { summarizePickerLatencies } from '~/utils/picker-latency'
 
 export interface GroupPickerItem {
@@ -142,7 +143,7 @@ const PickerNodeCard = memo(
       >
         <Checkbox
           checked={checked}
-          className="shrink-0"
+          className="picker-node-check shrink-0"
           aria-label={`${t('actions.select')} ${item.title}`}
           onCheckedChange={() => onToggle(item.id)}
         />
@@ -154,17 +155,17 @@ const PickerNodeCard = memo(
           onClick={() => onToggle(item.id)}
         >
           <NodeName name={item.title} />
-          <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] leading-4 text-muted-foreground">
-            {item.badge && (
-              <span className="picker-node-protocol shrink-0 text-[10px] uppercase text-muted-foreground">
-                {item.badge}
-              </span>
-            )}
-            <span className="min-w-0 truncate" title={[item.meta, item.description].filter(Boolean).join(' · ')}>
-              {item.source || item.meta}
-            </span>
-          </span>
         </button>
+        <span className="picker-node-meta">
+          {item.badge && (
+            <span className="picker-node-protocol" title={item.badge}>
+              {nodeProtocolLabel(item.badge)}
+            </span>
+          )}
+          <span className="min-w-0 truncate" title={[item.meta, item.description].filter(Boolean).join(' · ')}>
+            {item.source || item.meta}
+          </span>
+        </span>
         <div className="picker-node-actions">
           <PickerLatencyButton
             id={item.id}

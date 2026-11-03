@@ -136,7 +136,11 @@ async function preview(page) {
     await viewer.getByRole('searchbox').focus()
     await page.mouse.move(0, 0)
     await page.waitForTimeout(180)
-    assert.equal(await secondary.evaluate((e) => getComputedStyle(e).opacity), '0')
+    assert.equal(
+      await secondary.evaluate((e) => getComputedStyle(e).opacity),
+      '1',
+      'Actions stay discoverable without precise hovering',
+    )
     await tile.hover({ position: { x: 4, y: 4 } })
     await page.waitForTimeout(200)
     assert.equal(await secondary.evaluate((e) => getComputedStyle(e).opacity), '1')

@@ -29,7 +29,7 @@ export function LatencyBadge({ result, fallback }: { result?: NodeLatencyProbeRe
       <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-current" />
       {result?.source === 'automatic' && <span>{t('latency.automaticShort')}</span>}
       {result?.source === 'manual' && result.alive && <span>{t('latency.manualShort')}</span>}
-      {formatLatencyLabel(result, t) || fallback || t('panel.notTested')}
+      <span className="min-w-0 truncate">{formatLatencyLabel(result, t) || fallback || t('panel.notTested')}</span>
     </span>
   )
 }

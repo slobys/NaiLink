@@ -1,0 +1,535 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-03T08:04:02.930306Z",
+  "title": "Design System: NaiLink Compact Console",
+  "extensions": {
+    "colorMeta": {
+      "primary": {
+        "role": "primary",
+        "displayName": "Primary",
+        "canonical": "oklch(0.75 0.18 85)",
+        "tonalRamp": [
+          "oklch(0.15 0.045 85)",
+          "oklch(0.25 0.09 85)",
+          "oklch(0.35 0.144 85)",
+          "oklch(0.45 0.18 85)",
+          "oklch(0.6 0.18 85)",
+          "oklch(0.75 0.18 85)",
+          "oklch(0.85 0.117 85)",
+          "oklch(0.95 0.027 85)"
+        ]
+      },
+      "primary-foreground": {
+        "role": "neutral",
+        "displayName": "Primary Foreground",
+        "canonical": "oklch(0.18 0.02 60)",
+        "tonalRamp": [
+          "oklch(0.15 0.005 60)",
+          "oklch(0.25 0.01 60)",
+          "oklch(0.35 0.016 60)",
+          "oklch(0.45 0.02 60)",
+          "oklch(0.6 0.02 60)",
+          "oklch(0.75 0.02 60)",
+          "oklch(0.85 0.013 60)",
+          "oklch(0.95 0.003 60)"
+        ]
+      },
+      "background": {
+        "role": "neutral",
+        "displayName": "Background",
+        "canonical": "oklch(0.99 0.008 85)",
+        "tonalRamp": [
+          "oklch(0.15 0.002 85)",
+          "oklch(0.25 0.004 85)",
+          "oklch(0.35 0.0064 85)",
+          "oklch(0.45 0.008 85)",
+          "oklch(0.6 0.008 85)",
+          "oklch(0.75 0.008 85)",
+          "oklch(0.85 0.0052 85)",
+          "oklch(0.95 0.0012 85)"
+        ]
+      },
+      "foreground": {
+        "role": "neutral",
+        "displayName": "Foreground",
+        "canonical": "oklch(0.18 0.02 60)",
+        "tonalRamp": [
+          "oklch(0.15 0.005 60)",
+          "oklch(0.25 0.01 60)",
+          "oklch(0.35 0.016 60)",
+          "oklch(0.45 0.02 60)",
+          "oklch(0.6 0.02 60)",
+          "oklch(0.75 0.02 60)",
+          "oklch(0.85 0.013 60)",
+          "oklch(0.95 0.003 60)"
+        ]
+      },
+      "card": {
+        "role": "neutral",
+        "displayName": "Card",
+        "canonical": "oklch(0.99 0.008 85)",
+        "tonalRamp": [
+          "oklch(0.15 0.002 85)",
+          "oklch(0.25 0.004 85)",
+          "oklch(0.35 0.0064 85)",
+          "oklch(0.45 0.008 85)",
+          "oklch(0.6 0.008 85)",
+          "oklch(0.75 0.008 85)",
+          "oklch(0.85 0.0052 85)",
+          "oklch(0.95 0.0012 85)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted",
+        "canonical": "oklch(0.95 0.012 85)",
+        "tonalRamp": [
+          "oklch(0.15 0.003 85)",
+          "oklch(0.25 0.006 85)",
+          "oklch(0.35 0.0096 85)",
+          "oklch(0.45 0.012 85)",
+          "oklch(0.6 0.012 85)",
+          "oklch(0.75 0.012 85)",
+          "oklch(0.85 0.0078 85)",
+          "oklch(0.95 0.0018 85)"
+        ]
+      },
+      "muted-foreground": {
+        "role": "neutral",
+        "displayName": "Muted Foreground",
+        "canonical": "oklch(0.5 0.02 60)",
+        "tonalRamp": [
+          "oklch(0.15 0.005 60)",
+          "oklch(0.25 0.01 60)",
+          "oklch(0.35 0.016 60)",
+          "oklch(0.45 0.02 60)",
+          "oklch(0.6 0.02 60)",
+          "oklch(0.75 0.02 60)",
+          "oklch(0.85 0.013 60)",
+          "oklch(0.95 0.003 60)"
+        ]
+      },
+      "secondary": {
+        "role": "neutral",
+        "displayName": "Secondary",
+        "canonical": "oklch(0.96 0.015 85)",
+        "tonalRamp": [
+          "oklch(0.15 0.00375 85)",
+          "oklch(0.25 0.0075 85)",
+          "oklch(0.35 0.012 85)",
+          "oklch(0.45 0.015 85)",
+          "oklch(0.6 0.015 85)",
+          "oklch(0.75 0.015 85)",
+          "oklch(0.85 0.00975 85)",
+          "oklch(0.95 0.00225 85)"
+        ]
+      },
+      "accent": {
+        "role": "neutral",
+        "displayName": "Accent",
+        "canonical": "oklch(0.94 0.02 85)",
+        "tonalRamp": [
+          "oklch(0.15 0.005 85)",
+          "oklch(0.25 0.01 85)",
+          "oklch(0.35 0.016 85)",
+          "oklch(0.45 0.02 85)",
+          "oklch(0.6 0.02 85)",
+          "oklch(0.75 0.02 85)",
+          "oklch(0.85 0.013 85)",
+          "oklch(0.95 0.003 85)"
+        ]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "Border",
+        "canonical": "oklch(0.92 0.015 85)",
+        "tonalRamp": [
+          "oklch(0.15 0.00375 85)",
+          "oklch(0.25 0.0075 85)",
+          "oklch(0.35 0.012 85)",
+          "oklch(0.45 0.015 85)",
+          "oklch(0.6 0.015 85)",
+          "oklch(0.75 0.015 85)",
+          "oklch(0.85 0.00975 85)",
+          "oklch(0.95 0.00225 85)"
+        ]
+      },
+      "input": {
+        "role": "neutral",
+        "displayName": "Input",
+        "canonical": "oklch(0.92 0.015 85)",
+        "tonalRamp": [
+          "oklch(0.15 0.00375 85)",
+          "oklch(0.25 0.0075 85)",
+          "oklch(0.35 0.012 85)",
+          "oklch(0.45 0.015 85)",
+          "oklch(0.6 0.015 85)",
+          "oklch(0.75 0.015 85)",
+          "oklch(0.85 0.00975 85)",
+          "oklch(0.95 0.00225 85)"
+        ]
+      },
+      "ring": {
+        "role": "primary",
+        "displayName": "Ring",
+        "canonical": "oklch(0.75 0.18 85)",
+        "tonalRamp": [
+          "oklch(0.15 0.045 85)",
+          "oklch(0.25 0.09 85)",
+          "oklch(0.35 0.144 85)",
+          "oklch(0.45 0.18 85)",
+          "oklch(0.6 0.18 85)",
+          "oklch(0.75 0.18 85)",
+          "oklch(0.85 0.117 85)",
+          "oklch(0.95 0.027 85)"
+        ]
+      },
+      "destructive": {
+        "role": "neutral",
+        "displayName": "Destructive",
+        "canonical": "oklch(0.577 0.245 27.325)",
+        "tonalRamp": [
+          "oklch(0.15 0.06125 27.325)",
+          "oklch(0.25 0.1225 27.325)",
+          "oklch(0.35 0.196 27.325)",
+          "oklch(0.45 0.245 27.325)",
+          "oklch(0.6 0.245 27.325)",
+          "oklch(0.75 0.245 27.325)",
+          "oklch(0.85 0.1593 27.325)",
+          "oklch(0.95 0.03675 27.325)"
+        ]
+      },
+      "dark-primary": {
+        "role": "primary",
+        "displayName": "Dark Primary",
+        "canonical": "oklch(0.82 0.165 85)",
+        "tonalRamp": [
+          "oklch(0.15 0.04125 85)",
+          "oklch(0.25 0.0825 85)",
+          "oklch(0.35 0.132 85)",
+          "oklch(0.45 0.165 85)",
+          "oklch(0.6 0.165 85)",
+          "oklch(0.75 0.165 85)",
+          "oklch(0.85 0.1073 85)",
+          "oklch(0.95 0.02475 85)"
+        ]
+      },
+      "dark-primary-foreground": {
+        "role": "neutral",
+        "displayName": "Dark Primary Foreground",
+        "canonical": "oklch(0.16 0.015 60)",
+        "tonalRamp": [
+          "oklch(0.15 0.00375 60)",
+          "oklch(0.25 0.0075 60)",
+          "oklch(0.35 0.012 60)",
+          "oklch(0.45 0.015 60)",
+          "oklch(0.6 0.015 60)",
+          "oklch(0.75 0.015 60)",
+          "oklch(0.85 0.00975 60)",
+          "oklch(0.95 0.00225 60)"
+        ]
+      },
+      "dark-background": {
+        "role": "neutral",
+        "displayName": "Dark Background",
+        "canonical": "oklch(0.16 0.015 60)",
+        "tonalRamp": [
+          "oklch(0.15 0.00375 60)",
+          "oklch(0.25 0.0075 60)",
+          "oklch(0.35 0.012 60)",
+          "oklch(0.45 0.015 60)",
+          "oklch(0.6 0.015 60)",
+          "oklch(0.75 0.015 60)",
+          "oklch(0.85 0.00975 60)",
+          "oklch(0.95 0.00225 60)"
+        ]
+      },
+      "dark-foreground": {
+        "role": "neutral",
+        "displayName": "Dark Foreground",
+        "canonical": "oklch(0.95 0.015 85)",
+        "tonalRamp": [
+          "oklch(0.15 0.00375 85)",
+          "oklch(0.25 0.0075 85)",
+          "oklch(0.35 0.012 85)",
+          "oklch(0.45 0.015 85)",
+          "oklch(0.6 0.015 85)",
+          "oklch(0.75 0.015 85)",
+          "oklch(0.85 0.00975 85)",
+          "oklch(0.95 0.00225 85)"
+        ]
+      },
+      "dark-card": {
+        "role": "neutral",
+        "displayName": "Dark Card",
+        "canonical": "oklch(0.19 0.015 60)",
+        "tonalRamp": [
+          "oklch(0.15 0.00375 60)",
+          "oklch(0.25 0.0075 60)",
+          "oklch(0.35 0.012 60)",
+          "oklch(0.45 0.015 60)",
+          "oklch(0.6 0.015 60)",
+          "oklch(0.75 0.015 60)",
+          "oklch(0.85 0.00975 60)",
+          "oklch(0.95 0.00225 60)"
+        ]
+      },
+      "dark-muted": {
+        "role": "neutral",
+        "displayName": "Dark Muted",
+        "canonical": "oklch(0.24 0.015 60)",
+        "tonalRamp": [
+          "oklch(0.15 0.00375 60)",
+          "oklch(0.25 0.0075 60)",
+          "oklch(0.35 0.012 60)",
+          "oklch(0.45 0.015 60)",
+          "oklch(0.6 0.015 60)",
+          "oklch(0.75 0.015 60)",
+          "oklch(0.85 0.00975 60)",
+          "oklch(0.95 0.00225 60)"
+        ]
+      },
+      "dark-muted-foreground": {
+        "role": "neutral",
+        "displayName": "Dark Muted Foreground",
+        "canonical": "oklch(0.65 0.02 70)",
+        "tonalRamp": [
+          "oklch(0.15 0.005 70)",
+          "oklch(0.25 0.01 70)",
+          "oklch(0.35 0.016 70)",
+          "oklch(0.45 0.02 70)",
+          "oklch(0.6 0.02 70)",
+          "oklch(0.75 0.02 70)",
+          "oklch(0.85 0.013 70)",
+          "oklch(0.95 0.003 70)"
+        ]
+      },
+      "dark-border": {
+        "role": "neutral",
+        "displayName": "Dark Border",
+        "canonical": "oklch(0.28 0.015 60)",
+        "tonalRamp": [
+          "oklch(0.15 0.00375 60)",
+          "oklch(0.25 0.0075 60)",
+          "oklch(0.35 0.012 60)",
+          "oklch(0.45 0.015 60)",
+          "oklch(0.6 0.015 60)",
+          "oklch(0.75 0.015 60)",
+          "oklch(0.85 0.00975 60)",
+          "oklch(0.95 0.00225 60)"
+        ]
+      },
+      "dark-input": {
+        "role": "neutral",
+        "displayName": "Dark Input",
+        "canonical": "oklch(0.3 0.015 60)",
+        "tonalRamp": [
+          "oklch(0.15 0.00375 60)",
+          "oklch(0.25 0.0075 60)",
+          "oklch(0.35 0.012 60)",
+          "oklch(0.45 0.015 60)",
+          "oklch(0.6 0.015 60)",
+          "oklch(0.75 0.015 60)",
+          "oklch(0.85 0.00975 60)",
+          "oklch(0.95 0.00225 60)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "title": {
+        "displayName": "窗口标题",
+        "purpose": "节点窗口标题，18px / 26px，半粗体。"
+      },
+      "body": {
+        "displayName": "界面正文",
+        "purpose": "常规界面文本，14px / 20px。"
+      },
+      "node-name": {
+        "displayName": "节点名称",
+        "purpose": "紧凑瓷片名称；选中提升字重，保留全文入口。"
+      },
+      "label": {
+        "displayName": "次级标签",
+        "purpose": "检测目标名称与常规次级文案。"
+      },
+      "node-meta": {
+        "displayName": "紧凑元数据",
+        "purpose": "节点协议、来源与测试徽标，不扩展到正文。"
+      },
+      "connection-result": {
+        "displayName": "检测结果",
+        "purpose": "当前耗时或状态；数字使用 tabular-nums。"
+      },
+      "mono": {
+        "displayName": "技术等宽文本",
+        "purpose": "Source Code Pro 用于原有技术内容。"
+      }
+    },
+    "shadows": [
+      {
+        "name": "console-flat",
+        "value": "none",
+        "purpose": "紧凑节点、连接卡片、普通区块及公共按钮；弹窗与既有运行概况容器保留各自库样式。"
+      }
+    ],
+    "motion": [
+      {
+        "name": "tile-state",
+        "value": "140ms ease-out",
+        "purpose": "console.css 的颜色和边界过渡；减少动态效果时紧凑瓷片取消过渡。"
+      },
+      {
+        "name": "name-read-delay",
+        "value": "600ms",
+        "purpose": "仅在 hover:hover 且 prefers-reduced-motion:no-preference 时允许溢出名称开始平移。"
+      },
+      {
+        "name": "name-read-duration",
+        "value": "min(12s, max(3s, overflowDistance / 35))",
+        "purpose": "NodeName.tsx 以像素距离计算秒数；往返 ease-in-out infinite alternate，展开后停止。"
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "single-column-embedded",
+        "value": "329px"
+      },
+      {
+        "name": "full-screen-node-dialog",
+        "value": "559px"
+      },
+      {
+        "name": "touch-target-width",
+        "value": "640px"
+      },
+      {
+        "name": "four-connections",
+        "value": "900px"
+      },
+      {
+        "name": "toolbar-wrap",
+        "value": "1200px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "主按钮",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "控制台主要提交动作；触控布局增大目标。",
+      "html": "<button class=\"ds-primary\">添加所选节点</button>",
+      "css": ".ds-primary{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:36px;padding:8px 16px;border-radius:8px;font-family:'Fira Sans', system-ui, -apple-system, sans-serif;font-size:14px;font-weight:500;line-height:20px;cursor:pointer;box-shadow:none;transition:background-color 150ms,color 150ms;border:0;background:var(--primary,oklch(0.75 0.18 85));color:var(--primary-foreground,oklch(0.18 0.02 60));}.ds-primary:hover{background:color-mix(in oklab,var(--primary,oklch(0.75 0.18 85)) 90%,transparent)}.ds-primary:focus-visible{outline:2px solid var(--ring,oklch(0.75 0.18 85));outline-offset:2px;}.ds-primary:disabled{opacity:.5;pointer-events:none}@media(max-width:640px),(pointer:coarse){.ds-primary{min-height:44px}}"
+    },
+    {
+      "name": "边框按钮",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "保持清楚边界的次要公共操作。",
+      "html": "<button class=\"ds-outline\">测试当前结果</button>",
+      "css": ".ds-outline{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:36px;padding:8px 16px;border-radius:8px;font-family:'Fira Sans', system-ui, -apple-system, sans-serif;font-size:14px;font-weight:500;line-height:20px;cursor:pointer;box-shadow:none;transition:background-color 150ms,color 150ms;border:1px solid var(--border,oklch(0.92 0.015 85));background:var(--background,oklch(0.99 0.008 85));color:var(--foreground,oklch(0.18 0.02 60));}.ds-outline:hover{background:var(--accent,oklch(0.94 0.02 85))}.ds-outline:focus-visible{outline:2px solid var(--ring,oklch(0.75 0.18 85));outline-offset:2px;}.ds-outline:disabled{opacity:.5;pointer-events:none}@media(max-width:640px),(pointer:coarse){.ds-outline{min-height:44px}}"
+    },
+    {
+      "name": "幽灵按钮",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "低强调动作；样例为窗口取消入口。",
+      "html": "<button class=\"ds-ghost\">取消</button>",
+      "css": ".ds-ghost{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:36px;padding:8px 16px;border-radius:8px;font-family:'Fira Sans', system-ui, -apple-system, sans-serif;font-size:14px;font-weight:500;line-height:20px;cursor:pointer;box-shadow:none;transition:background-color 150ms,color 150ms;border:0;background:transparent;color:var(--foreground,oklch(0.18 0.02 60));}.ds-ghost:hover{background:var(--accent,oklch(0.94 0.02 85))}.ds-ghost:focus-visible{outline:2px solid var(--ring,oklch(0.75 0.18 85));outline-offset:2px;}.ds-ghost:disabled{opacity:.5;pointer-events:none}@media(max-width:640px),(pointer:coarse){.ds-ghost{min-height:44px}}"
+    },
+    {
+      "name": "搜索字段",
+      "kind": "input",
+      "refersTo": "input-search",
+      "description": "沿用主题输入边界与焦点；触控使用 16px 字号。",
+      "html": "<label class=\"ds-search\"><svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><circle cx=\"11\" cy=\"11\" r=\"8\"/><path d=\"m21 21-4.3-4.3\"/></svg><input aria-label=\"搜索节点\" placeholder=\"搜索节点\" /></label>",
+      "css": ".ds-search{display:flex;align-items:center;gap:8px;min-width:0;max-width:420px;padding:0 12px;border:1px solid var(--input,oklch(0.92 0.015 85));border-radius:8px;color:var(--muted-foreground,oklch(0.5 0.02 60));background:transparent}.ds-search input{font-family:'Fira Sans', system-ui, -apple-system, sans-serif;width:100%;min-width:0;height:36px;border:0;background:transparent;color:var(--foreground,oklch(0.18 0.02 60));font-size:14px;outline:none}.ds-search input::placeholder{color:var(--muted-foreground,oklch(0.5 0.02 60))}.ds-search:focus-within{outline:2px solid var(--ring,oklch(0.75 0.18 85));outline-offset:2px;}@media(max-width:640px),(pointer:coarse){.ds-search input{height:44px;font-size:16px}}"
+    },
+    {
+      "name": "已选计数",
+      "kind": "chip",
+      "refersTo": "count-chip",
+      "description": "静态计数，不把状态徽标做成额外操作。",
+      "html": "<span class=\"ds-count\">已选 2 项</span>",
+      "css": ".ds-count{display:inline-flex;padding:2px 8px;border-radius:999px;background:var(--muted,oklch(0.95 0.012 85));color:var(--muted-foreground,oklch(0.5 0.02 60));font-family:'Fira Sans', system-ui, -apple-system, sans-serif;font-size:12px;line-height:16px;font-variant-numeric:tabular-nums}"
+    },
+    {
+      "name": "普通控制台区块",
+      "kind": "card",
+      "refersTo": "console-panel",
+      "description": "一般 panel-section；运行概况容器保留既有级联例外。",
+      "html": "<section class=\"ds-panel\"><h2>节点和订阅</h2><p>管理已导入的资源。</p></section>",
+      "css": ".ds-panel{padding:16px;border:1px solid var(--border,oklch(0.92 0.015 85));border-radius:12px;background:var(--card,oklch(0.99 0.008 85));color:var(--foreground,oklch(0.18 0.02 60));font-family:'Fira Sans', system-ui, -apple-system, sans-serif;box-shadow:none}.ds-panel h2{margin:0;font-size:14px;line-height:20px;font-weight:600}.ds-panel p{margin:8px 0 0;color:var(--muted-foreground,oklch(0.5 0.02 60));font-size:12px;line-height:16px}"
+    },
+    {
+      "name": "已选节点瓷片",
+      "kind": "custom",
+      "refersTo": "node-tile-selected",
+      "description": "两行紧凑网格；整卡填色、边界和实体勾选同时表达选中。",
+      "html": "<article class=\"ds-tile\"><button class=\"ds-tile-name\" aria-pressed=\"true\">示例节点</button><button class=\"ds-tile-check\" role=\"checkbox\" aria-checked=\"true\" aria-label=\"选择 示例节点\"><svg viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3\" aria-hidden=\"true\"><path d=\"m5 12 4 4L19 6\"/></svg></button><span class=\"ds-tile-meta\">SOCKS5 · 手动节点</span><button class=\"ds-tile-test\">测试</button></article>",
+      "css": ".ds-tile{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:24px 26px;align-items:center;gap:3px 6px;min-height:70px;max-width:260px;padding:8px 10px;border:1px solid var(--primary,oklch(0.75 0.18 85));border-radius:10px;background:color-mix(in oklab,var(--primary,oklch(0.75 0.18 85)) 22%,var(--card,oklch(0.99 0.008 85)));font-family:'Fira Sans', system-ui, -apple-system, sans-serif;transition:background-color 140ms ease-out,border-color 140ms ease-out}.ds-tile:hover{border-color:var(--primary,oklch(0.75 0.18 85))}.ds-tile-name,.ds-tile-test{padding:0;border:0;background:transparent;cursor:pointer;font-family:inherit}.ds-tile-name{grid-column:1;grid-row:1;min-width:0;text-align:left;color:var(--foreground,oklch(0.18 0.02 60));font-size:13px;font-weight:600}.ds-tile-check{grid-column:2;grid-row:1;display:grid;place-content:center;width:18px;height:18px;padding:0;border:1px solid var(--primary,oklch(0.75 0.18 85));border-radius:5px;background:var(--primary,oklch(0.75 0.18 85));color:var(--primary-foreground,oklch(0.18 0.02 60));cursor:pointer}.ds-tile-meta{grid-column:1;grid-row:2;font-size:11px;line-height:16px;color:color-mix(in oklab,var(--foreground,oklch(0.18 0.02 60)) 76%,var(--card,oklch(0.99 0.008 85)))}.ds-tile-test{grid-column:2;grid-row:2;min-height:26px;min-width:36px;font-size:12px;color:var(--foreground,oklch(0.18 0.02 60))}.ds-tile-test:hover{background:var(--accent,oklch(0.94 0.02 85));border-radius:8px}.ds-tile button:focus-visible{outline:2px solid var(--ring,oklch(0.75 0.18 85));outline-offset:2px;}@media(max-width:640px),(pointer:coarse){.ds-tile{grid-template-rows:44px 44px;padding:4px 8px;gap:0 4px}.ds-tile-name,.ds-tile-test{min-height:44px}.ds-tile-test{min-width:44px}.ds-tile-check{width:22px;height:22px}}@media(prefers-reduced-motion:reduce){.ds-tile{transition:none}}"
+    },
+    {
+      "name": "连接检测卡片",
+      "kind": "custom",
+      "refersTo": "connection-card",
+      "description": "官方 Google SVG 内联示例；状态为未检测，不制造检测结果。原资源来源见 src/assets/brands/sources.json。",
+      "html": "<article class=\"ds-connection\"><svg aria-hidden=\"true\" xmlns=\"http://www.w3.org/2000/svg\" height=\"24\" viewBox=\"0 0 24 24\" width=\"24\"><path d=\"M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z\" fill=\"#4285F4\"/><path d=\"M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z\" fill=\"#34A853\"/><path d=\"M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z\" fill=\"#FBBC05\"/><path d=\"M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z\" fill=\"#EA4335\"/><path d=\"M1 1h22v22H1z\" fill=\"none\"/></svg><div class=\"ds-connection-copy\"><h3>Google</h3><span class=\"ds-history\" aria-hidden=\"true\"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span class=\"ds-result\">未检测</span></div></article>",
+      "css": ".ds-connection{display:flex;align-items:center;gap:10px;max-width:330px;padding:8px 12px;border:1px solid var(--border,oklch(0.92 0.015 85));border-radius:10px;background:var(--card,oklch(0.99 0.008 85));font-family:'Fira Sans', system-ui, -apple-system, sans-serif}.ds-connection>svg{flex:0 0 24px;width:24px;height:24px}.ds-connection-copy{display:grid;flex:1;min-width:0;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:16px 12px;align-items:center;gap:3px 10px}.ds-connection h3{margin:0;grid-column:1;font-size:12px;line-height:16px;font-weight:400;color:color-mix(in oklab,var(--foreground,oklch(0.18 0.02 60)) 76%,var(--card,oklch(0.99 0.008 85)))}.ds-history{display:flex;grid-column:1;grid-row:2;height:12px;gap:2px;align-items:end}.ds-history i{flex:1;height:3px;border-radius:1px;background:color-mix(in oklab,var(--muted-foreground,oklch(0.5 0.02 60)) 15%,transparent)}.ds-result{grid-column:2;grid-row:1/3;font-size:12px;line-height:20px;color:var(--muted-foreground,oklch(0.5 0.02 60));white-space:nowrap;font-variant-numeric:tabular-nums}@media(max-width:559px){.ds-connection{padding:6px 8px;gap:7px}.ds-connection>svg{flex-basis:20px;width:20px;height:20px}.ds-connection-copy{gap:2px 6px}.ds-connection h3{grid-column:1/-1}.ds-result{grid-row:2;line-height:14px}}"
+    },
+    {
+      "name": "社区导航链接",
+      "kind": "nav",
+      "refersTo": "community-link",
+      "description": "保持原地址与新标签行为，窄屏只隐藏可见文字。",
+      "html": "<nav class=\"ds-community\" aria-label=\"社区频道\"><a href=\"https://www.youtube.com/@naiyou\" target=\"_blank\" rel=\"noopener noreferrer\" aria-label=\"YouTube 频道（在新标签页打开）\"><svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" fill=\"none\" aria-hidden=\"true\"><rect x=\"2\" y=\"5\" width=\"20\" height=\"14\" rx=\"4\" stroke=\"currentColor\" stroke-width=\"2\"/><path d=\"m10 9 5 3-5 3V9Z\" fill=\"currentColor\"/></svg><span>YouTube</span></a></nav>",
+      "css": ".ds-community{display:flex;flex-wrap:wrap;gap:8px;font-family:'Fira Sans', system-ui, -apple-system, sans-serif}.ds-community a{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:36px;padding:0 10px;border:1px solid var(--border,oklch(0.92 0.015 85));border-radius:8px;background:var(--card,oklch(0.99 0.008 85));color:var(--foreground,oklch(0.18 0.02 60));font-size:13px;font-weight:600;text-decoration:none;box-shadow:none}.ds-community svg{color:oklch(0.637 0.237 25.331)}.ds-community a:hover{border-color:color-mix(in oklab,var(--primary,oklch(0.75 0.18 85)) 45%,var(--border,oklch(0.92 0.015 85)));background:var(--accent,oklch(0.94 0.02 85))}.ds-community a:focus-visible{outline:2px solid var(--ring,oklch(0.75 0.18 85));outline-offset:3px}@media(max-width:640px),(pointer:coarse){.ds-community a{min-height:44px}}@media(max-width:559px){.ds-community span{display:none}}"
+    },
+    {
+      "name": "订阅节点瓷片",
+      "kind": "custom",
+      "refersTo": "node-tile",
+      "description": "同一表面与密度；名称详情、测试、加入和更多保持可见。",
+      "html": "<article class=\"ds-sub-node\"><div class=\"ds-sub-heading\"><button class=\"ds-sub-name\">示例订阅节点</button><span>VLESS</span></div><div class=\"ds-sub-actions\"><button class=\"ds-sub-test\">测试</button><button aria-label=\"加入群组\"><svg viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M12 5v14M5 12h14\"/></svg></button><button aria-label=\"更多操作\"><svg viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"currentColor\" aria-hidden=\"true\"><circle cx=\"5\" cy=\"12\" r=\"1.5\"/><circle cx=\"12\" cy=\"12\" r=\"1.5\"/><circle cx=\"19\" cy=\"12\" r=\"1.5\"/></svg></button></div></article>",
+      "css": ".ds-sub-node{display:flex;flex-direction:column;gap:4px;max-width:260px;padding:8px 10px;border:1px solid color-mix(in oklab,var(--border,oklch(0.92 0.015 85)) 65%,transparent);border-radius:10px;background:color-mix(in oklab,var(--muted,oklch(0.95 0.012 85)) 35%,var(--card,oklch(0.99 0.008 85)));font-family:'Fira Sans', system-ui, -apple-system, sans-serif;transition:background-color 140ms ease-out,border-color 140ms ease-out}.ds-sub-node:hover{border-color:color-mix(in oklab,var(--primary,oklch(0.75 0.18 85)) 40%,var(--border,oklch(0.92 0.015 85)));background:color-mix(in oklab,var(--primary,oklch(0.75 0.18 85)) 7%,var(--card,oklch(0.99 0.008 85)))}.ds-sub-heading{display:flex;align-items:center;gap:6px;min-width:0}.ds-sub-heading span{font-size:11px;color:var(--muted-foreground,oklch(0.5 0.02 60))}.ds-sub-node button{display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:8px;background:transparent;cursor:pointer;font-family:inherit;color:color-mix(in oklab,var(--foreground,oklch(0.18 0.02 60)) 76%,var(--card,oklch(0.99 0.008 85)))}.ds-sub-node .ds-sub-name{flex:1;justify-content:start;min-width:0;min-height:24px;padding:0;font-size:13px;line-height:20px;font-weight:500;color:var(--foreground,oklch(0.18 0.02 60))}.ds-sub-name:hover{color:var(--primary,oklch(0.75 0.18 85))}.ds-sub-actions{display:flex;align-items:center;gap:0}.ds-sub-actions button{min-width:26px;min-height:26px;padding:2px 4px;font-size:12px}.ds-sub-actions .ds-sub-test{flex:1;justify-content:start}.ds-sub-actions button:hover{background:var(--accent,oklch(0.94 0.02 85))}.ds-sub-node button:focus-visible{outline:2px solid var(--ring,oklch(0.75 0.18 85));outline-offset:2px;}@media(max-width:640px),(pointer:coarse){.ds-sub-node .ds-sub-name{min-height:44px}.ds-sub-actions button{min-width:44px;min-height:44px}}@media(prefers-reduced-motion:reduce){.ds-sub-node{transition:none}}"
+    }
+  ],
+  "narrative": {
+    "northStar": "紧凑控制台",
+    "overview": "系统沿用 NaiLink 的主题、字体和 LuCI 导航，以用户明确指定的 Zashboard / OpenClash 密度与选中反馈作为细节参考。名称、来源、协议和测试结果优先于留白；选中通过整卡填色、边界和实体勾选共同表达。\n\n本文件描述已实现的控制台、添加节点窗口与订阅节点浏览器。它不替换宿主 LuCI 的导航，也不把控制台的紧凑尺寸强加给配置编辑器等其他页面。依据为 `src/console.css`、`src/index.css`、`src/constants/themes.ts`、对应 React 组件和 `.impeccable/review/` 的实现截图；没有已批准的独立视觉稿。",
+    "keyCharacteristics": [
+      "主题变量决定表面和强调色，状态同时提供文字或勾选。",
+      "两行节点瓷片与固定工具栏支持快速扫读。",
+      "桌面密度与触控目标分别设置，操作入口始终可发现。",
+      "官方品牌文件随前端打包，连接检测不依赖远程图片。"
+    ],
+    "rules": [
+      {
+        "name": "The Theme Binding Rule",
+        "body": "控制台表面、选中、悬停与焦点始终引用当前主题变量；品牌原色与检测状态保留各自含义。",
+        "section": "colors"
+      },
+      {
+        "name": "The Name Access Rule",
+        "body": "截断只控制布局，不取消完整名称：保留 `title`、名称按钮、展开或详情入口，以及完整可访问名称。",
+        "section": "typography"
+      }
+    ],
+    "dos": [
+      "**Do** 从当前主题变量派生紧凑表面、悬停、选中与焦点颜色。",
+      "**Do** 同时保留整卡选中填色、边界、实体勾选及可访问状态。",
+      "**Do** 在触控布局中保留 44px 主要操作目标和完整名称入口。",
+      "**Do** 在最窄嵌入视口使用单列，并检查弹窗工具栏和提交区仍可到达。",
+      "**Do** 使用已记录来源的本地官方 Logo，并保持原比例与颜色。",
+      "**Do** 将虚拟行的可见高度、尾间隔和滚动步距作为同一组计算验证。"
+    ],
+    "donts": [
+      "**Don't** 用 70px 网格瓷片规则覆盖手动节点列表的 102px / 122px 虚拟步距。",
+      "**Don't** 通过隐藏测试、加入、更多、筛选或长名称入口来制造紧凑效果。",
+      "**Don't** 让悬停动画成为触控或键盘读取完整名称的唯一方式。",
+      "**Don't** 把默认 Amber 色值硬编码为其他主题的运行时颜色。",
+      "**Don't** 把品牌图片改成自动生成图、字符图标或运行时远程请求。",
+      "**Don't** 将旧全局发光、渐变、悬浮阴影工具类扩散到紧凑节点与连接卡片。"
+    ]
+  }
+}

@@ -19,7 +19,7 @@ import (
 // Fixed public, unauthenticated targets only. The API cannot supply a URL,
 // headers, credentials or redirects to a router/private-network service.
 var routerConnectivityTargets = []struct{ id, url string }{
-	{"baidu", "https://www.baidu.com/"},
+	{"aliyun", "https://www.aliyun.com/robots.txt"},
 	{"google", "https://www.google.com/generate_204"},
 	{"openai", "https://chatgpt.com/robots.txt"},
 	{"github", "https://github.com/robots.txt"},

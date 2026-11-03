@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '~/components/u
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '~/components/ui/dropdown-menu'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '~/components/ui/sheet'
 import { buildNodeLibrary, defaultNodeFilters, filterNodeLibrary } from '~/utils/node-library'
+import { nodeProtocolLabel } from '~/utils/node-protocol-label'
 
 type SubscriptionNode = LibraryNode['node']
 
@@ -44,17 +45,21 @@ const SubscriptionNodeTile = memo(
     const name = node.tag || node.name || node.id
     return (
       <article role="listitem" data-name-card data-subscription-node={node.id} className="subscription-node-tile">
-        <button
-          type="button"
-          className="subscription-node-name min-w-0 text-left text-sm font-medium hover:text-primary"
-          title={name}
-          aria-label={`${t('panel.nodeDetails')} ${name}`}
-          onClick={() => onDetails(node)}
-        >
-          <NodeName name={name} />
-        </button>
+        <div className="subscription-node-heading">
+          <button
+            type="button"
+            className="subscription-node-name min-w-0 text-left text-sm font-medium hover:text-primary"
+            title={name}
+            aria-label={`${t('panel.nodeDetails')} ${name}`}
+            onClick={() => onDetails(node)}
+          >
+            <NodeName name={name} />
+          </button>
+          <span className="subscription-node-protocol" title={node.protocol}>
+            {nodeProtocolLabel(node.protocol)}
+          </span>
+        </div>
         <div className="subscription-node-actions">
-          <span className="subscription-node-protocol">{node.protocol}</span>
           <Button
             size="sm"
             variant="ghost"
@@ -83,7 +88,7 @@ const SubscriptionNodeTile = memo(
             onClick={() => onJoin(node)}
           >
             <Plus />
-            <span>{t('panel.join')}</span>
+            <span className="sr-only">{t('panel.join')}</span>
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -191,7 +196,7 @@ export function SubscriptionNodes({
             </DialogTitle>
             <p className="text-sm text-muted-foreground">{t('panel.subscriptionNodesHint')}</p>
           </DialogHeader>
-          <div className="grid shrink-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <div className="subscription-search-row grid shrink-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
             <label className="flex min-w-0 items-center gap-2 rounded-lg border px-3">
               <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
               <span className="sr-only">{t('panel.searchNodes')}</span>
@@ -215,7 +220,7 @@ export function SubscriptionNodes({
               {t('latency.testFiltered')}
             </Button>
           </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <div className="subscription-filters-row flex shrink-0 flex-wrap items-center gap-2">
             <label className="min-w-0 flex-1">
               <span className="sr-only">{t('panel.sort')}</span>
               <select

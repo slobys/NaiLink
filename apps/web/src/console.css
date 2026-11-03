@@ -1,0 +1,599 @@
+/* NaiLink console skin. Geometry of virtualized/draggable rows is intentionally
+   owned by index.css; these rules change presentation, not row offsets. */
+:root {
+  --console-secondary: color-mix(in oklab, var(--foreground) 76%, var(--card));
+  --console-hover: color-mix(in oklab, var(--primary) 7%, var(--card));
+  --console-selected: color-mix(in oklab, var(--primary) 22%, var(--card));
+}
+.router-panel,
+.node-picker-dialog,
+.subscription-browser {
+  caret-color: var(--primary);
+  scrollbar-color: color-mix(in oklab, var(--foreground) 30%, var(--background)) transparent;
+  scrollbar-width: thin;
+}
+:is(.router-panel, .node-picker-dialog, .subscription-browser) ::selection {
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+.router-panel .panel-section,
+.router-panel #panel-monitor {
+  border-radius: 12px;
+  box-shadow: none;
+  padding: 16px;
+}
+.router-panel :is(.subscription-card, .panel-node-row) {
+  border-radius: 10px;
+  box-shadow: none;
+}
+.router-panel [data-slot='button'],
+.node-picker-dialog [data-slot='button'],
+.subscription-browser [data-slot='button'] {
+  border-radius: 8px;
+  box-shadow: none;
+}
+.router-toolbar {
+  column-gap: 24px;
+  padding-block: 10px;
+}
+.router-toolbar-actions {
+  gap: 8px;
+}
+.router-toolbar-actions > button,
+.community-link {
+  height: 36px;
+  min-height: 36px;
+  border-radius: 8px;
+  box-shadow: none;
+}
+.community-link {
+  padding-inline: 10px;
+  gap: 7px;
+}
+.router-panel .panel-select {
+  color: var(--console-secondary);
+}
+.router-panel .panel-node-row:hover {
+  background: var(--console-hover);
+}
+
+/* Compact connection strip: original logos + short history + current result. */
+.connection-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.connection-card {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+}
+.service-logo {
+  display: flex;
+  flex: 0 0 24px;
+  align-items: center;
+  justify-content: center;
+}
+.service-logo img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+.connection-card > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: 16px 12px;
+  align-items: center;
+  gap: 3px 10px;
+}
+.connection-name {
+  grid-column: 1;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--console-secondary);
+}
+.connection-history {
+  grid-column: 1;
+  grid-row: 2;
+  display: flex;
+  height: 12px;
+  gap: 2px;
+  align-items: end;
+  overflow: hidden;
+}
+.connection-result {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+@media (min-width: 900px) {
+  .connection-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* Two equal lines form one tile. Names and secondary actions never compete. */
+.node-picker-dialog,
+.subscription-browser {
+  width: calc(100% - 40px);
+  max-width: 1440px;
+  max-height: min(860px, calc(100dvh - 40px));
+  border-radius: 16px;
+}
+.node-picker-dialog [data-slot='dialog-title'],
+.subscription-browser [data-slot='dialog-title'] {
+  font-size: 18px;
+  line-height: 26px;
+  font-weight: 600;
+}
+.node-picker-dialog .node-picker-toolbar {
+  padding: 10px 16px;
+  background: var(--card);
+}
+.node-picker-dialog .node-picker-body {
+  padding: 12px 16px;
+}
+.node-picker-dialog .node-picker-footer {
+  padding: 10px 16px;
+}
+.node-picker-dialog .picker-filters-row {
+  display: flex;
+}
+.node-picker-dialog .picker-bulk-actions {
+  display: flex;
+}
+.node-picker-dialog .node-picker-count {
+  display: block;
+  color: var(--console-secondary);
+}
+.node-picker-dialog .picker-search-row > button {
+  display: inline-flex;
+}
+.picker-node-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr));
+  align-items: start;
+  gap: 10px;
+}
+.picker-node-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: 24px 26px;
+  align-items: center;
+  gap: 3px 6px;
+  min-height: 70px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--muted) 35%, var(--card));
+  cursor: pointer;
+  transition:
+    background-color 140ms ease-out,
+    border-color 140ms ease-out;
+}
+.picker-node-row:hover,
+.picker-node-row:not(.picker-node-selected):hover,
+.subscription-node-tile:hover {
+  outline: none;
+  box-shadow: none;
+  background: var(--console-hover);
+  border-color: color-mix(in oklab, var(--primary) 40%, var(--border));
+}
+.picker-node-row.picker-node-selected,
+.picker-node-row.picker-node-selected:hover {
+  box-shadow: none;
+  background: var(--console-selected);
+  border-color: var(--primary);
+}
+.picker-node-select {
+  grid-column: 1;
+  grid-row: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 24px;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--foreground);
+}
+.picker-node-selected .picker-node-select {
+  color: var(--foreground);
+  font-weight: 600;
+}
+.picker-node-check {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  box-shadow: none;
+}
+.picker-node-meta {
+  grid-column: 1;
+  grid-row: 2;
+  display: flex;
+  min-width: 0;
+  gap: 5px;
+  align-items: center;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--console-secondary);
+}
+.picker-node-protocol {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--console-secondary);
+  text-transform: none;
+}
+.picker-node-actions {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  justify-content: end;
+  min-width: 0;
+  gap: 0;
+}
+.picker-node-row .picker-latency-button {
+  height: 26px;
+  min-height: 26px;
+  min-width: 36px;
+  max-width: 106px;
+  padding: 0 2px;
+  font-size: 12px;
+  color: var(--console-secondary);
+}
+.picker-node-row .picker-name-toggle {
+  height: 26px;
+  min-height: 26px;
+  width: 24px;
+  min-width: 24px;
+  opacity: 1;
+  pointer-events: auto;
+  color: var(--console-secondary);
+}
+.picker-node-row [data-latency-tone],
+.subscription-node-test [data-latency-tone] {
+  padding: 2px 5px;
+  font-size: 11px;
+  line-height: 16px;
+  gap: 3px;
+}
+.picker-node-row:focus-within,
+.subscription-node-tile:focus-within {
+  outline: none;
+}
+:is(.node-picker-dialog, .subscription-browser) :is(button, [role='checkbox'], input, select):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.picker-node-row.picker-name-expanded {
+  grid-template-rows: auto 26px;
+}
+.picker-name-expanded .picker-node-select {
+  padding-block: 3px;
+}
+
+.subscription-browser {
+  padding: 16px;
+  gap: 12px;
+}
+.subscription-browser [data-slot='dialog-header'] p {
+  font-size: 12px;
+  color: var(--console-secondary);
+}
+.subscription-search-row input {
+  height: 36px;
+  font-size: 14px;
+}
+.subscription-search-row label:focus-within {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.subscription-filters-row > label {
+  flex: 0 1 190px;
+}
+.subscription-filters-row > span {
+  margin-left: auto;
+}
+.subscription-node-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr));
+  gap: 10px;
+}
+.subscription-node-tile {
+  min-width: 0;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--muted) 35%, var(--card));
+  box-shadow: none;
+}
+.subscription-node-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+.subscription-browser .subscription-node-name {
+  flex: 1;
+  min-height: 24px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+.subscription-node-protocol {
+  flex: 0 0 auto;
+  width: auto;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--console-secondary);
+  text-transform: none;
+}
+.subscription-node-actions {
+  display: flex;
+  gap: 0;
+  align-items: center;
+  justify-content: end;
+}
+.subscription-browser .subscription-node-actions button {
+  min-height: 26px;
+  height: 26px;
+  min-width: 26px;
+  padding: 2px 4px;
+  color: var(--console-secondary);
+}
+.subscription-node-actions .subscription-node-test {
+  justify-content: start;
+  flex: 1;
+  min-width: 0;
+  max-width: none;
+  overflow: hidden;
+}
+.subscription-node-actions .subscription-node-join {
+  min-width: 26px;
+  width: 26px;
+}
+.subscription-node-actions button > svg {
+  width: 14px;
+  height: 14px;
+}
+.subscription-node-secondary {
+  opacity: 1;
+}
+.subscription-node-tile [data-latency-tone] {
+  max-width: 100%;
+}
+
+@media (max-width: 1200px) {
+  .router-toolbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 16px;
+  }
+  .router-toolbar-actions {
+    grid-column: 1 / -1;
+    flex-wrap: wrap;
+  }
+}
+@media (max-width: 640px), (pointer: coarse) {
+  .router-toolbar-actions > button,
+  .community-link {
+    height: 44px;
+    min-height: 44px;
+  }
+  .node-picker-dialog .picker-node-select {
+    min-height: 44px;
+  }
+  .picker-node-row {
+    grid-template-rows: 44px 44px;
+    padding: 4px 8px;
+    gap: 0 4px;
+  }
+  .picker-node-row .picker-node-check {
+    width: 22px;
+    height: 22px;
+  }
+  .picker-node-row .picker-latency-button {
+    height: 44px;
+    min-height: 44px;
+    min-width: 44px;
+    max-width: 102px;
+  }
+  .picker-node-row .picker-name-toggle {
+    height: 44px;
+    min-height: 44px;
+    width: 44px;
+    min-width: 44px;
+  }
+  .picker-node-actions:has(.picker-name-toggle) {
+    grid-column: 1 / -1;
+  }
+  .picker-node-row:has(.picker-name-toggle) .picker-node-meta {
+    max-width: calc(100% - 148px);
+  }
+  .picker-node-row .node-name {
+    display: -webkit-box;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-height: 20px;
+  }
+  .picker-node-row .node-name-text {
+    display: inline;
+    white-space: normal;
+  }
+  .picker-node-row.picker-name-expanded {
+    grid-template-rows: auto 44px;
+  }
+  .picker-node-row.picker-name-expanded .node-name {
+    display: block;
+    -webkit-line-clamp: unset;
+  }
+  .picker-node-row.picker-name-expanded .node-name-text {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .subscription-browser .subscription-node-name {
+    min-height: 44px;
+  }
+  .subscription-browser .subscription-node-actions button,
+  .subscription-node-actions .subscription-node-join {
+    height: 44px;
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .subscription-search-row input {
+    min-height: 44px;
+    font-size: 16px;
+  }
+}
+@media (max-width: 559px) {
+  .node-picker-dialog,
+  .subscription-browser {
+    width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    max-width: 100%;
+    border-radius: 0;
+    border: 0;
+  }
+  .subscription-browser {
+    padding: 12px;
+  }
+  .node-picker-dialog .node-picker-toolbar {
+    padding: 8px 12px;
+  }
+  .node-picker-dialog .node-picker-body {
+    padding: 10px 12px;
+  }
+  .node-picker-dialog .node-picker-footer {
+    padding: 8px 12px;
+    gap: 6px;
+  }
+  .picker-node-grid,
+  .subscription-node-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .picker-node-meta {
+    flex-wrap: wrap;
+    gap: 0 4px;
+    line-height: 14px;
+    font-size: 11px;
+  }
+  .picker-node-row .picker-latency-button {
+    max-width: 100%;
+  }
+  .picker-node-row:has(.picker-name-toggle) .picker-node-meta {
+    max-width: calc(100% - 88px);
+  }
+  .picker-node-actions:has(.picker-name-toggle) .picker-latency-button {
+    max-width: 60px;
+  }
+  .subscription-node-heading {
+    flex-wrap: wrap;
+    gap: 0;
+    position: relative;
+  }
+  .subscription-node-heading .subscription-node-protocol {
+    position: absolute;
+    bottom: -8px;
+    right: 0;
+    font-size: 10px;
+    pointer-events: none;
+  }
+  .subscription-node-actions {
+    margin-top: 4px;
+  }
+  .subscription-node-actions .subscription-node-test {
+    padding-inline: 0;
+  }
+  .subscription-node-actions .subscription-node-join,
+  .subscription-node-actions .subscription-node-secondary {
+    min-width: 44px;
+    width: 44px;
+  }
+  .subscription-node-test [data-latency-source] > span:not([aria-hidden]):not(.truncate) {
+    display: none;
+  }
+  .connection-card {
+    padding: 6px 8px;
+    gap: 7px;
+  }
+  .connection-card > div {
+    grid-template-columns: minmax(24px, 1fr) auto;
+    gap: 2px 6px;
+  }
+  .connection-history {
+    gap: 1px;
+  }
+  .connection-name {
+    grid-column: 1 / -1;
+  }
+  .connection-result {
+    grid-row: 2;
+    font-size: 12px;
+    line-height: 14px;
+  }
+  .router-panel [data-connectivity] label {
+    min-height: 44px;
+  }
+  .router-panel [data-connectivity] [data-slot='switch'] {
+    min-height: 16px;
+    height: 16px;
+  }
+  .service-logo {
+    flex-basis: 20px;
+  }
+  .service-logo img {
+    width: 20px;
+    height: 20px;
+  }
+  .router-toolbar > .community-links {
+    grid-column: 2;
+  }
+  .community-link {
+    padding-inline: 10px;
+  }
+  .community-link > span {
+    display: none;
+  }
+}
+@media (max-width: 329px) {
+  .picker-node-grid,
+  .subscription-node-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  .node-picker-dialog {
+    max-height: 100dvh;
+    height: 100dvh;
+  }
+  .node-picker-dialog .node-picker-toolbar {
+    max-height: 120px;
+    overflow: auto;
+  }
+  .node-picker-dialog .picker-filters-row {
+    display: flex;
+  }
+  .node-picker-dialog .picker-bulk-actions {
+    display: flex;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .picker-node-row,
+  .subscription-node-tile {
+    transition: none;
+  }
+}

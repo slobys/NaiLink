@@ -76,10 +76,10 @@ fs.mkdirSync(output, { recursive: true })
     const first = picker.locator(`[data-picker-node="${ids[0]}"]`)
     const name = first.locator('.picker-node-select')
     for (const [width, columns] of [
-      [1800, 4],
-      [1100, 3],
-      [800, 2],
-      [390, 1],
+      [1800, 7],
+      [1100, 5],
+      [800, 3],
+      [390, 2],
     ]) {
       await page.setViewportSize({ width, height: 1100 })
       await page.waitForTimeout(250)
@@ -116,14 +116,28 @@ fs.mkdirSync(output, { recursive: true })
     await name.click()
     assert.ok(await first.getByRole('checkbox').isChecked())
     assert.equal(await first.getAttribute('data-selected'), 'true')
+    await picker.locator(`[data-picker-node="${ids[1]}"]`).click({ position: { x: 5, y: 5 } })
+    await picker.getByRole('button', { name: '只看已选', exact: true }).click()
+    assert.equal(await list.locator('[data-picker-node]').count(), 2)
+    await picker.getByRole('button', { name: '只看已选', exact: true }).click()
+    for (const width of [1800, 390, 320]) {
+      await page.setViewportSize({ width, height: width === 1800 ? 1100 : 844 })
+      await page.waitForTimeout(150)
+      await picker.screenshot({ path: path.join(output, `picker-selected-${width}.png`) })
+      assert.ok(await picker.evaluate((e) => e.scrollWidth <= e.clientWidth + 1))
+    }
+    await page.setViewportSize({ width: 1800, height: 1100 })
+    await picker.getByRole('button', { name: '清空选择', exact: true }).click()
+    await name.click()
     await first.getByRole('checkbox').uncheck()
     assert.equal(await first.getAttribute('data-selected'), 'false')
+    await page.keyboard.press('Tab')
     await name.focus()
-    assert.equal(await first.evaluate((e) => getComputedStyle(e).outlineStyle), 'solid')
+    assert.equal(await name.evaluate((e) => getComputedStyle(e).outlineStyle), 'solid')
     await picker.screenshot({ path: path.join(output, 'picker-four-columns.png') })
     await page.keyboard.press('Escape')
     process.stdout.write(
-      'PASS: picker 4/3/2/1 columns, actual overflow-only name motion, reduced-motion opt-out, hover/focus/checked states\n',
+      'PASS: picker 7/5/3/2 columns, actual overflow-only name motion, reduced-motion opt-out, hover/focus/checked states\n',
     )
     await navigate('resources')
     const manual = f.locator('#workspace-nodes')

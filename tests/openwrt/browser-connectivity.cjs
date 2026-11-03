@@ -21,7 +21,7 @@ function sample() {
     state: 'ready',
     checking: false,
     checkedAt: at,
-    targets: ['baidu', 'google', 'openai', 'github'].map((id, index) => ({
+    targets: ['aliyun', 'google', 'openai', 'github'].map((id, index) => ({
       id,
       samples: Array.from({ length: 18 }, (_, i) => ({
         at: at - (17 - i) * 30000,
@@ -91,6 +91,18 @@ function sample() {
               colorScheme: width === 320 ? 'dark' : 'light',
             })
       const page = await context.newPage()
+      if (process.env.DAED_RESOURCE_PREVIEW_DIST) {
+        const dist = path.resolve(process.env.DAED_RESOURCE_PREVIEW_DIST)
+        await page.route('**/cgi-bin/daed-router/**', async (route) => {
+          if (route.request().method() !== 'GET') return route.continue()
+          const file = path.resolve(
+            dist,
+            new URL(route.request().url()).pathname.split('/cgi-bin/daed-router/')[1] || 'index.html',
+          )
+          if (!file.startsWith(dist + path.sep) || !fs.existsSync(file)) return route.continue()
+          return route.fulfill({ path: file })
+        })
+      }
       page.on('pageerror', (e) => errors.push(e.message))
       let fail = false,
         force = 0,
@@ -120,6 +132,25 @@ function sample() {
       assert.equal(
         await section.locator('[data-connectivity-target="github"]').getByText('超时', { exact: true }).count(),
         1,
+      )
+      assert.ok(await section.getByText('阿里云', { exact: true }).isVisible())
+      assert.equal(
+        await section
+          .locator('.service-logo img')
+          .evaluateAll((es) =>
+            es.filter((e) => getComputedStyle(e).display !== 'none').every((e) => e.complete && e.naturalWidth > 0),
+          ),
+        true,
+      )
+      assert.ok(
+        (await section.locator('[data-connectivity-target]').first().boundingBox()).height <= 54,
+        'Compact cards must retain readable results without extra vertical space',
+      )
+      assert.ok(
+        await section
+          .locator('.connection-history')
+          .evaluateAll((es) => es.every((e) => e.firstElementChild.getBoundingClientRect().width > 0)),
+        'Every narrow card must retain visible history bars next to long HTTP results',
       )
       const columns = await section
         .locator(':scope > div')

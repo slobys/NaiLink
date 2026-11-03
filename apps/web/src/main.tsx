@@ -7,6 +7,7 @@ import { i18nInit } from '~/i18n'
 import '~/suppress-monaco-errors'
 
 import '~/index.css'
+import '~/console.css'
 
 dayjs.extend(duration)
 

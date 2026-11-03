@@ -12,7 +12,7 @@ export function CommunityLinks() {
           <rect x="2" y="5" width="20" height="14" rx="4" stroke="currentColor" strokeWidth="2" />
           <path d="m10 9 5 3-5 3V9Z" fill="currentColor" />
         </svg>
-        YouTube
+        <span>YouTube</span>
       </a>
       <a
         href="https://t.me/naiyous"
@@ -29,7 +29,7 @@ export function CommunityLinks() {
             strokeLinejoin="round"
           />
         </svg>
-        Telegram
+        <span>Telegram</span>
       </a>
     </nav>
   )
