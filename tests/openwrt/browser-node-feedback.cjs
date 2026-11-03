@@ -185,6 +185,10 @@ const base = process.env.DAED_PANEL_URL || 'http://localhost:18080',
       current = viewer.locator(`[data-subscription-node="${subNode}"]`)
     await current.locator('[aria-label="当前出口: AI"]').waitFor()
     assert.equal(await current.getAttribute('data-active'), 'true')
+    const search = viewer.locator('.subscription-search-row input')
+    await search.focus()
+    assert.equal(await search.evaluate((e) => getComputedStyle(e).outlineStyle), 'none')
+    assert.equal(await search.evaluate((e) => getComputedStyle(e.closest('label')).outlineWidth), '2px')
     await viewer.screenshot({ path: path.join(output, 'subscription-current.png') })
     fail = true
     await page.reload()

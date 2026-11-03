@@ -371,7 +371,7 @@
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
-.subscription-search-row input:focus-visible {
+.subscription-browser .subscription-search-row input:focus-visible {
   outline: none;
 }
 .subscription-filters-row > label {
