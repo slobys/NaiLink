@@ -3,7 +3,63 @@
 :root {
   --console-secondary: color-mix(in oklab, var(--foreground) 76%, var(--card));
   --console-hover: color-mix(in oklab, var(--primary) 7%, var(--card));
-  --console-selected: color-mix(in oklab, var(--primary) 22%, var(--card));
+  --console-node-surface: color-mix(in oklab, var(--foreground) 9%, var(--card));
+  --console-node-border: color-mix(in oklab, var(--foreground) 19%, var(--card));
+  --console-node-hover: color-mix(in oklab, var(--foreground) 14%, var(--card));
+  --console-selected: oklch(0.81 0.09 150);
+  --console-selected-hover: oklch(0.78 0.1 150);
+  --console-selected-text: oklch(0.26 0.045 155);
+  --console-selected-border: oklch(0.48 0.11 150);
+  --console-selected-control: oklch(0.4 0.1 155);
+  --console-selected-control-ink: oklch(0.98 0.008 150);
+}
+.dark {
+  --console-node-surface: color-mix(in oklab, var(--foreground) 12%, var(--card));
+  --console-node-border: color-mix(in oklab, var(--foreground) 25%, var(--card));
+  --console-node-hover: color-mix(in oklab, var(--foreground) 18%, var(--card));
+  --console-selected: oklch(0.36 0.075 155);
+  --console-selected-hover: oklch(0.4 0.08 155);
+  --console-selected-text: oklch(0.96 0.015 150);
+  --console-selected-border: oklch(0.69 0.1 155);
+  --console-selected-control: oklch(0.76 0.12 155);
+  --console-selected-control-ink: oklch(0.2 0.025 155);
+}
+.node-name-label {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+.node-name-label > .node-name {
+  flex: 1;
+}
+.node-region-icon {
+  display: inline-block;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 15px;
+  border-radius: 2px;
+  object-fit: contain;
+}
+.node-region-unknown {
+  width: 17px;
+  height: 17px;
+  color: var(--console-secondary);
+}
+[data-group-member-name] > .node-region-icon {
+  margin-top: 3px;
+}
+.router-panel :is(.panel-node-row, .group-member-card) {
+  background: var(--console-node-surface);
+  border-color: var(--console-node-border);
+}
+.router-panel :is(.panel-node-row, .group-member-card):hover {
+  background: var(--console-node-hover);
+}
+.subscription-node-tile:is(:hover, :focus-within) .subscription-node-name,
+.router-panel .panel-node-row [data-node-details]:hover {
+  color: var(--foreground);
 }
 .router-panel,
 .node-picker-dialog,
@@ -54,7 +110,7 @@
   color: var(--console-secondary);
 }
 .router-panel .panel-node-row:hover {
-  background: var(--console-hover);
+  background: var(--console-node-hover);
 }
 
 /* Compact connection strip: original logos + short history + current result. */
@@ -172,9 +228,9 @@
   gap: 3px 6px;
   min-height: 70px;
   padding: 8px 10px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--console-node-border);
   border-radius: 10px;
-  background: color-mix(in oklab, var(--muted) 35%, var(--card));
+  background: var(--console-node-surface);
   cursor: pointer;
   transition:
     background-color 140ms ease-out,
@@ -185,14 +241,27 @@
 .subscription-node-tile:hover {
   outline: none;
   box-shadow: none;
-  background: var(--console-hover);
+  background: var(--console-node-hover);
   border-color: color-mix(in oklab, var(--primary) 40%, var(--border));
 }
 .picker-node-row.picker-node-selected,
 .picker-node-row.picker-node-selected:hover {
   box-shadow: none;
   background: var(--console-selected);
-  border-color: var(--primary);
+  border-color: var(--console-selected-border);
+  color: var(--console-selected-text);
+}
+.picker-node-row.picker-node-selected:hover {
+  background: var(--console-selected-hover);
+}
+.picker-node-row.picker-node-selected
+  :is(.picker-node-meta, .picker-node-protocol, .picker-latency-button, .picker-name-toggle) {
+  color: color-mix(in oklab, var(--console-selected-text) 85%, var(--console-selected));
+}
+.picker-node-selected .picker-node-check[data-state='checked'] {
+  background: var(--console-selected-control);
+  border-color: var(--console-selected-control);
+  color: var(--console-selected-control-ink);
 }
 .picker-node-select {
   grid-column: 1;
@@ -206,7 +275,7 @@
   color: var(--foreground);
 }
 .picker-node-selected .picker-node-select {
-  color: var(--foreground);
+  color: var(--console-selected-text);
   font-weight: 600;
 }
 .picker-node-check {
@@ -216,6 +285,7 @@
   width: 18px;
   height: 18px;
   border-radius: 5px;
+  border-color: color-mix(in oklab, var(--foreground) 55%, var(--console-node-surface));
   box-shadow: none;
 }
 .picker-node-meta {
@@ -316,7 +386,8 @@
   gap: 4px;
   padding: 8px 10px;
   border-radius: 10px;
-  background: color-mix(in oklab, var(--muted) 35%, var(--card));
+  background: var(--console-node-surface);
+  border-color: var(--console-node-border);
   box-shadow: none;
 }
 .subscription-node-heading {

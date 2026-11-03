@@ -154,7 +154,7 @@ const PickerNodeCard = memo(
           aria-label={`${t('actions.select')} ${item.title}`}
           onClick={() => onToggle(item.id)}
         >
-          <NodeName name={item.title} />
+          <NodeName name={item.title} showRegion />
         </button>
         <span className="picker-node-meta">
           {item.badge && (

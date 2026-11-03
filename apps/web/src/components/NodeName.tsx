@@ -1,8 +1,11 @@
 import { memo, useEffect, useRef } from 'react'
+import { NodeRegionIcon } from '~/components/NodeRegionIcon'
+import { nodeRegion, nodeRegionDisplayName } from '~/utils/node-region'
 
 // Measure only the name being read, rather than observing every node in a large subscription.
-export const NodeName = memo(({ name }: { name: string }) => {
+export const NodeName = memo(({ name, showRegion = false }: { name: string; showRegion?: boolean }) => {
   const ref = useRef<HTMLSpanElement>(null)
+  const region = showRegion ? nodeRegion(name) : undefined
   useEffect(() => {
     const element = ref.current
     const target = element?.closest('[data-name-card]') || element?.closest('button')
@@ -36,8 +39,11 @@ export const NodeName = memo(({ name }: { name: string }) => {
     }
   }, [name])
   return (
-    <span ref={ref} className="node-name" title={name}>
-      <span className="node-name-text">{name}</span>
+    <span className="node-name-label">
+      {showRegion && <NodeRegionIcon region={region} />}
+      <span ref={ref} className="node-name" title={name}>
+        <span className="node-name-text">{showRegion ? nodeRegionDisplayName(name, region) : name}</span>
+      </span>
     </span>
   )
 })

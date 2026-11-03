@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-03T08:04:02.930306Z",
+  "generatedAt": "2026-11-03T10:43:34.247332+00:00",
   "title": "Design System: NaiLink Compact Console",
   "extensions": {
     "colorMeta": {
@@ -410,7 +410,18 @@
         "name": "toolbar-wrap",
         "value": "1200px"
       }
-    ]
+    ],
+    "nodeCardStates": {
+      "surface": "var(--console-node-surface)",
+      "border": "var(--console-node-border)",
+      "selectedLight": "oklch(0.81 0.09 150)",
+      "selectedDark": "oklch(0.36 0.075 155)",
+      "selectedTextLight": "oklch(0.26 0.045 155)",
+      "selectedTextDark": "oklch(0.96 0.015 150)",
+      "flagSize": "20px 15px",
+      "regionSource": "src/assets/regions/sources.json",
+      "regionMeaning": "Name hints only; not a verified exit IP location"
+    }
   },
   "components": [
     {
@@ -465,9 +476,9 @@
       "name": "已选节点瓷片",
       "kind": "custom",
       "refersTo": "node-tile-selected",
-      "description": "两行紧凑网格；整卡填色、边界和实体勾选同时表达选中。",
+      "description": "多选节点采用独立绿色填充、绿色边界与实心勾选，名称和次要信息保持可读。",
       "html": "<article class=\"ds-tile\"><button class=\"ds-tile-name\" aria-pressed=\"true\">示例节点</button><button class=\"ds-tile-check\" role=\"checkbox\" aria-checked=\"true\" aria-label=\"选择 示例节点\"><svg viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3\" aria-hidden=\"true\"><path d=\"m5 12 4 4L19 6\"/></svg></button><span class=\"ds-tile-meta\">SOCKS5 · 手动节点</span><button class=\"ds-tile-test\">测试</button></article>",
-      "css": ".ds-tile{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:24px 26px;align-items:center;gap:3px 6px;min-height:70px;max-width:260px;padding:8px 10px;border:1px solid var(--primary,oklch(0.75 0.18 85));border-radius:10px;background:color-mix(in oklab,var(--primary,oklch(0.75 0.18 85)) 22%,var(--card,oklch(0.99 0.008 85)));font-family:'Fira Sans', system-ui, -apple-system, sans-serif;transition:background-color 140ms ease-out,border-color 140ms ease-out}.ds-tile:hover{border-color:var(--primary,oklch(0.75 0.18 85))}.ds-tile-name,.ds-tile-test{padding:0;border:0;background:transparent;cursor:pointer;font-family:inherit}.ds-tile-name{grid-column:1;grid-row:1;min-width:0;text-align:left;color:var(--foreground,oklch(0.18 0.02 60));font-size:13px;font-weight:600}.ds-tile-check{grid-column:2;grid-row:1;display:grid;place-content:center;width:18px;height:18px;padding:0;border:1px solid var(--primary,oklch(0.75 0.18 85));border-radius:5px;background:var(--primary,oklch(0.75 0.18 85));color:var(--primary-foreground,oklch(0.18 0.02 60));cursor:pointer}.ds-tile-meta{grid-column:1;grid-row:2;font-size:11px;line-height:16px;color:color-mix(in oklab,var(--foreground,oklch(0.18 0.02 60)) 76%,var(--card,oklch(0.99 0.008 85)))}.ds-tile-test{grid-column:2;grid-row:2;min-height:26px;min-width:36px;font-size:12px;color:var(--foreground,oklch(0.18 0.02 60))}.ds-tile-test:hover{background:var(--accent,oklch(0.94 0.02 85));border-radius:8px}.ds-tile button:focus-visible{outline:2px solid var(--ring,oklch(0.75 0.18 85));outline-offset:2px;}@media(max-width:640px),(pointer:coarse){.ds-tile{grid-template-rows:44px 44px;padding:4px 8px;gap:0 4px}.ds-tile-name,.ds-tile-test{min-height:44px}.ds-tile-test{min-width:44px}.ds-tile-check{width:22px;height:22px}}@media(prefers-reduced-motion:reduce){.ds-tile{transition:none}}"
+      "css": ".ds-tile{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:24px 26px;align-items:center;gap:3px 6px;min-height:70px;max-width:260px;padding:8px 10px;border:1px solid var(--console-selected-border,oklch(0.48 0.11 150));border-radius:10px;background:var(--console-selected,oklch(0.81 0.09 150));font-family:'Fira Sans', system-ui, -apple-system, sans-serif;transition:background-color 140ms ease-out,border-color 140ms ease-out}.ds-tile:hover{border-color:var(--console-selected-border,oklch(0.48 0.11 150))}.ds-tile-name,.ds-tile-test{padding:0;border:0;background:transparent;cursor:pointer;font-family:inherit}.ds-tile-name{grid-column:1;grid-row:1;min-width:0;text-align:left;color:var(--console-selected-text,oklch(0.26 0.045 155));font-size:13px;font-weight:600}.ds-tile-check{grid-column:2;grid-row:1;display:grid;place-content:center;width:18px;height:18px;padding:0;border:1px solid var(--console-selected-border,oklch(0.48 0.11 150));border-radius:5px;background:var(--console-selected-border,oklch(0.48 0.11 150));color:var(--primary-foreground,oklch(0.18 0.02 60));cursor:pointer}.ds-tile-meta{grid-column:1;grid-row:2;font-size:11px;line-height:16px;color:color-mix(in oklab,var(--console-selected-text,oklch(0.26 0.045 155)) 76%,var(--card,oklch(0.99 0.008 85)))}.ds-tile-test{grid-column:2;grid-row:2;min-height:26px;min-width:36px;font-size:12px;color:var(--console-selected-text,oklch(0.26 0.045 155))}.ds-tile-test:hover{background:var(--accent,oklch(0.94 0.02 85));border-radius:8px}.ds-tile button:focus-visible{outline:2px solid var(--ring,oklch(0.75 0.18 85));outline-offset:2px;}@media(max-width:640px),(pointer:coarse){.ds-tile{grid-template-rows:44px 44px;padding:4px 8px;gap:0 4px}.ds-tile-name,.ds-tile-test{min-height:44px}.ds-tile-test{min-width:44px}.ds-tile-check{width:22px;height:22px}}@media(prefers-reduced-motion:reduce){.ds-tile{transition:none}}"
     },
     {
       "name": "连接检测卡片",
@@ -516,7 +527,7 @@
       }
     ],
     "dos": [
-      "**Do** 从当前主题变量派生紧凑表面、悬停、选中与焦点颜色。",
+      "**Do** 普通表面与焦点绑定主题，节点多选使用独立绿色语义及实心勾选。",
       "**Do** 同时保留整卡选中填色、边界、实体勾选及可访问状态。",
       "**Do** 在触控布局中保留 44px 主要操作目标和完整名称入口。",
       "**Do** 在最窄嵌入视口使用单列，并检查弹窗工具栏和提交区仍可到达。",

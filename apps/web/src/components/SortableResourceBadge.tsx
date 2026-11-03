@@ -2,10 +2,12 @@ import type { DraggableProvided, DraggableStateSnapshot } from '@hello-pangea/dn
 import { Draggable } from '@hello-pangea/dnd'
 import { GripVertical, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { NodeRegionIcon } from '~/components/NodeRegionIcon'
 import { Button } from '~/components/ui/button'
 import { SimpleTooltip } from '~/components/ui/tooltip'
 import { cn } from '~/lib/utils'
 import { getInstantDropStyle } from '~/utils'
+import { nodeRegion } from '~/utils/node-region'
 
 export function SortableResourceBadge({
   id,
@@ -51,8 +53,12 @@ export function SortableResourceBadge({
       </div>
 
       <div className="min-w-0 flex-1">
-        <span data-group-member-name className="block text-xs font-medium leading-5 [overflow-wrap:anywhere]">
-          {name}
+        <span
+          data-group-member-name
+          className="flex items-start gap-1.5 text-xs font-medium leading-5 [overflow-wrap:anywhere]"
+        >
+          {protocol && <NodeRegionIcon region={nodeRegion(name)} />}
+          <span className="min-w-0">{name}</span>
         </span>
         <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted-foreground">
           {protocol && <span className="shrink-0 font-medium uppercase text-primary">{protocol}</span>}

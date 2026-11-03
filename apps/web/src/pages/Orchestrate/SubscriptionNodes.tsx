@@ -53,7 +53,7 @@ const SubscriptionNodeTile = memo(
             aria-label={`${t('panel.nodeDetails')} ${name}`}
             onClick={() => onDetails(node)}
           >
-            <NodeName name={name} />
+            <NodeName name={name} showRegion />
           </button>
           <span className="subscription-node-protocol" title={node.protocol}>
             {nodeProtocolLabel(node.protocol)}

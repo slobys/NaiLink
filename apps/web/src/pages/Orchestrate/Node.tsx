@@ -95,7 +95,7 @@ function NodeRow({
           data-node-details={node.id}
           onClick={() => onAction(entry, 'details')}
         >
-          <NodeName name={name} />
+          <NodeName name={name} showRegion />
           <span className="panel-node-meta" title={sources.map((source) => source.name).join(' · ')}>
             <span className="panel-node-protocol">{node.protocol}</span>
             <span className="truncate">

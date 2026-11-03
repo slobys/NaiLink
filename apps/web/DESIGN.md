@@ -106,14 +106,14 @@ components:
     rounded: '{rounded.panel}'
     padding: '{spacing.panel}'
   node-tile:
-    backgroundColor: 'color-mix(in oklab, var(--muted) 35%, var(--card))'
+    backgroundColor: 'var(--console-node-surface)'
     textColor: '{colors.foreground}'
     rounded: '{rounded.tile}'
     padding: '8px 10px'
     typography: '{typography.node-name}'
   node-tile-selected:
-    backgroundColor: 'color-mix(in oklab, var(--primary) 22%, var(--card))'
-    textColor: '{colors.foreground}'
+    backgroundColor: 'var(--console-selected)'
+    textColor: 'var(--console-selected-text)'
     rounded: '{rounded.tile}'
     padding: '8px 10px'
   connection-card:
@@ -152,7 +152,7 @@ components:
 
 ### Primary
 
-暖金色 `primary` 用于主操作、勾选、选中边界与焦点；前景由 `primary-foreground` 决定。深色模式对应 `dark-primary` 与 `dark-primary-foreground`。错误采用独立的 `destructive` 语义色。
+暖金色 `primary` 用于主操作与焦点；节点多选使用独立绿色状态色，其他勾选沿用主题；前景由 `primary-foreground` 决定。深色模式对应 `dark-primary` 与 `dark-primary-foreground`。错误采用独立的 `destructive` 语义色。
 
 `App.tsx` 通过 `themeColorsToCSSVars()` 将所选主题写入根元素的 `--primary`、`--background`、`--foreground`、`--card`、`--muted`、`--border`、`--input`、`--ring` 等变量；Tailwind 的 `--color-*` 别名再引用它们。Amber、Ocean、Rose、Emerald、Violet、Slate、Sunset、Teal、Sky、Indigo、Coffee、Olive 及深浅/系统模式均沿用现有定义。
 
@@ -160,11 +160,11 @@ components:
 
 浅色为暖白表面与深墨文字，深色为炭色表面与暖白文字。`muted`、`secondary` 和 `accent` 是低强度表面层级；`border` 为一像素边界，`input` 为字段边界。不要把浅色前景或背景硬编码进主题组件。
 
-控制台派生色直接复用当前主题：次要文字为 `color-mix(in oklab, var(--foreground) 76%, var(--card))`，悬停为 `color-mix(in oklab, var(--primary) 7%, var(--card))`，选中填色为 `color-mix(in oklab, var(--primary) 22%, var(--card))`。未选节点表面为 `color-mix(in oklab, var(--muted) 35%, var(--card))`。这些配方来自 `console.css`，不是新增主题。
+次要文字仍为 `color-mix(in oklab, var(--foreground) 76%, var(--card))`。普通节点表面改为前景混合 9%（深色 12%），边界混合 19%（深色 25%）；悬停表面混合 14%（深色 18%），加深节点与画布的区分。绿色多选语义独立于主题：浅色填充 `oklch(0.81 0.09 150)`、文字 `oklch(0.26 0.045 155)`、边界 `oklch(0.48 0.11 150)`；深色填充 `oklch(0.36 0.075 155)`、文字 `oklch(0.96 0.015 150)`、边界 `oklch(0.69 0.1 155)`。悬停保持绿色，实心勾选保留。具体控制色与悬停值以 `console.css` 为准。
 
 连接检测沿用成功、受限、失败的绿、琥珀、红语义与原有明暗变体；历史短条与文字结果配对，不能用品牌颜色替代检测状态。
 
-**The Theme Binding Rule.** 控制台表面、选中、悬停与焦点始终引用当前主题变量；品牌原色与检测状态保留各自含义。
+**The Theme Binding Rule.** 普通表面、悬停与焦点继续绑定主题；节点多选使用与主题分开的深浅绿色语义，必须同时有勾选与可访问状态。地区旗帜保留标准图形颜色，不映射为主题色。
 
 ## Typography
 
@@ -223,7 +223,7 @@ components:
 
 ### Cards / Containers
 
-普通区块使用 `console-panel`。添加节点瓷片左侧为名称和协议/来源，右侧为勾选及测试/名称展开。选中使用 `node-tile-selected` 的整卡填色、主题边界与实心勾选；悬停为较浅填色和混合边界。焦点以实际按钮为目标，不能仅用整卡 `focus-within` 替代。
+普通区块使用 `console-panel`。添加节点瓷片左侧为名称和协议/来源，右侧为勾选及测试/名称展开。选中使用 `node-tile-selected` 的整卡绿色填充、绿色边界、对应深浅文字与实心勾选；未选悬停使用加深的中性表面。订阅浏览只有悬停/详情，不添加虚假的多选或当前出口状态。焦点以实际按钮为目标，不能仅用整卡 `focus-within` 替代。
 
 订阅瓷片采用同一表面与圆角，名称按钮打开详情；测试、加入和更多始终可见。名称或测试结果较长时允许其容器收缩，独立操作按钮不能被挤出或隐藏。
 
@@ -239,6 +239,12 @@ LuCI 继续拥有页面导航。NaiLink 公共栏中的社区链接保持 YouTub
 
 阿里云是一个严格限定的原始栅格例外：直接打包官方 CDN 的原始 32×32 ICO，未重新生成或描绘；其来源与哈希同样在 manifest 中。这个例外不允许其他供应商使用随意截图、手绘近似图或未记录来源的栅格文件。
 
+### Node region indicators
+
+`NodeRegionIcon` 使用本地 `flag-icons` 4:3 SVG（42 个常见地区），源码修订、MIT 许可与每文件摘要在 `src/assets/regions/`，二进制静态资源另包含第三方许可。图标为 20×15px，文字仍由 `NodeName` 的独立伸缩容器负责截断与平移，虚拟列表步距不变。订阅来源名称不展示节点旗帜。
+
+只按节点名称中的明确旗帜、中英文地区名和有边界的 HK/JP/SG 等代码识别；不解析服务器域名、不请求 IP 定位、不改名或分流。多个地区且没有唯一明确旗帜、或未知地区显示中性地球；提示说明这是名称标注，不保证实际出口位置。已有前置旗帜仅在可见排版中换成 SVG，存储名称、搜索、可访问按钮名称和完整 title 保留。
+
 ### Name motion
 
 完整名称只在读取时测量。支持悬停且未请求减少动态效果时，溢出名称在悬停或键盘焦点后延迟 600ms 往返平移，时长按距离计算并限制在 3–12s；不溢出时不动。触控使用换行、名称展开或详情；展开后停止平移。`prefers-reduced-motion: reduce` 不启动名称平移，并取消紧凑瓷片过渡。常规瓷片颜色/边界过渡为 140ms `ease-out`。
@@ -247,7 +253,7 @@ LuCI 继续拥有页面导航。NaiLink 公共栏中的社区链接保持 YouTub
 
 ### Do:
 
-- **Do** 从当前主题变量派生紧凑表面、悬停、选中与焦点颜色。
+- **Do** 普通表面与焦点绑定主题，节点多选使用独立绿色语义及实心勾选。
 - **Do** 同时保留整卡选中填色、边界、实体勾选及可访问状态。
 - **Do** 在触控布局中保留 44px 主要操作目标和完整名称入口。
 - **Do** 在最窄嵌入视口使用单列，并检查弹窗工具栏和提交区仍可到达。
