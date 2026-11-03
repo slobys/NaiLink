@@ -82,6 +82,7 @@ function NodeRow({
       data-node-id={node.id}
       data-name-card
       data-active={!!activeGroups?.length}
+      data-dragging={snapshot.isDragging || snapshot.isDropAnimating}
       role="listitem"
     >
       <div

@@ -133,8 +133,12 @@ const base = process.env.DAED_PANEL_URL || 'http://localhost:18080',
         await normal.hover()
         await page.waitForTimeout(180)
         const hover = await color(normal)
-        assert.ok(Math.max(...plain.map((v, i) => Math.abs(v - hover[i]))) >= 15, JSON.stringify({ plain, hover }))
-        assert.equal(await normal.evaluate((e) => getComputedStyle(e).outlineWidth), '2px')
+        assert.ok(Math.max(...plain.map((v, i) => Math.abs(v - hover[i]))) >= 4, JSON.stringify({ plain, hover }))
+        assert.equal(await normal.evaluate((e) => getComputedStyle(e).outlineStyle), 'none')
+        assert.equal(await normal.evaluate((e) => getComputedStyle(e).translate), '0px -2px')
+        await page.emulateMedia({ reducedMotion: 'reduce' })
+        assert.equal(await normal.evaluate((e) => getComputedStyle(e).translate), 'none')
+        await page.emulateMedia({ reducedMotion: 'no-preference' })
         for (const card of [a, b]) {
           const green = await color(card)
           assert.ok(green[1] > green[0] && green[1] > green[2])
@@ -148,6 +152,31 @@ const base = process.env.DAED_PANEL_URL || 'http://localhost:18080',
     await page.setViewportSize({ width: 1800, height: 1100 })
     await page.goto(base + '/cgi-bin/luci/admin/services/daed/resources')
     await f.locator('[data-workspace="resources"]').waitFor()
+    const manual = f.locator('.panel-node-row').first()
+    await manual.hover()
+    await page.waitForTimeout(220)
+    const gutter = await manual.evaluate((e) => {
+      const r = e.getBoundingClientRect(),
+        v = e.closest('[data-node-scroll]').getBoundingClientRect(),
+        s = getComputedStyle(e)
+      return {
+        top: r.top - v.top,
+        left: r.left - v.left,
+        right: v.right - r.right,
+        outline: s.outlineStyle,
+        height: r.height,
+        translate: s.translate,
+      }
+    })
+    assert.ok(gutter.top >= 3 && gutter.left >= 5 && gutter.right >= 5, JSON.stringify(gutter))
+    assert.equal(gutter.height, 92)
+    assert.equal(gutter.outline, 'none')
+    assert.equal(gutter.translate, '0px -2px')
+    await page.mouse.move(1, 1)
+    await page.waitForTimeout(220)
+    assert.equal(await manual.evaluate((e) => getComputedStyle(e).translate), 'none')
+    await manual.locator('[data-node-details]').focus()
+    assert.equal(await manual.locator('[data-node-details]').evaluate((e) => getComputedStyle(e).outlineWidth), '2px')
     await f
       .locator(`[data-subscription-card="subscription-${sub.id}"]`)
       .getByRole('button', { name: '查看节点', exact: true })
@@ -183,6 +212,7 @@ const base = process.env.DAED_PANEL_URL || 'http://localhost:18080',
           resourcesUnchanged: true,
           reads,
           evidence,
+          manualViewport: gutter,
           errors,
         },
         null,
@@ -190,7 +220,7 @@ const base = process.env.DAED_PANEL_URL || 'http://localhost:18080',
       ),
     )
     console.log(
-      'PASS: strong hover, confirmed current exit and independent checked states, latency/custom sorting, light/dark 1800/390/320, read failure clears stale markers, resources preserved',
+      'PASS: soft hover without outer ring, lift/reset/reduced motion, unclipped manual rows, keyboard focus, current/checked green states, sorting, light/dark 1800/390/320, resources preserved',
     )
   } finally {
     await browser.close()

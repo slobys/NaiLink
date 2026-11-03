@@ -369,14 +369,14 @@
       {
         "name": "console-flat",
         "value": "none",
-        "purpose": "紧凑节点、连接卡片、普通区块及公共按钮；弹窗与既有运行概况容器保留各自库样式。"
+        "purpose": "连接卡片、普通区块及公共按钮保持平面；节点悬停允许轻量向下投影，弹窗保留库样式。"
       }
     ],
     "motion": [
       {
         "name": "tile-state",
-        "value": "140ms ease-out",
-        "purpose": "console.css 的颜色和边界过渡；减少动态效果时紧凑瓷片取消过渡。"
+        "value": "160ms / 180ms ease-out",
+        "purpose": "节点颜色 160ms，上浮及投影 180ms；触控、拖动与减少动画模式无上浮。"
       },
       {
         "name": "name-read-delay",
@@ -420,7 +420,11 @@
       "selectedTextDark": "oklch(0.96 0.015 150)",
       "flagSize": "20px 15px",
       "regionSource": "src/assets/regions/sources.json",
-      "regionMeaning": "Name hints only; not a verified exit IP location"
+      "regionMeaning": "Name hints only; not a verified exit IP location",
+      "hover": "var(--console-node-hover)",
+      "hoverLift": "0 -2px",
+      "hoverOutline": "none",
+      "viewportGutter": "6px"
     }
   },
   "components": [
@@ -476,9 +480,9 @@
       "name": "已选节点瓷片",
       "kind": "custom",
       "refersTo": "node-tile-selected",
-      "description": "多选节点采用独立绿色填充、绿色边界与实心勾选，名称和次要信息保持可读。",
+      "description": "多选节点采用独立绿色填充、绿色边界与实心勾选，名称和次要信息保持可读。 悬停为柔和主题色与轻微上浮，不加整卡外圈。",
       "html": "<article class=\"ds-tile\"><button class=\"ds-tile-name\" aria-pressed=\"true\">示例节点</button><button class=\"ds-tile-check\" role=\"checkbox\" aria-checked=\"true\" aria-label=\"选择 示例节点\"><svg viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3\" aria-hidden=\"true\"><path d=\"m5 12 4 4L19 6\"/></svg></button><span class=\"ds-tile-meta\">SOCKS5 · 手动节点</span><button class=\"ds-tile-test\">测试</button></article>",
-      "css": ".ds-tile{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:24px 26px;align-items:center;gap:3px 6px;min-height:70px;max-width:260px;padding:8px 10px;border:1px solid var(--console-selected-border,oklch(0.48 0.11 150));border-radius:10px;background:var(--console-selected,oklch(0.81 0.09 150));font-family:'Fira Sans', system-ui, -apple-system, sans-serif;transition:background-color 140ms ease-out,border-color 140ms ease-out}.ds-tile:hover{border-color:var(--console-selected-border,oklch(0.48 0.11 150))}.ds-tile-name,.ds-tile-test{padding:0;border:0;background:transparent;cursor:pointer;font-family:inherit}.ds-tile-name{grid-column:1;grid-row:1;min-width:0;text-align:left;color:var(--console-selected-text,oklch(0.26 0.045 155));font-size:13px;font-weight:600}.ds-tile-check{grid-column:2;grid-row:1;display:grid;place-content:center;width:18px;height:18px;padding:0;border:1px solid var(--console-selected-border,oklch(0.48 0.11 150));border-radius:5px;background:var(--console-selected-border,oklch(0.48 0.11 150));color:var(--primary-foreground,oklch(0.18 0.02 60));cursor:pointer}.ds-tile-meta{grid-column:1;grid-row:2;font-size:11px;line-height:16px;color:color-mix(in oklab,var(--console-selected-text,oklch(0.26 0.045 155)) 76%,var(--card,oklch(0.99 0.008 85)))}.ds-tile-test{grid-column:2;grid-row:2;min-height:26px;min-width:36px;font-size:12px;color:var(--console-selected-text,oklch(0.26 0.045 155))}.ds-tile-test:hover{background:var(--accent,oklch(0.94 0.02 85));border-radius:8px}.ds-tile button:focus-visible{outline:2px solid var(--ring,oklch(0.75 0.18 85));outline-offset:2px;}@media(max-width:640px),(pointer:coarse){.ds-tile{grid-template-rows:44px 44px;padding:4px 8px;gap:0 4px}.ds-tile-name,.ds-tile-test{min-height:44px}.ds-tile-test{min-width:44px}.ds-tile-check{width:22px;height:22px}}@media(prefers-reduced-motion:reduce){.ds-tile{transition:none}}"
+      "css": ".ds-tile{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:24px 26px;align-items:center;gap:3px 6px;min-height:70px;max-width:260px;padding:8px 10px;border:1px solid var(--console-selected-border,oklch(0.48 0.11 150));border-radius:10px;background:var(--console-selected,oklch(0.81 0.09 150));font-family:'Fira Sans', system-ui, -apple-system, sans-serif;transition:background-color 160ms ease-out,translate 180ms ease-out,box-shadow 180ms ease-out}.ds-tile:hover{border-color:var(--console-selected-border,oklch(0.48 0.11 150))}.ds-tile-name,.ds-tile-test{padding:0;border:0;background:transparent;cursor:pointer;font-family:inherit}.ds-tile-name{grid-column:1;grid-row:1;min-width:0;text-align:left;color:var(--console-selected-text,oklch(0.26 0.045 155));font-size:13px;font-weight:600}.ds-tile-check{grid-column:2;grid-row:1;display:grid;place-content:center;width:18px;height:18px;padding:0;border:1px solid var(--console-selected-border,oklch(0.48 0.11 150));border-radius:5px;background:var(--console-selected-border,oklch(0.48 0.11 150));color:var(--primary-foreground,oklch(0.18 0.02 60));cursor:pointer}.ds-tile-meta{grid-column:1;grid-row:2;font-size:11px;line-height:16px;color:color-mix(in oklab,var(--console-selected-text,oklch(0.26 0.045 155)) 76%,var(--card,oklch(0.99 0.008 85)))}.ds-tile-test{grid-column:2;grid-row:2;min-height:26px;min-width:36px;font-size:12px;color:var(--console-selected-text,oklch(0.26 0.045 155))}.ds-tile-test:hover{background:var(--accent,oklch(0.94 0.02 85));border-radius:8px}.ds-tile button:focus-visible{outline:2px solid var(--ring,oklch(0.75 0.18 85));outline-offset:2px;}@media(max-width:640px),(pointer:coarse){.ds-tile{grid-template-rows:44px 44px;padding:4px 8px;gap:0 4px}.ds-tile-name,.ds-tile-test{min-height:44px}.ds-tile-test{min-width:44px}.ds-tile-check{width:22px;height:22px}}@media(prefers-reduced-motion:reduce){.ds-tile{transition:none}}@media(hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference){.ds-tile:hover{translate:0 -2px;box-shadow:0 3px 6px -3px color-mix(in oklab,var(--foreground) 18%,transparent)}}"
     },
     {
       "name": "连接检测卡片",
@@ -500,9 +504,9 @@
       "name": "订阅节点瓷片",
       "kind": "custom",
       "refersTo": "node-tile",
-      "description": "同一表面与密度；名称详情、测试、加入和更多保持可见。",
+      "description": "同一表面与密度；名称详情、测试、加入和更多保持可见。 悬停为柔和主题色与轻微上浮，不加整卡外圈。",
       "html": "<article class=\"ds-sub-node\"><div class=\"ds-sub-heading\"><button class=\"ds-sub-name\">示例订阅节点</button><span>VLESS</span></div><div class=\"ds-sub-actions\"><button class=\"ds-sub-test\">测试</button><button aria-label=\"加入群组\"><svg viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M12 5v14M5 12h14\"/></svg></button><button aria-label=\"更多操作\"><svg viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"currentColor\" aria-hidden=\"true\"><circle cx=\"5\" cy=\"12\" r=\"1.5\"/><circle cx=\"12\" cy=\"12\" r=\"1.5\"/><circle cx=\"19\" cy=\"12\" r=\"1.5\"/></svg></button></div></article>",
-      "css": ".ds-sub-node{display:flex;flex-direction:column;gap:4px;max-width:260px;padding:8px 10px;border:1px solid color-mix(in oklab,var(--border,oklch(0.92 0.015 85)) 65%,transparent);border-radius:10px;background:color-mix(in oklab,var(--muted,oklch(0.95 0.012 85)) 35%,var(--card,oklch(0.99 0.008 85)));font-family:'Fira Sans', system-ui, -apple-system, sans-serif;transition:background-color 140ms ease-out,border-color 140ms ease-out}.ds-sub-node:hover{border-color:color-mix(in oklab,var(--primary,oklch(0.75 0.18 85)) 40%,var(--border,oklch(0.92 0.015 85)));background:color-mix(in oklab,var(--primary,oklch(0.75 0.18 85)) 7%,var(--card,oklch(0.99 0.008 85)))}.ds-sub-heading{display:flex;align-items:center;gap:6px;min-width:0}.ds-sub-heading span{font-size:11px;color:var(--muted-foreground,oklch(0.5 0.02 60))}.ds-sub-node button{display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:8px;background:transparent;cursor:pointer;font-family:inherit;color:color-mix(in oklab,var(--foreground,oklch(0.18 0.02 60)) 76%,var(--card,oklch(0.99 0.008 85)))}.ds-sub-node .ds-sub-name{flex:1;justify-content:start;min-width:0;min-height:24px;padding:0;font-size:13px;line-height:20px;font-weight:500;color:var(--foreground,oklch(0.18 0.02 60))}.ds-sub-name:hover{color:var(--primary,oklch(0.75 0.18 85))}.ds-sub-actions{display:flex;align-items:center;gap:0}.ds-sub-actions button{min-width:26px;min-height:26px;padding:2px 4px;font-size:12px}.ds-sub-actions .ds-sub-test{flex:1;justify-content:start}.ds-sub-actions button:hover{background:var(--accent,oklch(0.94 0.02 85))}.ds-sub-node button:focus-visible{outline:2px solid var(--ring,oklch(0.75 0.18 85));outline-offset:2px;}@media(max-width:640px),(pointer:coarse){.ds-sub-node .ds-sub-name{min-height:44px}.ds-sub-actions button{min-width:44px;min-height:44px}}@media(prefers-reduced-motion:reduce){.ds-sub-node{transition:none}}"
+      "css": ".ds-sub-node{display:flex;flex-direction:column;gap:4px;max-width:260px;padding:8px 10px;border:1px solid color-mix(in oklab,var(--border,oklch(0.92 0.015 85)) 65%,transparent);border-radius:10px;background:color-mix(in oklab,var(--muted,oklch(0.95 0.012 85)) 35%,var(--card,oklch(0.99 0.008 85)));font-family:'Fira Sans', system-ui, -apple-system, sans-serif;transition:background-color 160ms ease-out,translate 180ms ease-out,box-shadow 180ms ease-out}.ds-sub-node:hover{background:color-mix(in oklab,var(--primary,oklch(0.75 0.18 85)) 7%,var(--card,oklch(0.99 0.008 85)))}.ds-sub-heading{display:flex;align-items:center;gap:6px;min-width:0}.ds-sub-heading span{font-size:11px;color:var(--muted-foreground,oklch(0.5 0.02 60))}.ds-sub-node button{display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:8px;background:transparent;cursor:pointer;font-family:inherit;color:color-mix(in oklab,var(--foreground,oklch(0.18 0.02 60)) 76%,var(--card,oklch(0.99 0.008 85)))}.ds-sub-node .ds-sub-name{flex:1;justify-content:start;min-width:0;min-height:24px;padding:0;font-size:13px;line-height:20px;font-weight:500;color:var(--foreground,oklch(0.18 0.02 60))}.ds-sub-name:hover{color:var(--primary,oklch(0.75 0.18 85))}.ds-sub-actions{display:flex;align-items:center;gap:0}.ds-sub-actions button{min-width:26px;min-height:26px;padding:2px 4px;font-size:12px}.ds-sub-actions .ds-sub-test{flex:1;justify-content:start}.ds-sub-actions button:hover{background:var(--accent,oklch(0.94 0.02 85))}.ds-sub-node button:focus-visible{outline:2px solid var(--ring,oklch(0.75 0.18 85));outline-offset:2px;}@media(max-width:640px),(pointer:coarse){.ds-sub-node .ds-sub-name{min-height:44px}.ds-sub-actions button{min-width:44px;min-height:44px}}@media(prefers-reduced-motion:reduce){.ds-sub-node{transition:none}}@media(hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference){.ds-sub-node:hover{translate:0 -2px;box-shadow:0 3px 6px -3px color-mix(in oklab,var(--foreground) 18%,transparent)}}"
     }
   ],
   "narrative": {
@@ -524,6 +528,11 @@
         "name": "The Name Access Rule",
         "body": "截断只控制布局，不取消完整名称：保留 `title`、名称按钮、展开或详情入口，以及完整可访问名称。",
         "section": "typography"
+      },
+      {
+        "body": "节点卡片采用柔和主题色和 2px 上浮，无额外外圈；手动虚拟列表留白 6px，步距保持 102px/122px。拖动、触控和减少动画设置不叠加上浮；键盘实际控件保留焦点。",
+        "name": "节点悬停与裁切",
+        "section": "components"
       }
     ],
     "dos": [

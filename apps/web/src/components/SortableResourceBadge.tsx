@@ -42,6 +42,7 @@ export function SortableResourceBadge({
     <div
       data-group-member
       data-active={!!activeGroups?.length}
+      data-dragging={snapshot.isDragging || snapshot.isDropAnimating}
       ref={provided.innerRef}
       {...provided.draggableProps}
       style={getInstantDropStyle(provided, snapshot)}

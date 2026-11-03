@@ -5,10 +5,9 @@
   --console-hover: color-mix(in oklab, var(--primary) 7%, var(--card));
   --console-node-surface: color-mix(in oklab, var(--foreground) 9%, var(--card));
   --console-node-border: color-mix(in oklab, var(--foreground) 19%, var(--card));
-  --console-node-hover: color-mix(in oklab, var(--foreground) 20%, var(--card));
-  --console-node-hover-border: color-mix(in oklab, var(--foreground) 50%, var(--primary));
+  --console-node-hover: color-mix(in oklab, var(--primary) 7%, var(--card));
   --console-selected: oklch(0.81 0.09 150);
-  --console-selected-hover: oklch(0.75 0.1 150);
+  --console-selected-hover: oklch(0.84 0.075 150);
   --console-selected-text: oklch(0.26 0.045 155);
   --console-selected-border: oklch(0.48 0.11 150);
   --console-selected-control: oklch(0.4 0.1 155);
@@ -17,10 +16,9 @@
 .dark {
   --console-node-surface: color-mix(in oklab, var(--foreground) 12%, var(--card));
   --console-node-border: color-mix(in oklab, var(--foreground) 25%, var(--card));
-  --console-node-hover: color-mix(in oklab, var(--foreground) 24%, var(--card));
-  --console-node-hover-border: color-mix(in oklab, var(--foreground) 35%, var(--primary));
+  --console-node-hover: color-mix(in oklab, var(--primary) 12%, var(--console-node-surface));
   --console-selected: oklch(0.36 0.075 155);
-  --console-selected-hover: oklch(0.43 0.08 155);
+  --console-selected-hover: oklch(0.4 0.075 155);
   --console-selected-text: oklch(0.96 0.015 150);
   --console-selected-border: oklch(0.69 0.1 155);
   --console-selected-control: oklch(0.76 0.12 155);
@@ -244,7 +242,7 @@
   outline: none;
   box-shadow: none;
   background: var(--console-node-hover);
-  border-color: color-mix(in oklab, var(--primary) 40%, var(--border));
+  border-color: var(--console-node-border);
 }
 .picker-node-row.picker-node-selected,
 .picker-node-row.picker-node-selected:hover {
@@ -372,6 +370,9 @@
 .subscription-search-row label:focus-within {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
+}
+.subscription-search-row input:focus-visible {
+  outline: none;
 }
 .subscription-filters-row > label {
   flex: 0 1 190px;
@@ -664,15 +665,8 @@
     display: flex;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .picker-node-row,
-  .subscription-node-tile {
-    transition: none;
-  }
-}
-
 /* Identical state language on picker, subscription, library and group nodes.
-   Outline does not change measured virtual-row or drag geometry. */
+   Hover uses a soft tint and a small lift, never an extra card outline. */
 .node-title-line {
   display: flex;
   min-width: 0;
@@ -705,15 +699,36 @@
   height: 32px;
   padding-block: 4px;
 }
+:is(.picker-node-row, .subscription-node-tile, .router-panel .panel-node-row, .router-panel .group-member-card) {
+  outline: none;
+  transition:
+    background-color 160ms ease-out,
+    box-shadow 180ms ease-out,
+    translate 180ms ease-out;
+}
 :is(.picker-node-row, .subscription-node-tile, .router-panel .panel-node-row, .router-panel .group-member-card):is(
   :hover,
-  :focus-within
+  :has(:focus-visible)
 ) {
   background: var(--console-node-hover);
-  border-color: var(--console-node-hover-border);
-  outline: 2px solid var(--console-node-hover-border);
-  outline-offset: -1px;
-  box-shadow: none;
+  border-color: var(--console-node-border);
+  outline: none;
+}
+.router-panel .panel-node-row:focus-within {
+  outline: none;
+}
+/* The viewport owns this gutter; virtual row strides stay 102px / 122px. */
+.router-panel [data-node-scroll] {
+  padding: 6px;
+  scroll-padding: 6px;
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  :is(.picker-node-row, .subscription-node-tile, .router-panel .panel-node-row, .router-panel .group-member-card):not(
+      [data-dragging='true']
+    ):hover {
+    translate: 0 -2px;
+    box-shadow: 0 3px 6px -3px color-mix(in oklab, var(--foreground) 18%, transparent);
+  }
 }
 :is(
   .picker-node-row,
@@ -731,10 +746,9 @@
     .subscription-node-tile,
     .router-panel .panel-node-row,
     .router-panel .group-member-card
-  )[data-active='true']:is(:hover, :focus-within),
-.picker-node-row[data-selected='true']:is(:hover, :focus-within) {
+  )[data-active='true']:is(:hover, :has(:focus-visible)),
+.picker-node-row[data-selected='true']:is(:hover, :has(:focus-visible)) {
   background: var(--console-selected-hover);
-  outline-color: var(--console-selected-border);
   border-color: var(--console-selected-border);
 }
 :is(
@@ -777,5 +791,11 @@
     min-height: 44px;
     font-size: 16px;
     flex: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(.picker-node-row, .subscription-node-tile, .router-panel .panel-node-row, .router-panel .group-member-card) {
+    transition: none;
+    translate: none;
   }
 }
