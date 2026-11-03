@@ -89,7 +89,7 @@ export function ConnectivityOverview() {
     refetchOnWindowFocus: false,
     refetchInterval:
       automatic && running && !busy && visible
-        ? (q) => (q.state.data?.checking || !q.state.data?.checkedAt ? 2000 : 30000)
+        ? (q) => (!q.state.error && (q.state.data?.checking || !q.state.data?.checkedAt) ? 2000 : 30000)
         : false,
     refetchIntervalInBackground: false,
     placeholderData: (previous) => previous,
