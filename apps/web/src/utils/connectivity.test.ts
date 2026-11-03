@@ -36,7 +36,7 @@ describe('dashboard connectivity', () => {
     const duplicate = fixture()
     duplicate.targets[0].id = duplicate.targets[1].id
     const oversized = fixture()
-    oversized.targets[0].samples = Array.from({length: 19}).fill(oversized.targets[0].samples[0])
+    oversized.targets[0].samples = Array.from({ length: 19 }, (_, at) => ({ ...oversized.targets[0].samples[0], at }))
     const invalid = fixture()
     invalid.targets[0].samples[0].latencyMs = -1
     const missing = fixture()
