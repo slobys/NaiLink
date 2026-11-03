@@ -7,7 +7,7 @@ import { Button } from '~/components/ui/button'
 import { SimpleTooltip } from '~/components/ui/tooltip'
 import { cn } from '~/lib/utils'
 import { getInstantDropStyle } from '~/utils'
-import { nodeRegion } from '~/utils/node-region'
+import { nodeRegion, nodeRegionDisplayName } from '~/utils/node-region'
 
 export function SortableResourceBadge({
   id,
@@ -31,6 +31,7 @@ export function SortableResourceBadge({
   children?: React.ReactNode
 }) {
   const { t } = useTranslation()
+  const region = protocol ? nodeRegion(name) : undefined
   const card = (provided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
     <div
       data-group-member
@@ -57,8 +58,8 @@ export function SortableResourceBadge({
           data-group-member-name
           className="flex items-start gap-1.5 text-xs font-medium leading-5 [overflow-wrap:anywhere]"
         >
-          {protocol && <NodeRegionIcon region={nodeRegion(name)} />}
-          <span className="min-w-0">{name}</span>
+          {protocol && <NodeRegionIcon region={region} />}
+          <span className="min-w-0">{protocol ? nodeRegionDisplayName(name, region) : name}</span>
         </span>
         <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted-foreground">
           {protocol && <span className="shrink-0 font-medium uppercase text-primary">{protocol}</span>}
