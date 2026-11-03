@@ -89,6 +89,9 @@
   box-shadow: none;
 }
 .router-toolbar {
+  /* Keep the community pair together when apply/status controls appear.
+     The actions already wrap; let that region absorb changing content. */
+  grid-template-columns: auto max-content minmax(0, 1fr);
   column-gap: 24px;
   padding-block: 10px;
 }
@@ -464,6 +467,9 @@
   .community-link {
     height: 44px;
     min-height: 44px;
+  }
+  .community-link {
+    min-width: 44px;
   }
   .node-picker-dialog .picker-node-select {
     min-height: 44px;

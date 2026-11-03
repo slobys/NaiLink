@@ -1,11 +1,11 @@
 # NaiLink · 奶油互联
 
 支持 OpenWrt、ImmortalWrt、iStoreOS 的现代 LuCI，提供 x86_64 / ARM64 及试验性 ARMv7 / MIPS32 / MIPSel32 的
-IPK 和 APK v3 安装包。当前测试版：[openwrt-v0.6.71](https://github.com/slobys/NaiLink/releases/tag/openwrt-v0.6.71)。
+IPK 和 APK v3 安装包。当前测试版：[openwrt-v0.6.72](https://github.com/slobys/NaiLink/releases/tag/openwrt-v0.6.72)。
 
 本项目从 0.6.14 起更名为 NaiLink（奶油互联），侧边栏显示 **NaiLink**。0.6.13 及更早版本显示 **Daed**。沿用原有包名、服务、路径和配置，可继续保留数据升级。
 
-## 0.6.71 常用分流与用途检测
+## 0.6.72 常用分流与用途检测
 
 新安装预设 proxy、AI、Netflix 群组和“分流”路由；已有安装点击“常用分流”补齐，保留当前路由。AI、Netflix 未单独配置节点时暂用 proxy，改名同步路由引用。选择窗口按用途自动检测，可暂停、筛选并只添加通过节点；入口可访问不等于账号可用或 Netflix 完整解锁。结果独立缓存，最多 2 个服务请求，不覆盖普通延迟。订阅组选择、节点悬停和运行概况同步收紧，保留原配置。
 

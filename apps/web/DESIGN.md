@@ -260,6 +260,8 @@ components:
 
 ### Navigation
 
+社区链接为不可拆分的横向一组。顶部桌面网格依次为标题 `auto`、社区链接 `max-content`、操作区 `minmax(0, 1fr)`；新增应用按钮或状态文案由操作区内部换行承接。≤1200px 保留原两行布局。触控社区链接的点击区域至少 44×44px。
+
 LuCI 继续拥有页面导航。NaiLink 公共栏中的社区链接保持 YouTube 与 Telegram 的原地址及新标签行为；桌面图标配文字，小于 560px 时隐藏可见文字但保留可访问名称。链接使用当前主题表面、边界及悬停色，键盘焦点为 2px 外框及 3px 外偏移。
 
 ### Connection strip and provider assets

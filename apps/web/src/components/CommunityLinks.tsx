@@ -1,6 +1,6 @@
 export function CommunityLinks() {
   return (
-    <nav aria-label="社区频道" className="community-links flex min-w-0 flex-wrap items-center justify-center gap-2">
+    <nav aria-label="社区频道" className="community-links flex min-w-0 flex-nowrap items-center justify-center gap-2">
       <a
         href="https://www.youtube.com/@naiyou"
         target="_blank"
