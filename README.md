@@ -54,13 +54,13 @@
 
 ## 安装、更新与卸载
 
-以 **root** 登录路由器 SSH，复制下面的命令，自动安装或更新到最新公开的 NaiLink 版本（包含测试版）。
+以 **root** 登录路由器 SSH，执行下面的一行命令打开中文管理菜单。
 
 ```sh
-nl=$(uclient-fetch -O- https://slobys.github.io/NaiLink/install.sh) && sh -c "${nl:?下载为空}"
+nl=$(uclient-fetch -O- https://slobys.github.io/NaiLink/install.sh) && sh -c "${nl:?下载为空}" -- --menu
 ```
 
-安装命令无需填写版本号。安装后运行 `nailink` 即可打开中文菜单，管理升级、卸载和环境检查。
+选择 **1 安装 / 更新** 后，脚本会自动查找最新公开版本（包含测试版）。菜单也保留 **2 卸载**、**3 检查环境** 和 **0 退出**。安装后可运行 `nailink` 再次打开菜单。
 
 更新先备份并保留节点、订阅、群组与配置。**卸载会备份后删除插件和当前数据，可离线执行**；备份保留在 `/root/daed-backups`。[更新与卸载教程 →](https://slobys.github.io/NaiLink/maintenance.html)
 

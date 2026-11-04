@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parent
 def build_installer(output):
     source = ROOT.parents[1] / "openwrt/install.sh"
     header, body = source.read_bytes().split(b"\n", 1)
-    entry = header + b'\n[ "$#" -gt 0 ] || set -- --install\nset -- --latest "$@"\n' + body
+    entry = header + b'\n[ "$#" -gt 0 ] || set -- --menu\nset -- --latest "$@"\n' + body
     # The one-line command passes the downloaded script as one argument to ash.
     # Linux limits each argument to 32 pages, or 128 KiB with 4 KiB pages.
     if len(entry) >= 128 * 1024:

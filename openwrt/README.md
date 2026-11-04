@@ -436,13 +436,13 @@ CGI 网关内嵌面板，不再要求新窗口。管理服务未运行时，面�
 
 ## 安装和保留数据升级
 
-以 root 在路由器 SSH 中执行，自动安装或更新到最新公开的版本（包含测试版）。
+以 root 在路由器 SSH 中执行，打开中文管理菜单。
 
 ```sh
-nl=$(uclient-fetch -O- https://slobys.github.io/NaiLink/install.sh) && sh -c "${nl:?下载为空}"
+nl=$(uclient-fetch -O- https://slobys.github.io/NaiLink/install.sh) && sh -c "${nl:?下载为空}" -- --menu
 ```
 
-安装后可直接运行 `nailink` 再次打开菜单。选择安装/更新时才联网获取最新发布脚本；卸载可以离线执行。
+选择 **1 安装 / 更新** 后，脚本会自动查找最新公开版本（包含测试版）。菜单也提供卸载、环境检查和退出。安装后可直接运行 `nailink` 再次打开菜单，使用本机菜单卸载时可离线执行。
 
 旧版菜单无法访问 `raw.githubusercontent.com` 时，可使用上面的固定入口。
 

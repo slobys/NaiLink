@@ -255,8 +255,7 @@ exit 44''')
  cp /fixtures/releases.json "$output" ;;
 '''))
 
-    def test_latest_public_install_resolves_version_numerically_and_preserves_data(self):
-        self.published_installer()
+    def serve_public_entry(self):
         output = self.router.root / 'tmp'
         build_installer = runpy.run_path(str(test_router.PROJECT / 'docs/site/build.py'))['build_installer']
         build_installer(output)
@@ -267,11 +266,15 @@ if [ "$*" = '-O- https://slobys.github.io/NaiLink/install.sh' ]; then
     exec cat /tmp/install.sh
 fi
 ''' + fixture)
-        result = self.router.run_router('/bin/sh', '-c', self.public_install_command())
+
+    def test_latest_public_install_resolves_version_numerically_and_preserves_data(self):
+        self.published_installer()
+        self.serve_public_entry()
+        result = self.router.run_router('/bin/sh', '-c', self.public_install_command(), input='1\n')
         self.assert_network_update_preserved_data(result)
         urls = (self.router.root / 'tmp/download-urls').read_text()
         self.assertNotIn('raw.githubusercontent.com', urls)
-        self.assertNotIn('请选择', result.stdout)
+        self.assertEqual(result.stdout.count('请选择'), 1)
 
     @staticmethod
     def public_install_command():
@@ -287,9 +290,39 @@ fi
                 self.assertFalse((self.router.root / 'tmp/partial-installer-ran').exists())
                 self.unchanged()
 
+    def test_one_line_menu_opens_before_any_install_and_can_exit(self):
+        self.serve_public_entry()
+        command = self.public_install_command()
+        for invocation in (command, command.removesuffix(' -- --menu')):
+            with self.subTest(command=invocation):
+                result = self.router.run_router('/bin/sh', '-c', invocation, input='0\n')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                for label in ('1) 安装 / 更新', '2) 卸载', '3) 检查环境', '0) 退出'):
+                    self.assertIn(label, result.stdout)
+                self.assertNotIn('正在查找最新发布', result.stdout)
+                self.assertEqual((self.router.root / 'tmp/pm-calls').read_text(), '')
+                self.unchanged()
+
+    def test_one_line_menu_uninstall_requires_confirmation_and_keeps_backup(self):
+        self.serve_public_entry()
+        command = self.public_install_command()
+        result = self.router.run_router('/bin/sh', '-c', command, input='2\nn\n0\n')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('已取消卸载', result.stdout)
+        self.unchanged()
+
+        result = self.router.run_router('/bin/sh', '-c', command, input='2\ny\n')
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertNotIn('正在查找最新发布', result.stdout)
+        self.assertFalse((self.router.root / 'etc/daed').exists())
+        backup = next((self.router.root / 'root/daed-backups').glob('*.tar.gz'))
+        with tarfile.open(backup) as archive:
+            self.assertEqual(archive.extractfile('etc/daed/wing.db').read(), b'existing database')
+
     def test_latest_public_menu_can_check_using_release_api_when_feed_fails(self):
         self.published_installer(atom_failure=True)
-        result = self.menu('3\n', '--latest')
+        self.serve_public_entry()
+        result = self.router.run_router('/bin/sh', '-c', self.public_install_command(), input='3\n')
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertIn('找到发布版 0.7.99', result.stdout)
         self.assertNotIn('install ', (self.router.root / 'tmp/pm-calls').read_text())
