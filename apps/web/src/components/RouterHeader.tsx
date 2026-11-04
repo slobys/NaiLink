@@ -74,58 +74,76 @@ export function RouterHeader() {
   }
   return (
     <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur-sm">
-      <div className="router-toolbar mx-auto grid max-w-[1400px] items-center gap-3 px-4 py-3 lg:px-8">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <Activity className="h-5 w-5 text-primary" aria-hidden="true" />
-          <h1 className="text-base font-semibold tracking-tight">{title}</h1>
+      <div className="router-toolbar mx-auto max-w-[1400px] px-4 lg:px-8">
+        <div className="router-toolbar-brand">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <Activity className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
+            <h1 className="text-base font-semibold tracking-tight">{title}</h1>
+          </div>
+          <CommunityLinks />
         </div>
-        <CommunityLinks />
-        <div className="router-toolbar-actions flex flex-wrap items-center gap-2">
-          <RouterVersion />
-          <RouterGeodata />
-          <RouterCore />
-          <ThemePicker variant="compact" />
-          <span
-            role="status"
-            className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${running ? 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-300' : 'bg-muted text-muted-foreground'}`}
-          >
-            <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
-            {query.isPending || query.isError ? t('panel.checking') : running ? t('panel.running') : t('panel.stopped')}
-          </span>
-          {(modified || (saving && !run.isPending)) && (
-            <span role="status" className="text-xs text-muted-foreground">
-              {saving && !run.isPending ? t('panel.saving') : t('panel.unapplied')}
-            </span>
-          )}
-          {modified && (
-            <Button
-              size="sm"
-              disabled={saving || query.isError}
-              aria-busy={run.isPending && operation === 'apply'}
-              onClick={() => invoke('apply')}
-            >
-              {run.isPending && operation === 'apply' ? t('panel.applying') : t('panel.apply')}
-            </Button>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={saving || query.isPending || query.isError}
-            aria-busy={run.isPending && operation === 'toggle'}
-            onClick={() => invoke('toggle')}
-          >
-            <Power className="h-3.5 w-3.5" aria-hidden="true" />
-            {run.isPending && operation === 'toggle'
-              ? running
-                ? t('panel.stopping')
-                : t('panel.starting')
-              : running
-                ? t('panel.stop')
-                : t('panel.start')}
-          </Button>
+        <div className="router-toolbar-actions">
+          <div className="router-toolbar-tools" role="group" aria-label="维护设置">
+            <RouterVersion />
+            <RouterGeodata />
+            <RouterCore />
+            <ThemePicker variant="compact" />
+          </div>
+          <div className="router-toolbar-session" role="group" aria-label="运行控制">
+            <div className="router-toolbar-state">
+              <span
+                role="status"
+                className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${running ? 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-300' : 'bg-muted text-muted-foreground'}`}
+              >
+                <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
+                {query.isPending || query.isError
+                  ? t('panel.checking')
+                  : running
+                    ? t('panel.running')
+                    : t('panel.stopped')}
+              </span>
+              {(modified || (saving && !run.isPending)) && (
+                <span role="status" className={saving && !run.isPending ? 'text-xs text-muted-foreground' : 'sr-only'}>
+                  {saving && !run.isPending ? t('panel.saving') : t('panel.unapplied')}
+                </span>
+              )}
+            </div>
+            <div className="router-config-actions">
+              {modified && (
+                <Button
+                  size="sm"
+                  title={t('panel.unapplied')}
+                  disabled={saving || query.isError}
+                  aria-busy={run.isPending && operation === 'apply'}
+                  onClick={() => invoke('apply')}
+                >
+                  {run.isPending && operation === 'apply' ? t('panel.applying') : t('panel.apply')}
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={saving || query.isPending || query.isError}
+                aria-busy={run.isPending && operation === 'toggle'}
+                onClick={() => invoke('toggle')}
+              >
+                <Power className="h-3.5 w-3.5" aria-hidden="true" />
+                {run.isPending && operation === 'toggle'
+                  ? running
+                    ? t('panel.stopping')
+                    : t('panel.starting')
+                  : running
+                    ? t('panel.stop')
+                    : t('panel.start')}
+              </Button>
+            </div>
+          </div>
         </div>
         {configuring && (
-          <div role="status" className="col-span-full rounded-lg bg-primary/5 px-3 py-2 text-sm text-muted-foreground">
+          <div
+            role="status"
+            className="router-toolbar-message rounded-lg bg-primary/5 px-3 py-2 text-sm text-muted-foreground"
+          >
             {job?.action === 'config_stop' ? '正在停止代理' : '正在应用配置'}
             ，关闭页面后后台任务仍会继续，请勿重复提交。
           </div>
@@ -133,7 +151,7 @@ export function RouterHeader() {
         {!configuring && !run.isPending && (failure || query.isError) && (
           <div
             role="alert"
-            className="col-span-full flex w-full flex-wrap items-center gap-3 rounded-lg border border-destructive/25 bg-destructive/5 p-3 text-sm"
+            className="router-toolbar-message flex w-full flex-wrap items-center gap-3 rounded-lg border border-destructive/25 bg-destructive/5 p-3 text-sm"
           >
             <span>{failure || t('panel.loadFailed')}</span>
             <Button

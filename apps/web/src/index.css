@@ -866,16 +866,6 @@ form {
   .panel-workspace[data-workspace='dashboard'] #panel-monitor {
     padding: 14px;
   }
-  .router-toolbar {
-    gap: 8px;
-  }
-  .router-toolbar-actions {
-    width: 100%;
-    justify-content: flex-end;
-  }
-  .router-toolbar-actions > [role='status']:first-child {
-    margin-right: auto;
-  }
 }
 
 .traffic-chart {
@@ -1352,79 +1342,6 @@ form {
   }
   .subscription-actions-menu [role='menuitem'] {
     min-height: 44px;
-  }
-}
-
-.router-toolbar {
-  grid-template-columns: auto minmax(0, 1fr) auto;
-}
-.router-toolbar-actions {
-  justify-content: flex-end;
-  min-width: 0;
-}
-.router-toolbar-actions > button {
-  height: 40px;
-  min-height: 40px;
-}
-.community-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 40px;
-  padding: 0 14px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--card);
-  font-size: 13px;
-  font-weight: 600;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
-}
-.community-link:hover {
-  border-color: color-mix(in oklab, var(--primary) 45%, var(--border));
-  background: var(--accent);
-}
-.community-link:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 3px;
-}
-@media (pointer: coarse) {
-  .router-toolbar-actions > button,
-  .community-link {
-    height: 44px;
-    min-height: 44px;
-  }
-}
-@media (max-width: 900px) {
-  .router-toolbar {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-  .router-toolbar-actions {
-    grid-column: 1 / -1;
-  }
-  .router-toolbar-actions > button {
-    height: 44px;
-    min-height: 44px;
-  }
-  .community-link {
-    min-height: 44px;
-    padding-inline: 10px;
-    gap: 6px;
-  }
-}
-@media (max-width: 370px) {
-  .router-toolbar > .community-links {
-    grid-column: 1 / -1;
-    justify-content: flex-start;
-  }
-  .community-link {
-    font-size: 12px;
-    gap: 4px;
-    padding-inline: 6px;
-  }
-  .community-link svg {
-    width: 18px;
-    height: 18px;
   }
 }
 

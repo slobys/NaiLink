@@ -89,25 +89,172 @@
   box-shadow: none;
 }
 .router-toolbar {
-  /* Keep the community pair together when apply/status controls appear.
-     The actions already wrap; let that region absorb changing content. */
-  grid-template-columns: auto max-content minmax(0, 1fr);
-  column-gap: 24px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
   padding-block: 10px;
 }
-.router-toolbar-actions {
+.router-toolbar-brand,
+.router-toolbar-tools,
+.router-toolbar-session,
+.router-toolbar-state,
+.router-config-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
   gap: 8px;
 }
-.router-toolbar-actions > button,
+.router-toolbar-brand {
+  gap: 16px;
+}
+.router-toolbar-brand h1 {
+  white-space: nowrap;
+}
+.router-toolbar-actions {
+  display: flex;
+  flex: 1 1 max-content;
+  max-width: 100%;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 16px;
+}
+.router-toolbar-message {
+  flex: 0 0 100%;
+  min-width: 0;
+}
+.router-toolbar-actions button,
 .community-link {
   height: 36px;
   min-height: 36px;
+  white-space: nowrap;
   border-radius: 8px;
   box-shadow: none;
 }
 .community-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  background: var(--card);
+  font-size: 13px;
+  font-weight: 600;
   padding-inline: 10px;
   gap: 7px;
+}
+.community-link:hover {
+  border-color: color-mix(in oklab, var(--primary) 45%, var(--border));
+  background: var(--accent);
+}
+.community-link:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+.router-panel .group-member-card[data-member-kind='node'] {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 24px;
+  gap: 0 4px;
+  align-items: center;
+}
+.group-member-card[data-member-kind='node'] > .group-member-body {
+  display: contents;
+}
+.group-member-card[data-member-kind='node'] .group-member-handle {
+  grid-area: 1 / 1;
+}
+.group-member-card[data-member-kind='node'] .group-member-remove {
+  grid-area: 1 / 3;
+}
+.group-member-heading {
+  grid-area: 1 / 2;
+  display: flex;
+  min-width: 0;
+  min-height: 1.5rem;
+  align-items: center;
+  gap: 5px;
+}
+.group-member-name-control {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 1.5rem;
+  align-items: center;
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.5rem;
+  border-radius: 3px;
+}
+.group-member-name-control:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.group-member-card[data-member-kind='node'] .group-member-details {
+  grid-row: 2;
+  grid-column: 1 / -1;
+  height: 1rem;
+  min-height: 1rem;
+  flex-wrap: nowrap;
+  line-height: 1rem;
+  white-space: nowrap;
+  gap: 4px;
+}
+.group-member-card[data-member-kind='node'] .group-member-meta {
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+.group-member-card[data-dragging='true'] .node-name-text {
+  animation: none;
+  will-change: auto;
+}
+@media (max-width: 640px) {
+  .router-toolbar-brand {
+    width: 100%;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .router-toolbar-actions {
+    flex-basis: 100%;
+  }
+  .router-toolbar-tools {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .router-toolbar-tools > button {
+    min-width: 0;
+    padding-inline: 8px;
+    gap: 6px;
+    font-size: 0.75rem;
+  }
+  .router-toolbar-session {
+    display: grid;
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .router-config-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .router-config-actions > button:only-child {
+    grid-column: 2;
+  }
+}
+@media (max-width: 640px), (pointer: coarse) {
+  .router-toolbar-actions button,
+  .community-link {
+    height: 44px;
+    min-height: 44px;
+  }
+  .community-link {
+    min-width: 44px;
+  }
+  .group-member-name-control,
+  .group-member-card[data-member-kind='node'] :is(.group-member-handle, .group-member-remove) {
+    min-height: 44px;
+  }
 }
 .router-panel .panel-select {
   color: var(--console-secondary);
@@ -452,25 +599,7 @@
   max-width: 100%;
 }
 
-@media (max-width: 1200px) {
-  .router-toolbar {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 8px 16px;
-  }
-  .router-toolbar-actions {
-    grid-column: 1 / -1;
-    flex-wrap: wrap;
-  }
-}
 @media (max-width: 640px), (pointer: coarse) {
-  .router-toolbar-actions > button,
-  .community-link {
-    height: 44px;
-    min-height: 44px;
-  }
-  .community-link {
-    min-width: 44px;
-  }
   .node-picker-dialog .picker-node-select {
     min-height: 44px;
   }
@@ -638,12 +767,6 @@
   .service-logo img {
     width: 20px;
     height: 20px;
-  }
-  .router-toolbar > .community-links {
-    grid-column: 2;
-  }
-  .community-link {
-    padding-inline: 10px;
   }
   .community-link > span {
     display: none;

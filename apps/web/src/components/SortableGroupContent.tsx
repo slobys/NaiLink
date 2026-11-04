@@ -191,7 +191,8 @@ export function SortableGroupContent({
   useLayoutEffect(() => {
     const element = contentRef.current
     if (!element) return
-    const observer = new ResizeObserver(([entry]) => setColumns(entry.contentRect.width >= 360 ? 2 : 1))
+    // Keep protocol and latency readable; only the address should yield space.
+    const observer = new ResizeObserver(([entry]) => setColumns(entry.contentRect.width >= 400 ? 2 : 1))
     observer.observe(element)
     return () => observer.disconnect()
   }, [])

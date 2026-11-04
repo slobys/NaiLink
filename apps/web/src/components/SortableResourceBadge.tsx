@@ -3,13 +3,14 @@ import { Draggable } from '@hello-pangea/dnd'
 import { GripVertical, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { NodeActiveMark } from '~/components/NodeActiveMark'
-import { NodeRegionIcon } from '~/components/NodeRegionIcon'
+import { NodeName } from '~/components/NodeName'
 import { Button } from '~/components/ui/button'
+import { Popover, PopoverContent, PopoverTrigger } from '~/components/ui/popover'
 import { SimpleTooltip } from '~/components/ui/tooltip'
 import { useRuntimeNodes } from '~/hooks/useRuntimeNodes'
 import { cn } from '~/lib/utils'
 import { getInstantDropStyle } from '~/utils'
-import { nodeRegion, nodeRegionDisplayName } from '~/utils/node-region'
+import { nodeProtocolLabel } from '~/utils/node-protocol-label'
 
 export function SortableResourceBadge({
   id,
@@ -37,10 +38,12 @@ export function SortableResourceBadge({
   const { t } = useTranslation()
   const runtime = useRuntimeNodes(!!nodeId)
   const activeGroups = nodeId ? runtime.active.get(nodeId) : undefined
-  const region = protocol ? nodeRegion(name) : undefined
+  const isNode = !!nodeId || !!protocol
   const card = (provided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
     <div
       data-group-member
+      data-member-kind={isNode ? 'node' : 'subscription'}
+      data-name-card={isNode ? true : undefined}
       data-active={!!activeGroups?.length}
       data-dragging={snapshot.isDragging || snapshot.isDropAnimating}
       ref={provided.innerRef}
@@ -61,23 +64,57 @@ export function SortableResourceBadge({
         <GripVertical className="h-4 w-4 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground/70" />
       </div>
 
-      <div className="min-w-0 flex-1">
-        <span
-          data-group-member-name
-          className="flex items-start gap-1.5 text-xs font-medium leading-5 [overflow-wrap:anywhere]"
-        >
-          {protocol && <NodeRegionIcon region={region} />}
-          <span className="min-w-0">{protocol ? nodeRegionDisplayName(name, region) : name}</span>
-          <NodeActiveMark groups={activeGroups} />
-        </span>
-        <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted-foreground">
-          {protocol && <span className="shrink-0 font-medium uppercase text-primary">{protocol}</span>}
+      <div className="group-member-body min-w-0 flex-1">
+        {isNode ? (
+          <div className="group-member-heading">
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  data-group-member-name
+                  className="group-member-name-control"
+                  aria-label={`${name}，查看完整名称`}
+                >
+                  <NodeName name={name} showRegion />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="start"
+                aria-label="节点信息"
+                className="max-w-[calc(100vw-2rem)] space-y-1 text-sm"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <p className="break-words font-medium">{name}</p>
+                {address && <p className="break-all text-xs text-muted-foreground">{address}</p>}
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  {protocol && <span>{nodeProtocolLabel(protocol)}</span>}
+                  {meta}
+                </div>
+                {children && <div className="text-xs text-muted-foreground">{children}</div>}
+              </PopoverContent>
+            </Popover>
+            <NodeActiveMark groups={activeGroups} />
+          </div>
+        ) : (
+          <span
+            data-group-member-name
+            className="flex items-start gap-1.5 text-xs font-medium leading-5 [overflow-wrap:anywhere]"
+          >
+            {name}
+          </span>
+        )}
+        <div className="group-member-details mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] text-muted-foreground">
+          {protocol && (
+            <span className="shrink-0 font-medium text-primary" title={protocol}>
+              {nodeProtocolLabel(protocol)}
+            </span>
+          )}
           {address && (
             <span className="min-w-0 flex-1 truncate" title={address}>
               {address}
             </span>
           )}
-          {meta && <span className="min-w-0 max-w-full [overflow-wrap:anywhere]">{meta}</span>}
+          {meta && <span className="group-member-meta min-w-0 max-w-full [overflow-wrap:anywhere]">{meta}</span>}
         </div>
       </div>
 
@@ -106,7 +143,7 @@ export function SortableResourceBadge({
     <Draggable draggableId={id} index={index} isDragDisabled={disabled}>
       {(provided, snapshot) => {
         const cardElement = card(provided, snapshot)
-        if (children) {
+        if (children && !isNode) {
           return <SimpleTooltip label={<span className="text-xs">{children}</span>}>{cardElement}</SimpleTooltip>
         }
         return cardElement
