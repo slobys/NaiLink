@@ -257,7 +257,7 @@ func TestRouterCoreProtocolInteroperability(t *testing.T) {
 		log := logrus.New()
 		log.SetOutput(io.Discard)
 		attempts := 0
-		var failed *routerSingBoxSession
+		var sessions []*routerSingBoxSession
 		recovered, err := routerStartPrivateProbe(ctx, func() (routerCoreSession, error) {
 			attempts++
 			s, e := newRouterNativeSession(ctx, log, privateConf, nil, false, "sing-box", func(profile sbObject, _ sbPorts) {
@@ -265,8 +265,8 @@ func TestRouterCoreProtocolInteroperability(t *testing.T) {
 					profile["experimental"].(sbObject)["clash_api"].(sbObject)["external_controller"] = busy.Addr().String()
 				}
 			})
-			if attempts == 1 && e == nil {
-				failed = s.(*routerSingBoxSession)
+			if e == nil {
+				sessions = append(sessions, s.(*routerSingBoxSession))
 			}
 			return s, e
 		})
@@ -274,16 +274,24 @@ func TestRouterCoreProtocolInteroperability(t *testing.T) {
 			t.Fatal("actual native listener collision did not recover", attempts, err)
 		}
 		defer routerStopProbe(recovered)
-		if attempts != 2 || failed == nil {
+		// A subsequent private port can also collide with TIME_WAIT left by
+		// preceding real protocols. Recovery permits at most three attempts;
+		// verify each discarded process instead of requiring exactly two.
+		if attempts < 2 || attempts > 3 || len(sessions) != attempts {
 			t.Fatal("native startup bypassed the controlled collision", attempts)
 		}
-		select {
-		case <-failed.exit:
-		default:
-			t.Fatal("failed private process survived its replacement")
-		}
-		if _, err := os.Stat(failed.dir); !os.IsNotExist(err) {
-			t.Fatal("failed private configuration directory survived", err)
+		for i, failed := range sessions[:len(sessions)-1] {
+			if !failed.portConflict.Load() {
+				t.Fatal("private startup retried a non-collision failure", i+1)
+			}
+			select {
+			case <-failed.exit:
+			default:
+				t.Fatal("failed private process survived its replacement", i+1)
+			}
+			if _, err := os.Stat(failed.dir); !os.IsNotExist(err) {
+				t.Fatal("failed private configuration directory survived", i+1, err)
+			}
 		}
 		if connection, err := net.DialTimeout("tcp4", busy.Addr().String(), time.Second); err != nil {
 			t.Fatal("recovery modified the unrelated occupied listener", err)
