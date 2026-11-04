@@ -3,9 +3,25 @@ name: Online documentation
 on:
   push:
     branches: [main]
-    paths: ['docs/site/**', 'tests/docs/**', '.github/workflows/docs.yml', 'README.md', 'openwrt/Makefile']
+    paths:
+      [
+        'docs/site/**',
+        'tests/docs/**',
+        '.github/workflows/docs.yml',
+        'README.md',
+        'openwrt/Makefile',
+        'openwrt/install.sh',
+      ]
   pull_request:
-    paths: ['docs/site/**', 'tests/docs/**', '.github/workflows/docs.yml', 'README.md', 'openwrt/Makefile']
+    paths:
+      [
+        'docs/site/**',
+        'tests/docs/**',
+        '.github/workflows/docs.yml',
+        'README.md',
+        'openwrt/Makefile',
+        'openwrt/install.sh',
+      ]
   workflow_dispatch:
 
 permissions:

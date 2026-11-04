@@ -436,19 +436,15 @@ CGI 网关内嵌面板，不再要求新窗口。管理服务未运行时，面�
 
 ## 安装和保留数据升级
 
-以 root 在路由器 SSH 中执行，打开中文菜单后选择 **1 安装 / 更新**：
+以 root 在路由器 SSH 中执行，自动安装或更新到最新公开的版本（包含测试版）。
 
 ```sh
-uclient-fetch -O /tmp/nailink-install.sh https://github.com/slobys/NaiLink/releases/download/openwrt-v0.6.26/install.sh && sh /tmp/nailink-install.sh --menu --release openwrt-v0.6.26
+nl=$(uclient-fetch -O- https://slobys.github.io/NaiLink/install.sh) && sh -c "${nl:?下载为空}"
 ```
 
 安装后可直接运行 `nailink` 再次打开菜单。选择安装/更新时才联网获取最新发布脚本；卸载可以离线执行。
 
-若菜单提示无法解析 `raw.githubusercontent.com`，旧版也可用下面的命令绕过 Raw 入口，直接下载指定发行版：
-
-```sh
-nailink --install --release openwrt-v0.6.26
-```
+旧版菜单无法访问 `raw.githubusercontent.com` 时，可使用上面的固定入口。
 
 如果 `github.com` 也无法解析，请先检查路由器自身的 DNS：`nslookup github.com`。
 手机或电脑能够上网，并不能证明路由器 SSH 中的域名解析正常；无需因此删除节点或清空配置。
@@ -464,11 +460,7 @@ nailink --install --release openwrt-v0.6.26
 升级后刷新后台，再进入 **服务 → NaiLink**（0.6.13 及更早版本为 **Daed**）；仍显示旧内容时按 `Ctrl+F5`。
 无需修改监听地址。保留旧数据及原有排序、配色偏好，不重建数据库。
 
-固定版本的非交互安装/升级仍可执行：
-
-```sh
-uclient-fetch -O /tmp/nailink-install.sh https://github.com/slobys/NaiLink/releases/download/openwrt-v0.6.26/install.sh && sh /tmp/nailink-install.sh --install --release openwrt-v0.6.26
-```
+需要安装指定版本时，可到发布页下载对应的 `install.sh`，用 `sh ./install.sh --install` 执行。
 
 `--check` 仅检查环境；`--dry-run` 另下载并核对本机安装包，APK 使用已有
 软件源索引模拟依赖。预检失败不会停止或卸载现有 Daed。正式安装会先更新
@@ -484,10 +476,8 @@ uclient-fetch -O /tmp/nailink-install.sh https://github.com/slobys/NaiLink/relea
 ```sh
 # 安装成功后无需重新下载脚本
 daed-router-setup --uninstall
-# 也可以使用下载的脚本
-sh /tmp/nailink-install.sh --uninstall
 # 仅在需要清空旧配置、或替换其他来源的 daed 包时使用
-sh /tmp/nailink-install.sh --reinstall
+daed-router-setup --reinstall
 ```
 
 卸载、全新重装会先备份配置、数据库及 WAL，再移除 Daed 包和原数据。

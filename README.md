@@ -54,13 +54,13 @@
 
 ## 安装、更新与卸载
 
-以 **root** 登录路由器 SSH，执行下面一行，打开中文菜单：
+以 **root** 登录路由器 SSH，复制下面的命令，自动安装或更新到最新公开的 NaiLink 版本（包含测试版）。
 
 ```sh
-uclient-fetch -O /tmp/nailink-install.sh https://github.com/slobys/NaiLink/releases/download/openwrt-v0.6.74/install.sh && sh /tmp/nailink-install.sh --menu --release openwrt-v0.6.74
+nl=$(uclient-fetch -O- https://slobys.github.io/NaiLink/install.sh) && sh -c "${nl:?下载为空}"
 ```
 
-选择 **1 安装 / 更新**。安装后运行 `nailink` 可再次打开菜单，也可选择 **2 卸载**、**3 检查环境** 或 **0 退出**。
+安装命令无需填写版本号。安装后运行 `nailink` 即可打开中文菜单，管理升级、卸载和环境检查。
 
 更新先备份并保留节点、订阅、群组与配置。**卸载会备份后删除插件和当前数据，可离线执行**；备份保留在 `/root/daed-backups`。[更新与卸载教程 →](https://slobys.github.io/NaiLink/maintenance.html)
 
@@ -72,7 +72,7 @@ uclient-fetch -O /tmp/nailink-install.sh https://github.com/slobys/NaiLink/relea
 
 保留 0.6.30 的代理就绪检查与有效 DNS 分流关联恢复，可用 `nailink --check-network` 查看诊断。[恢复机制与限制 →](https://slobys.github.io/NaiLink/maintenance.html#restart-recovery)
 
-旧版菜单遇到 Raw 下载失败时，可运行 `nailink --install --release openwrt-v0.6.74`。如果 GitHub 也无法解析，先检查路由器自身 DNS。[下载故障排查 →](https://slobys.github.io/NaiLink/troubleshooting.html#download)
+旧版菜单遇到 Raw 下载失败时，可用上面的固定入口更新。如果 GitHub 也无法解析，先检查路由器自身 DNS。[下载故障排查 →](https://slobys.github.io/NaiLink/troubleshooting.html#download)
 
 **0.6.42 修复 Clash 订阅**：支持内嵌 `proxies` 的 YAML / JSON、SIP008 和普通 / Base64 节点列表；更新失败保留原节点，内容未变时保留节点 ID。仅提取节点，不导入订阅中的 DNS、路由或监听设置。[格式与限制 →](https://slobys.github.io/NaiLink/nodes.html#clash)
 

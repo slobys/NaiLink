@@ -1,4 +1,5 @@
 import contextlib
+import html
 import importlib.util
 import io
 import json
@@ -48,18 +49,27 @@ class HandbookTest(unittest.TestCase):
             with contextlib.redirect_stdout(io.StringIO()):
                 builder.build(self.output)
 
-    def test_version_and_install_entry_match_runtime(self):
+    def test_version_matches_runtime_and_install_entry_is_fixed(self):
         config = json.loads((ROOT / "docs/site/site.json").read_text(encoding="utf-8"))
         makefile = (ROOT / "openwrt/Makefile").read_text(encoding="utf-8")
         runtime_version = re.search(r"PKG_VERSION:=.*,(\d+\.\d+\.\d+)\)", makefile).group(1)
         self.assertEqual(config["version"], runtime_version)
         self.assertEqual(config["release"], "openwrt-v" + runtime_version)
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        openwrt_readme = (ROOT / "openwrt/README.md").read_text(encoding="utf-8")
         installation = (self.output / "installation.html").read_text(encoding="utf-8")
         for text in (readme, installation):
-            self.assertIn(config["release"] + "/install.sh", text)
+            self.assertNotIn("--release " + config["release"], text)
             self.assertIn("ARMv7", text)
             self.assertIn("暂不推荐", text)
+        command = html.unescape(re.search(r'<code class="language-sh">(.*?)</code>', installation, re.S).group(1))
+        self.assertEqual(command, f'nl=$(uclient-fetch -O- {config["url"]}install.sh) && sh -c "${{nl:?下载为空}}"')
+        for text in (readme, openwrt_readme):
+            self.assertIn(f"```sh\n{command}\n```", text)
+        header, body = (ROOT / "openwrt/install.sh").read_bytes().split(b"\n", 1)
+        entry = (self.output / "install.sh").read_bytes()
+        self.assertTrue(entry.startswith(header + b'\n[ "$#" -gt 0 ] || set -- --install\nset -- --latest "$@"\n'))
+        self.assertTrue(entry.endswith(body))
         self.assertNotIn("$release", installation)
         self.assertNotIn("$version", installation)
 

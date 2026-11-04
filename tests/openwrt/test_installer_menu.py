@@ -1,8 +1,10 @@
 """Exercise menu choices against real BusyBox/UCI in a disposable router."""
+import hashlib
 import json
 import os
 import pty
 import re
+import runpy
 import select
 import subprocess
 import tarfile
@@ -226,6 +228,80 @@ exit 44''')
         source = re.sub(r'^release=openwrt-v\d+\.\d+\.\d+$', 'release=openwrt-v0.7.99', source, flags=re.MULTILINE)
         self.router.write('/fixtures/latest-installer', source)
         self.router.assets(version='0.7.99')
+
+    def published_installer(self, *, atom_failure=False, bad_checksum=False):
+        self.prepare_network_update()
+        self.downloader('curl')
+        tags = ['v8.0.0', 'openwrt-v0.7.9', 'openwrt-v0.7.99', 'openwrt-v0.6.100']
+        self.router.write('/fixtures/releases.atom', '\n'.join(
+            f'    <link rel="alternate" type="text/html" href="https://github.com/slobys/NaiLink/releases/tag/{tag}"/>'
+            for tag in tags
+        ))
+        self.router.write('/fixtures/releases.json', json.dumps([
+            *({'tag_name': tag, 'draft': False} for tag in tags),
+            {'tag_name': 'openwrt-v9.0.0', 'draft': True},
+        ]))
+        script = (self.router.root / 'fixtures/latest-installer').read_bytes()
+        checksum = '0' * 64 if bad_checksum else hashlib.sha256(script).hexdigest()
+        self.router.write('/assets/SHA256SUMS', f'{checksum}  install.sh\n')
+        self.router.write('/assets/install.sh', script)
+        curl = self.router.root / 'bin/curl'
+        curl.write_text(curl.read_text().replace('case "$url" in\n', '''case "$url" in
+ https://github.com/slobys/NaiLink/releases.atom) ''' + (
+            'exit 22' if atom_failure else 'cp /fixtures/releases.atom "$output"'
+        ) + ''' ;;
+ 'https://api.github.com/repos/slobys/NaiLink/releases?per_page=30')
+ [ "$accept" = 'Accept: application/vnd.github+json' ] || exit 45
+ cp /fixtures/releases.json "$output" ;;
+'''))
+
+    def test_latest_public_install_resolves_version_numerically_and_preserves_data(self):
+        self.published_installer()
+        output = self.router.root / 'tmp'
+        build_installer = runpy.run_path(str(test_router.PROJECT / 'docs/site/build.py'))['build_installer']
+        build_installer(output)
+        downloader = self.router.root / 'bin/uclient-fetch'
+        shebang, fixture = downloader.read_text().split('\n', 1)
+        downloader.write_text(shebang + '''
+if [ "$*" = '-O- https://slobys.github.io/NaiLink/install.sh' ]; then
+    exec cat /tmp/install.sh
+fi
+''' + fixture)
+        result = self.router.run_router('/bin/sh', '-c', self.public_install_command())
+        self.assert_network_update_preserved_data(result)
+        urls = (self.router.root / 'tmp/download-urls').read_text()
+        self.assertNotIn('raw.githubusercontent.com', urls)
+        self.assertNotIn('请选择', result.stdout)
+
+    @staticmethod
+    def public_install_command():
+        readme = (test_router.PROJECT / 'README.md').read_text(encoding='utf-8')
+        return readme.split('```sh\n', 1)[1].split('\n```', 1)[0]
+
+    def test_one_line_install_refuses_failed_and_empty_downloads(self):
+        for downloader in ("echo 'touch /tmp/partial-installer-ran'; exit 4", 'exit 0'):
+            with self.subTest(downloader=downloader):
+                self.router.script('/bin/uclient-fetch', downloader)
+                result = self.router.run_router('/bin/sh', '-c', self.public_install_command())
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse((self.router.root / 'tmp/partial-installer-ran').exists())
+                self.unchanged()
+
+    def test_latest_public_menu_can_check_using_release_api_when_feed_fails(self):
+        self.published_installer(atom_failure=True)
+        result = self.menu('3\n', '--latest')
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn('找到发布版 0.7.99', result.stdout)
+        self.assertNotIn('install ', (self.router.root / 'tmp/pm-calls').read_text())
+        self.unchanged()
+
+    def test_latest_public_installer_rejects_bad_checksum_without_changing_service(self):
+        self.published_installer(bad_checksum=True)
+        result = self.menu('1\n', '--latest')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('安装脚本校验失败', result.stderr)
+        self.unchanged()
+        self.assertFalse(list((self.router.root / 'tmp').glob('daed-install.*')))
 
     def downloader(self, client, raw_failure=False, all_failure=False):
         self.router.script('/bin/' + client, '''output=''; url=''; accept=''

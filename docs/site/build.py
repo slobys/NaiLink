@@ -12,6 +12,17 @@ from urllib.parse import unquote, urlsplit
 ROOT = Path(__file__).resolve().parent
 
 
+def build_installer(output):
+    source = ROOT.parents[1] / "openwrt/install.sh"
+    header, body = source.read_bytes().split(b"\n", 1)
+    entry = header + b'\n[ "$#" -gt 0 ] || set -- --install\nset -- --latest "$@"\n' + body
+    # The one-line command passes the downloaded script as one argument to ash.
+    # Linux limits each argument to 32 pages, or 128 KiB with 4 KiB pages.
+    if len(entry) >= 128 * 1024:
+        raise ValueError("Installer exceeds the one-line command argument limit")
+    (output / "install.sh").write_bytes(entry)
+
+
 class Document(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
@@ -80,6 +91,7 @@ def build(output):
     shutil.copytree(ROOT / "assets", output / "assets", dirs_exist_ok=True)
     for name in ("site.css", "site.js"):
         shutil.copyfile(ROOT / name, output / name)
+    build_installer(output)
     search = []
     for number, page in enumerate(pages):
         source = ROOT / "content" / f"{page['id']}.html"
@@ -141,7 +153,7 @@ def build(output):
     urls = "".join(f'<url><loc>{config["url"]}{p["id"]}.html</loc></url>' for p in pages)
     (output / "sitemap.xml").write_text(f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>', encoding="utf-8")
     expected = {f'{p["id"]}.html' for p in pages} | {
-        "404.html", "site.css", "site.js", "search-index.json", ".nojekyll", "robots.txt", "sitemap.xml"
+        "404.html", "site.css", "site.js", "install.sh", "search-index.json", ".nojekyll", "robots.txt", "sitemap.xml"
     }
     expected |= {"assets/" + str(p.relative_to(ROOT / "assets")).replace("\\", "/") for p in (ROOT / "assets").rglob("*") if p.is_file()}
     actual = {str(p.relative_to(output)).replace("\\", "/") for p in output.rglob("*") if p.is_file()}

@@ -56,24 +56,29 @@
     回调加载。页面能打开、数据库能读写，均不能证明透明代理正常。自定义内核通过最小探针后，仍需要完整网络验证，不要绕过检查强装。
   </p>
 </div>
-<h2 id="install">通过中文菜单安装</h2>
-<p>用 SSH 以 <strong>root</strong> 登录路由器，完整复制下面这一行：</p>
-<pre><code class="language-sh">uclient-fetch -O /tmp/nailink-install.sh https://github.com/slobys/NaiLink/releases/download/$release/install.sh &amp;&amp; sh /tmp/nailink-install.sh --menu --release $release</code></pre>
-<p>这是当前 <strong>v$version 测试版</strong>的固定版本入口。下载成功后才会执行脚本，不需要手动挑选 CPU 或包格式。</p>
+<h2 id="install">自动安装最新版</h2>
+<p>用 SSH 以 <strong>root</strong> 登录路由器，完整复制下面的命令。</p>
+<pre><code class="language-sh">nl=$$(uclient-fetch -O- ${url}install.sh) &amp;&amp; sh -c "$${nl:?下载为空}"</code></pre>
+<p>
+  这个地址固定，每次执行时查找最新公开的 NaiLink
+  版本（包含测试版）。安装器会校验对应的安装脚本，并自动选择适合路由器的安装包。
+</p>
 <ol>
-  <li>在菜单输入 <code>1</code>，选择“安装 / 更新”。</li>
   <li>等待环境检查、依赖安装与包校验完成。不要同时执行第二次安装。</li>
   <li>安装成功后刷新路由器后台，进入 <strong>服务 → NaiLink</strong>。</li>
   <li>继续阅读<a href="quick-start.html">首次设置</a>，导入节点并应用配置。</li>
 </ol>
+<p>安装后运行 <code>nailink</code>，即可打开中文管理菜单。</p>
 <p>
   安装器结合 CPU、包管理器架构与 IPK/APK
   格式选择安装包，并核验下载内容。内核检查会临时加载并关闭<strong>未挂载到网卡</strong>的探针；不会为通过检查而更改
   JIT、DNS、路由或防火墙。
 </p>
 <h2 id="check">只检查环境，暂不安装</h2>
-<p>已安装用户运行 <code>nailink</code>，选择 <strong>3 检查环境</strong>。首次安装也可先下载脚本再检查：</p>
-<pre><code class="language-sh">uclient-fetch -O /tmp/nailink-install.sh https://github.com/slobys/NaiLink/releases/download/$release/install.sh &amp;&amp; sh /tmp/nailink-install.sh --check --release $release</code></pre>
+<p>
+  首次安装前，可以在安装命令末尾加上 <code> -- --check</code>，检查当前固件是否符合最新版的要求。已安装用户也可运行
+  <code>nailink</code>，选择 <strong>3 检查环境</strong>。
+</p>
 <p>
   <code>--check</code> 不安装软件包或修改软件源。若需连同安装包下载、哈希和依赖预演一起检查，可使用
   <code>--dry-run</code>；APK 依赖预演使用本机已有索引。

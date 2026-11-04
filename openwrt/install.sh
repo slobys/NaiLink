@@ -18,6 +18,7 @@ menu=auto
 explicit_action=0
 explicit_release=0
 latest_install=0
+latest_release=0
 update_only=0
 recoverable=0
 packages_changed=0
@@ -31,9 +32,10 @@ prepare_timeout=900
 fail() { printf 'NaiLink: %s\n' "$*" >&2; exit 1; }
 usage() {
 	cat <<'EOF'
-Usage: sh install.sh [--install | --uninstall | --reinstall] [--release TAG] [--asset-dir DIRECTORY] [--check | --dry-run]
+Usage: sh install.sh [--install | --uninstall | --reinstall] [--latest | --release TAG] [--asset-dir DIRECTORY] [--check | --dry-run]
   --menu        Open the Chinese install/update, uninstall and check menu.
   --install     Install or upgrade this script's release without the menu.
+  --latest      Resolve and verify the newest published OpenWrt release, including pre-releases.
   --update-only Require an existing managed install; never install fresh.
   --prepare-timeout SECONDS  Online preparation budget, from 1 to 900 seconds.
   --uninstall   Back up data, remove NaiLink packages and clear its config/data.
@@ -183,6 +185,76 @@ download_release_asset() {
 	fi
 	download_https "$ra_output" "https://github.com/$REPOSITORY/releases/download/$release/$ra_name" "$ra_timeout" '' "$ra_deadline"
 }
+version_at_least() {
+	awk -v target="$1" -v minimum="$2" 'BEGIN {
+		if (minimum !~ /^[0-9]+\.[0-9]+\.[0-9]+$/) exit 0;
+		split(target, newer, "."); split(minimum, older, ".");
+		for (i=1; i<=3; i++) {
+			if (newer[i]+0 > older[i]+0) exit 0;
+			if (newer[i]+0 < older[i]+0) exit 1;
+		}
+	}'
+}
+installer_version() {
+	awk '/^release=openwrt-v[0-9]+\.[0-9]+\.[0-9]+$/ {sub(/^release=openwrt-v/, ""); print; count++} END {if(count!=1) exit 1}' "$1"
+}
+install_latest_release() {
+	for tool in sha256sum awk mktemp; do
+		command -v "$tool" >/dev/null 2>&1 || fail "Missing tool: $tool"
+	done
+	stage=$(mktemp -d /tmp/daed-install.XXXXXX) || fail 'Cannot create staging directory.'
+	printf '\n正在查找最新发布的 NaiLink OpenWrt 版本…\n'
+	# The public feed includes pre-releases and excludes drafts. Extract only
+	# canonical release links; never interpret release descriptions as tags.
+	if download_https "$stage/releases" "https://github.com/$REPOSITORY/releases.atom" 30; then
+		awk -F '"' -v prefix="https://github.com/$REPOSITORY/releases/tag/" '
+			/^[[:space:]]*<link rel="alternate" type="text\/html" href=/ && index($6, prefix)==1 {
+				print substr($6, length(prefix)+1)
+			}
+		' "$stage/releases" > "$stage/tags"
+	else
+		: > "$stage/tags"
+	fi
+	if ! grep -Eq '^openwrt-v[0-9]+\.[0-9]+\.[0-9]+$' "$stage/tags" && command -v jsonfilter >/dev/null 2>&1; then
+		if download_https "$stage/releases" "https://api.github.com/repos/$REPOSITORY/releases?per_page=30" 30 'Accept: application/vnd.github+json'; then
+			jsonfilter -i "$stage/releases" -e '@[@.draft=false].tag_name' > "$stage/tags" || :
+		fi
+	fi
+	# Numeric comparison keeps 0.6.100 ahead of 0.6.99, even when a release
+	# was published out of order.
+	release=$(awk '
+		/^openwrt-v[0-9]+\.[0-9]+\.[0-9]+$/ {
+			split(substr($0, 10), candidate, ".")
+			for (i=1; i<=3; i++) {
+				if (candidate[i]+0 < best[i]+0) break
+				if (candidate[i]+0 > best[i]+0 || best_tag=="") {
+					best_tag=$0
+					split(substr(best_tag, 10), best, ".")
+					break
+				}
+			}
+		}
+		END {if (best_tag=="") exit 1; print best_tag}
+	' "$stage/tags") || fail '无法确认最新发布版。请检查路由器能否通过 HTTPS 访问 github.com 或 api.github.com。'
+	printf '找到发布版 %s，正在校验安装脚本…\n' "${release#openwrt-v}"
+	if ! download_release_asset SHA256SUMS "$stage/SHA256SUMS" 60 || ! download_release_asset install.sh "$stage/install.sh" 60; then
+		fail "无法获取 $release 的安装脚本或校验清单。"
+	fi
+	checksum=$(awk '$2=="install.sh" || $2=="*install.sh" {count++; if (length($1)==64 && $1 ~ /^[0-9a-fA-F]+$/) print tolower($1)} END {if (count!=1) exit 1}' "$stage/SHA256SUMS") || checksum=''
+	if [ -z "$checksum" ] || ! printf '%s  %s\n' "$checksum" "$stage/install.sh" | sha256sum -c - >/dev/null || ! sh -n "$stage/install.sh"; then
+		fail "发布版 $release 的安装脚本校验失败。"
+	fi
+	if ! target=$(installer_version "$stage/install.sh") || [ "$target" != "${release#openwrt-v}" ]; then
+		fail "安装脚本的版本与 $release 不一致。"
+	fi
+	if [ "$mode" = install ] && [ -r /usr/share/daed-router/version ]; then
+		IFS= read -r installed_version </usr/share/daed-router/version || :
+		if ! version_at_least "$target" "${installed_version%%-*}"; then
+			fail '发布版低于已安装版本，已取消安装。'
+		fi
+	fi
+	sh "$stage/install.sh" "--$mode" --release "$release"
+}
 install_latest() {
 	stage=$(mktemp -d /tmp/daed-install.XXXXXX) || fail 'Cannot create staging directory.'
 	url="https://raw.githubusercontent.com/$REPOSITORY/main/openwrt/install.sh"
@@ -199,21 +271,14 @@ install_latest() {
 	if [ ! -s "$stage/install.sh" ] || ! sh -n "$stage/install.sh"; then
 		fail 'Downloaded installer is empty or invalid.'
 	fi
-	target=$(awk '/^release=openwrt-v[0-9]+\.[0-9]+\.[0-9]+$/ {sub(/^release=openwrt-v/, ""); print; count++} END {if(count!=1) exit 1}' "$stage/install.sh") || fail 'Downloaded installer has no unique release version.'
+	target=$(installer_version "$stage/install.sh") || fail 'Downloaded installer has no unique release version.'
 	installed_version=''
 	if [ -r /usr/share/daed-router/version ]; then
 		IFS= read -r installed_version </usr/share/daed-router/version || :
 		installed_version=${installed_version%%-*}
 	fi
 	for minimum in "${release#openwrt-v}" "$installed_version"; do
-		if ! awk -v target="$target" -v minimum="$minimum" 'BEGIN {
-			if (minimum !~ /^[0-9]+\.[0-9]+\.[0-9]+$/) exit 0;
-			split(target, newer, "."); split(minimum, older, ".");
-			for (i=1; i<=3; i++) {
-				if (newer[i]+0 > older[i]+0) exit 0;
-				if (newer[i]+0 < older[i]+0) exit 1;
-			}
-		}' ; then
+		if ! version_at_least "$target" "$minimum"; then
 			fail 'Downloaded installer is older than this script/installation. Retry after the upstream cache refreshes; existing service/data were not changed.'
 		fi
 	done
@@ -244,6 +309,7 @@ while [ "$#" -gt 0 ]; do
 	--release) [ "$#" -ge 2 ] || fail 'Missing release tag.'; release=$2; explicit_release=1; shift 2 ;;
 	--asset-dir) [ "$#" -ge 2 ] || fail 'Missing asset directory.'; asset_dir=$2; shift 2 ;;
 	--menu) menu=1; shift ;;
+	--latest) latest_release=1; shift ;;
 	--update-only) update_only=1; explicit_action=1; shift ;;
 	--prepare-timeout)
 		[ "$#" -ge 2 ] || fail 'Missing preparation timeout.'
@@ -263,12 +329,16 @@ if [ "$menu" = auto ]; then
 fi
 [ "$mode" != check ] || [ "$action" = install ] || fail '--check cannot be combined with uninstall/reinstall.'
 [ "$update_only" != 1 ] || [ "$action" = install ] || fail '--update-only requires install/update mode.'
+if [ "$latest_release" = 1 ] && { [ "$explicit_release" = 1 ] || [ -n "$asset_dir" ] || [ "$action" != install ] || [ "$update_only" = 1 ]; }; then
+	fail '--latest is for installation or environment checks and cannot be combined with a fixed release, local assets, uninstall/reinstall or update-only.'
+fi
 case "$release" in ''|*[!a-zA-Z0-9._-]*) fail 'Invalid release tag.' ;; esac
 [ "$(id -u)" = 0 ] || fail 'Run on the router as root.'
 if [ ! -r /etc/openwrt_release ] || ! command -v uci >/dev/null 2>&1; then
 	fail 'Requires OpenWrt / ImmortalWrt / iStoreOS.'
 fi
 [ "$menu" != 1 ] || show_menu
+if [ "$latest_release" = 1 ] && [ "$action" = install ]; then install_latest_release; exit 0; fi
 if [ "$latest_install" = 1 ]; then install_latest; exit 0; fi
 # Kernel-held lock: it also releases on interruption/SIGKILL. Never unlink the
 # file, otherwise a second process could lock a different inode at the same path.
