@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -157,21 +158,65 @@ func (m *maintenanceManager) checkGeodataLatest(parent context.Context) maintena
 		}
 	}
 	check = geodataReleaseCheck{Checked: m.now().Unix()}
-	var release githubRelease
-	err := m.getJSON(ctx, "https://api.github.com/repos/Loyalsoldier/v2ray-rules-dat/releases/latest", &release)
-	if err == nil {
-		err = validateGeodataRelease(release)
-	}
+	tag, err := m.geodataReleaseTag(ctx)
 	check.Checked = m.now().Unix()
 	if err != nil {
 		check.Code = maintenanceCode(err)
 	} else {
-		check.Version, check.Tag = release.Tag, release.Tag
+		check.Version, check.Tag = tag, tag
 	}
 	if writeMaintenanceJSON(cache, check) != nil {
 		check = geodataReleaseCheck{Checked: m.now().Unix(), Code: "state_failed"}
 	}
 	return respond(&check)
+}
+
+const geodataReleases = "https://github.com/Loyalsoldier/v2ray-rules-dat/releases"
+
+func (m *maintenanceManager) geodataReleaseTag(ctx context.Context) (string, error) {
+	var release githubRelease
+	err := m.getJSON(ctx, "https://api.github.com/repos/Loyalsoldier/v2ray-rules-dat/releases/latest", &release)
+	if err == nil {
+		return release.Tag, validateGeodataRelease(release)
+	}
+	if !releaseWebsiteFallback(ctx, err) {
+		return "", err
+	}
+	return latestGeodataWebsiteTag(ctx)
+}
+
+func latestGeodataWebsiteTag(ctx context.Context) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 6*time.Second)
+	defer cancel()
+	client := maintenanceHTTPClient(false)
+	defer client.CloseIdleConnections()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, geodataReleases+"/latest", nil)
+	if err != nil {
+		return "", err
+	}
+	request.Header.Set("User-Agent", "NaiLink-maintenance")
+	response, err := client.Do(request)
+	if err != nil {
+		return "", errors.New(downloadFailureCode(err))
+	}
+	defer response.Body.Close()
+	switch response.StatusCode {
+	case http.StatusMovedPermanently, http.StatusFound, http.StatusSeeOther, http.StatusTemporaryRedirect, http.StatusPermanentRedirect:
+	case http.StatusForbidden, http.StatusTooManyRequests:
+		return "", errors.New("download_rate_limited")
+	default:
+		return "", errors.New("download_http")
+	}
+	location, err := response.Location()
+	if err != nil {
+		return "", errors.New("invalid_release")
+	}
+	tag, ok := strings.CutPrefix(location.String(), geodataReleases+"/tag/")
+	if !ok || !dataTag.MatchString(tag) {
+		return "", errors.New("invalid_release")
+	}
+	return tag, nil
 }
 
 func validateGeodataRelease(release githubRelease) error {
@@ -223,15 +268,12 @@ func (m *maintenanceManager) updateGeodata(ctx context.Context, job *maintenance
 	} else if !os.IsNotExist(e) {
 		return errors.New("unsafe_state")
 	}
-	var release githubRelease
-	if err = m.getJSON(ctx, "https://api.github.com/repos/Loyalsoldier/v2ray-rules-dat/releases/latest", &release); err != nil {
-		return err
-	}
-	if err = validateGeodataRelease(release); err != nil {
+	tag, err := m.geodataReleaseTag(ctx)
+	if err != nil {
 		return err
 	}
 	var currentVersion releaseInfo
-	if readMaintenanceJSON(filepath.Join(directory, "current", "version.json"), &currentVersion) == nil && currentVersion.Tag == release.Tag {
+	if readMaintenanceJSON(filepath.Join(directory, "current", "version.json"), &currentVersion) == nil && currentVersion.Tag == tag {
 		valid := true
 		for _, name := range []string{"geoip.dat", "geosite.dat"} {
 			sums, err := os.ReadFile(filepath.Join(directory, "current", name+".sha256sum"))
@@ -242,7 +284,7 @@ func (m *maintenanceManager) updateGeodata(ctx context.Context, job *maintenance
 			}
 		}
 		if valid {
-			job.Target = release.Tag
+			job.Target = tag
 			job.Code = "already_latest"
 			return nil
 		}
@@ -257,7 +299,7 @@ func (m *maintenanceManager) updateGeodata(ctx context.Context, job *maintenance
 			os.RemoveAll(stage)
 		}
 	}()
-	base := "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/download/" + release.Tag + "/"
+	base := geodataReleases + "/download/" + tag + "/"
 	if err = m.save(job, "downloading"); err != nil {
 		return errors.New("state_failed")
 	}
@@ -280,7 +322,7 @@ func (m *maintenanceManager) updateGeodata(ctx context.Context, job *maintenance
 			return e
 		}
 	}
-	if err = writeMaintenanceJSON(filepath.Join(stage, "version.json"), releaseInfo{release.Tag, release.Tag, m.now().Unix()}); err != nil {
+	if err = writeMaintenanceJSON(filepath.Join(stage, "version.json"), releaseInfo{tag, tag, m.now().Unix()}); err != nil {
 		return errors.New("state_failed")
 	}
 	// The control-plane actor activates this pair while reusing its current
@@ -298,7 +340,7 @@ func (m *maintenanceManager) updateGeodata(ctx context.Context, job *maintenance
 		return errors.New("state_failed")
 	}
 	target := filepath.Base(stage)
-	job.Batch, job.Target = target, release.Tag
+	job.Batch, job.Target = target, tag
 	if err = m.save(job, "applying"); err != nil {
 		return errors.New("state_failed")
 	}
@@ -327,7 +369,7 @@ func (m *maintenanceManager) updateGeodata(ctx context.Context, job *maintenance
 	// Keep only the active pair and one previous pair. Cleanup never traverses
 	// symlinks or non-managed paths, and firmware/shared geodata is untouched.
 	installed = true
-	job.Target = release.Tag
+	job.Target = tag
 	entries, _ := os.ReadDir(directory)
 	for _, entry := range entries {
 		if entry.IsDir() && regexp.MustCompile(`^data-[0-9]+$`).MatchString(entry.Name()) && entry.Name() != target && entry.Name() != previous {

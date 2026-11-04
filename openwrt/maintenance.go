@@ -10,6 +10,7 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
@@ -453,29 +454,47 @@ type githubRelease struct {
 	} `json:"assets"`
 }
 
-func (m *maintenanceManager) getJSON(ctx context.Context, address string, value any) error {
+func (m *maintenanceManager) releaseData(ctx context.Context, address string, limit int64) ([]byte, error) {
 	file, err := os.CreateTemp(m.stateDir, ".download-*")
 	if err != nil {
-		return errors.New("state_failed")
+		return nil, errors.New("state_failed")
 	}
 	name := file.Name()
 	file.Close()
 	defer os.Remove(name)
-	if err = m.fetch(ctx, address, name, 4<<20); err != nil {
-		return errors.New(downloadFailureCode(err))
+	if err = m.fetch(ctx, address, name, limit); err != nil {
+		return nil, errors.New(downloadFailureCode(err))
 	}
-	data, err := os.ReadFile(name)
-	if err != nil || json.Unmarshal(data, value) != nil {
+	return os.ReadFile(name)
+}
+
+func (m *maintenanceManager) getJSON(ctx context.Context, address string, value any) error {
+	// Leave time for the public website when the API stalls, including the
+	// synchronous rules version check's 12-second RPC budget.
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	data, err := m.releaseData(ctx, address, 4<<20)
+	if err != nil {
+		return err
+	}
+	if json.Unmarshal(data, value) != nil {
 		return errors.New("invalid_release")
 	}
 	return nil
 }
 func (m *maintenanceManager) checkRelease(ctx context.Context, job *maintenanceJob) error {
 	var releases []githubRelease
-	if err := m.getJSON(ctx, "https://api.github.com/repos/slobys/NaiLink/releases?per_page=10", &releases); err != nil {
-		return err
-	}
 	var latest releaseInfo
+	err := m.getJSON(ctx, "https://api.github.com/repos/slobys/NaiLink/releases?per_page=10", &releases)
+	if err != nil {
+		if !releaseWebsiteFallback(ctx, err) {
+			return err
+		}
+		latest, err = m.checkReleaseFeed(ctx)
+		if err != nil {
+			return err
+		}
+	}
 	for _, release := range releases {
 		match := releaseTag.FindStringSubmatch(release.Tag)
 		if release.Draft || match == nil {
@@ -497,6 +516,63 @@ func (m *maintenanceManager) checkRelease(ctx context.Context, job *maintenanceJ
 	}
 	job.Target = latest.Tag
 	return writeMaintenanceJSON(filepath.Join(m.stateDir, "latest.json"), latest)
+}
+
+func releaseWebsiteFallback(ctx context.Context, err error) bool {
+	if ctx.Err() != nil {
+		return false
+	}
+	switch downloadFailureCode(err) {
+	case "download_rate_limited", "download_asset_missing", "download_http", "download_dns", "download_timeout", "download_connection":
+		return true
+	}
+	return false
+}
+
+func (m *maintenanceManager) checkReleaseFeed(ctx context.Context) (releaseInfo, error) {
+	ctx, cancel := context.WithTimeout(ctx, 12*time.Second)
+	defer cancel()
+	const releases = "https://github.com/slobys/NaiLink/releases"
+	data, err := m.releaseData(ctx, releases+".atom", 1<<20)
+	if err != nil {
+		return releaseInfo{}, err
+	}
+	var feed struct {
+		XMLName xml.Name `xml:"http://www.w3.org/2005/Atom feed"`
+		Entries []struct {
+			Links []struct {
+				Href string `xml:"href,attr"`
+				Rel  string `xml:"rel,attr"`
+			} `xml:"link"`
+		} `xml:"entry"`
+	}
+	if xml.Unmarshal(data, &feed) != nil {
+		return releaseInfo{}, errors.New("invalid_release")
+	}
+	var latest releaseInfo
+	for _, entry := range feed.Entries {
+		for _, link := range entry.Links {
+			tag, ok := strings.CutPrefix(link.Href, releases+"/tag/")
+			match := releaseTag.FindStringSubmatch(tag)
+			if link.Rel == "alternate" && ok && match != nil && (latest.Version == "" || versionNewer(match[1], latest.Version)) {
+				latest = releaseInfo{match[1], tag, m.now().Unix()}
+			}
+		}
+	}
+	if latest.Tag == "" {
+		return releaseInfo{}, errors.New("invalid_release")
+	}
+	// Only offer tags that have the published package checksum manifest.
+	sums, err := m.releaseData(ctx, releases+"/download/"+latest.Tag+"/SHA256SUMS", 512<<10)
+	if err != nil {
+		return releaseInfo{}, err
+	}
+	for _, name := range []string{"install.sh", "manifest.tsv"} {
+		if _, err = checksumFor(sums, name); err != nil {
+			return releaseInfo{}, errors.New("invalid_release")
+		}
+	}
+	return latest, nil
 }
 func checksumFor(data []byte, name string) (string, error) {
 	found := ""
@@ -763,7 +839,7 @@ func maintenanceDownload(ctx context.Context, address, destination string, limit
 	return maintenanceDownloadAttempts(ctx, assetURL, destination, limit, "application/octet-stream")
 }
 
-func maintenanceDownloadAttempt(ctx context.Context, address, destination string, limit int64, accept string, ipv4 bool) error {
+func maintenanceHTTPClient(ipv4 bool) *http.Client {
 	transport := http.DefaultTransport
 	if base, ok := transport.(*http.Transport); ok {
 		copy := base.Clone()
@@ -778,14 +854,18 @@ func maintenanceDownloadAttempt(ctx context.Context, address, destination string
 		copy.ResponseHeaderTimeout = 20 * time.Second
 		copy.TLSHandshakeTimeout = 10 * time.Second
 		transport = copy
-		defer copy.CloseIdleConnections()
 	}
-	client := &http.Client{Transport: transport, CheckRedirect: func(r *http.Request, via []*http.Request) error {
+	return &http.Client{Transport: transport, CheckRedirect: func(r *http.Request, via []*http.Request) error {
 		if len(via) > 5 || !maintenanceDownloadAllowed(r.URL) {
 			return errors.New("download_redirect")
 		}
 		return nil
 	}}
+}
+
+func maintenanceDownloadAttempt(ctx context.Context, address, destination string, limit int64, accept string, ipv4 bool) error {
+	client := maintenanceHTTPClient(ipv4)
+	defer client.CloseIdleConnections()
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
 	if err != nil {
 		return err

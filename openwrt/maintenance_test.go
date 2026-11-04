@@ -614,6 +614,76 @@ func downloadResponse(request *http.Request, status int, text string) *http.Resp
 	return &http.Response{StatusCode: status, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(text)), ContentLength: int64(len(text)), Request: request}
 }
 
+func TestMaintenanceCheckUsesOfficialFeedWhenAPILimited(t *testing.T) {
+	original := http.DefaultTransport
+	t.Cleanup(func() { http.DefaultTransport = original })
+	const base = "https://github.com/slobys/NaiLink/releases"
+	feed := `<feed xmlns="http://www.w3.org/2005/Atom">
+		<entry><link rel="alternate" href="` + base + `/tag/openwrt-v0.6.9"/></entry>
+		<entry><link rel="alternate" href="` + base + `/tag/openwrt-v0.6.33"/></entry>
+		<entry><link rel="alternate" href="https://github.com/elsewhere/NaiLink/releases/tag/openwrt-v99.0.0"/></entry>
+	</feed>`
+	for _, valid := range []bool{true, false} {
+		t.Run(strconv.FormatBool(valid), func(t *testing.T) {
+			m := maintenanceFixture(t)
+			sums := strings.Repeat("a", 64) + "  install.sh\n"
+			if valid {
+				sums += strings.Repeat("b", 64) + "  manifest.tsv\n"
+			}
+			http.DefaultTransport = maintenanceTransport(func(r *http.Request) (*http.Response, error) {
+				switch r.URL.String() {
+				case "https://api.github.com/repos/slobys/NaiLink/releases?per_page=10":
+					return downloadResponse(r, http.StatusForbidden, "API limit"), nil
+				case base + ".atom":
+					return downloadResponse(r, http.StatusOK, feed), nil
+				case base + "/download/openwrt-v0.6.33/SHA256SUMS":
+					return downloadResponse(r, http.StatusOK, sums), nil
+				default:
+					t.Fatalf("unexpected request: %s", r.URL)
+					return nil, errors.New("unexpected request")
+				}
+			})
+			result := runFixtureJob(t, m, "check")
+			if valid {
+				if result.Job.State != "success" || result.Latest == nil || result.Latest.Tag != "openwrt-v0.6.33" {
+					t.Fatalf("fallback did not discover release: %+v", result)
+				}
+			} else if result.Job.State != "error" || result.Job.Code != "invalid_release" || result.Latest != nil {
+				t.Fatalf("incomplete checksum manifest accepted: %+v", result)
+			}
+		})
+	}
+}
+
+func TestGeodataCheckUsesOfficialRedirectWhenAPILimited(t *testing.T) {
+	original := http.DefaultTransport
+	t.Cleanup(func() { http.DefaultTransport = original })
+	for _, target := range []string{geodataReleases + "/tag/20261025", "https://github.com/elsewhere/v2ray-rules-dat/releases/tag/20261025"} {
+		m := maintenanceFixture(t)
+		http.DefaultTransport = maintenanceTransport(func(r *http.Request) (*http.Response, error) {
+			switch r.URL.String() {
+			case "https://api.github.com/repos/Loyalsoldier/v2ray-rules-dat/releases/latest":
+				return downloadResponse(r, http.StatusTooManyRequests, "API limit"), nil
+			case geodataReleases + "/latest":
+				response := downloadResponse(r, http.StatusFound, "")
+				response.Header.Set("Location", target)
+				return response, nil
+			default:
+				t.Fatalf("followed redirect or downloaded data during check: %s", r.URL)
+				return nil, errors.New("unexpected request")
+			}
+		})
+		check := m.checkGeodataLatest(context.Background()).GeodataCheck
+		if target == geodataReleases+"/tag/20261025" {
+			if check.Tag != "20261025" || check.Code != "" {
+				t.Fatalf("fallback did not discover rules: %+v", check)
+			}
+		} else if check.Tag != "" || check.Code != "invalid_release" {
+			t.Fatalf("accepted unrelated release redirect: %+v", check)
+		}
+	}
+}
+
 func TestMaintenanceOfficialAssetFallback(t *testing.T) {
 	original := http.DefaultTransport
 	t.Cleanup(func() { http.DefaultTransport = original })
