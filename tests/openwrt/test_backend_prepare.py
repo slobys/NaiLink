@@ -37,6 +37,7 @@ SOURCES = (
     "graphql/service/config/global/schema.go",
     "dae-core/config/config.go",
     "dae-core/component/outbound/dialer/dialer.go",
+    "dae-core/component/outbound/dialer/connectivity_check.go",
     "dae-core/component/outbound/dialer/register.go",
     "dae-core/component/interface_manager.go",
     "dae-core/control/dial.go", "dae-core/control/dns_control.go",
@@ -70,6 +71,8 @@ class BackendPrepareTests(unittest.TestCase):
         self.assertIn('source: String!', (self.root / "graphql/service/node/schema.go").read_text(encoding="utf-8"))
         self.assertEqual((self.root / "webrender/router_assets.go").read_bytes(), (ROOT / "openwrt/wing/web_assets.go").read_bytes())
         self.assertIn("return routerCheckConn(conn), nil", (self.root / "dae-core/component/outbound/dialer/dialer.go").read_text(encoding="utf-8"))
+        self.assertIn("defer routerFinishHealthResponse(resp, cancel)", (self.root / "dae-core/component/outbound/dialer/connectivity_check.go").read_text(encoding="utf-8"))
+        self.assertEqual((self.root / "dae-core/component/outbound/dialer/router_health_http.go").read_bytes(), (ROOT / "openwrt/wing/health_http.go").read_bytes())
         self.assertEqual((self.root / "dae/runtime.go").read_bytes(), (ROOT / "openwrt/wing/runtime.go").read_bytes())
         self.assertIn("return c.routerRouteDial(ctx, p)", (self.root / "dae-core/control/dial.go").read_text(encoding="utf-8"))
         self.assertEqual((self.root / "dae-core/control/dial.go").read_text(encoding="utf-8").count("c.routerChooseDialTarget(ctx, outboundIndex, dst, domain)"), 2)
