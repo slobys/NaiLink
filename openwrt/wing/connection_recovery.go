@@ -12,6 +12,7 @@ import (
 
 	"github.com/daeuniverse/dae/common/consts"
 	"github.com/daeuniverse/dae/component/dns"
+	"github.com/daeuniverse/dae/component/outbound/dialer"
 	"github.com/daeuniverse/outbound/netproxy"
 	"github.com/sirupsen/logrus"
 )
@@ -38,6 +39,17 @@ func routerHasTCPBackup(res *proxyDialResult, p *proxyDialParam) bool {
 	}
 	other, _, _, err := res.Outbound.SelectWithExclusionResult(res.SelectionNetworkTypeObj, res.IsDialIp, res.Dialer)
 	return err == nil && other != nil && other != res.Dialer && isProxyBackedDialer(other)
+}
+
+func routerTCPPrimaryBudget(remaining, interval time.Duration, sample dialer.DialerProbeObservationSnapshot) time.Duration {
+	budget := remaining / 2
+	age := time.Since(sample.CheckedAt)
+	if !sample.Alive || !sample.HasLatency || sample.Latency <= 0 || interval <= 0 || age < 0 || age/2 > interval || sample.Latency >= budget/4 {
+		return budget
+	}
+	// A recent, fast health check gives a ceiling for a stalled connect.
+	// Keep headroom for jitter and preserve the full split for slow links.
+	return min(budget, max(1500*time.Millisecond, 4*sample.Latency))
 }
 
 // Retry only connection establishment failures, before the application relay
@@ -89,7 +101,8 @@ func (c *ControlPlane) routerRouteDial(ctx context.Context, p *proxyDialParam) (
 		budget := consts.DefaultDialTimeout
 		if hasBackup {
 			deadline, _ := ctx.Deadline()
-			budget = time.Until(deadline) / 2
+			sample := res.Dialer.SnapshotLastProbe(res.SelectionNetworkTypeObj)
+			budget = routerTCPPrimaryBudget(time.Until(deadline), res.Dialer.CheckInterval, sample)
 		}
 		dialCtx, cancel := context.WithTimeout(ctx, budget)
 		dialStarted := time.Now()

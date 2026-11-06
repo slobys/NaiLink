@@ -11,33 +11,17 @@
 </p>
 <h2 id="current-version">v$version 更新与验证范围</h2>
 <p>
-  当前发布为<a href="https://github.com/slobys/NaiLink/releases/tag/$release">v$version 测试版</a
-  >。这轮更新保留原协议参数、DNS 上游、路由和接管方式：
+  <a href="https://github.com/slobys/NaiLink/releases/tag/$release">v$version 正式版</a>改善连接失败时的恢复和内核切换。
 </p>
 <ul>
-  <li>
-    <strong>应用并发保护：</strong
-    >读取一致快照后释放数据库事务，再等待内核重载，避免同时移除群组节点阻塞页面。运行状态记录本次实际加载版本，之后的编辑保留为待应用，已删除群组不会重新创建。
-  </li>
-  <li>
-    <strong>DNS 连接恢复：</strong>DNS 桥的 TCP / TLS
-    复用连接迟迟不返回时，符合条件的只读查询在原期限内最多发起一次同上游、同出口的备用请求；保留慢但有效的原响应，未使用的连接及时释放。
-  </li>
-  <li>
-    <strong>启动与清理：</strong
-    >三内核管理、原生重载和私有节点测试共用就绪检查，拒绝已经超时或取消的成功结果；失败清理使用独立的 30 秒时限。
-  </li>
-  <li>
-    <strong>已有恢复能力：</strong>非 TUN
-    检查并补回自己的缺失策略路由，内核意外退出时尝试恢复当前内核与模式；与其他服务冲突时明确停止并提示。
-  </li>
+  <li>dae 在有同群组备用节点时，根据近期探测适当缩短首选节点的连接等待。</li>
+  <li>sing-box 支持长于默认空闲超时的健康检查间隔。</li>
+  <li>mihomo 对明确要求特定 HTTP 状态的检测地址校验返回值。</li>
+  <li>sing-box 和 mihomo 的就绪检查遵循配置的 HTTP 方法和 DNS 地址族。</li>
 </ul>
 <p>
-  本版发布检查包含多架构构建、安装与回退、双栈转发和桥接。ARM64
-  实机完成三个内核、两种外置接管模式往返及短时公网传输。电脑与手机触控模拟已检查；这些结果不等同于所有设备长期稳定、实体手机验证或持续视频带宽保证。查看<a
-    href="https://github.com/slobys/NaiLink/blob/main/openwrt/VALIDATION.md"
-    >验证记录</a
-  >。
+  已在隔离环境验证三内核协议互通、连续传输、DNS 与切换回退。公开线路延迟、持续视频带宽和实体路由器运行效果需要单独实测。
+  <a href="https://github.com/slobys/NaiLink/blob/main/openwrt/VALIDATION.md">查看验证记录</a>。
 </p>
 <h2 id="menu">打开安装管理菜单</h2>
 <p>安装成功后，在路由器 SSH 中运行：</p>

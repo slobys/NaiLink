@@ -128,6 +128,42 @@ func TestRouterConnectionTCPReservesBackupBudget(t *testing.T) {
 	}
 }
 
+func TestRouterConnectionTCPSwitchesSoonerAfterRecentFastHealthCheck(t *testing.T) {
+	client, peer := net.Pipe()
+	defer client.Close()
+	defer peer.Close()
+	var firstBudget time.Duration
+	cp, ds := routerTestTCPGroup(t, consts.DialerSelectionPolicy_MinLastLatency,
+		func(ctx context.Context, _, _ string) (netproxy.Conn, error) {
+			deadline, _ := ctx.Deadline()
+			firstBudget = time.Until(deadline)
+			<-ctx.Done()
+			return nil, ctx.Err()
+		},
+		func(context.Context, string, string) (netproxy.Conn, error) { return client, nil })
+	network := &dialer.NetworkType{L4Proto: consts.L4ProtoStr_TCP, IpVersion: consts.IpVersionStr_4}
+	observation := dialer.DialerProbeObservationSnapshot{Alive: true, HasLatency: true, Latency: 40 * time.Millisecond, CheckedAt: time.Now()}
+	snapshot := ds[0].HealthSnapshot()
+	snapshot.Collections[network.Index()].LastProbe = observation
+	ds[0].RestoreHealthSnapshot(snapshot)
+
+	conn, res, err := cp.routeDial(context.Background(), routerTestTCPParam())
+	if err != nil || res.Dialer != ds[1] || firstBudget <= 0 || firstBudget > 1500*time.Millisecond {
+		t.Fatalf("fast node stall did not use a shorter budget and same-group backup: %v, budget=%v", err, firstBudget)
+	}
+	defer conn.Close()
+	t.Logf("backup started after a primary budget of %s", firstBudget.Round(time.Millisecond))
+
+	observation.Latency = 1200 * time.Millisecond
+	if got := routerTCPPrimaryBudget(8*time.Second, time.Second, observation); got != 4*time.Second {
+		t.Fatalf("slow node lost its original budget: %v", got)
+	}
+	observation.Latency, observation.CheckedAt = 40*time.Millisecond, time.Now().Add(-time.Minute)
+	if got := routerTCPPrimaryBudget(8*time.Second, time.Second, observation); got != 4*time.Second {
+		t.Fatalf("stale sample shortened the budget: %v", got)
+	}
+}
+
 func TestRouterConnectionTCPLatePrimarySuccessUsesBackup(t *testing.T) {
 	late, latePeer := net.Pipe()
 	defer late.Close()

@@ -778,29 +778,84 @@ func routerVerifySingBox(ctx context.Context, s *routerSingBoxSession) error {
 	if len(s.conf.Global.TcpCheckUrl) == 0 {
 		return errors.New("missing_check_url")
 	}
-	target := s.conf.Global.TcpCheckUrl[0]
-	parsed, parseErr := url.Parse(target)
-	if parseErr != nil || parsed.Hostname() == "" {
+	target, err := url.Parse(s.conf.Global.TcpCheckUrl[0])
+	if err != nil || target.Hostname() == "" || (target.Scheme != "http" && target.Scheme != "https") {
 		return errors.New("invalid_check_url")
 	}
-	name := parsed.Hostname()
+	name := target.Hostname()
 	if net.ParseIP(name) != nil {
 		name = "example.com"
 	}
-	qtype := uint16(dnsmessage.TypeA)
-	if s.conf.Dns.IpVersionPrefer == 6 {
-		qtype = dnsmessage.TypeAAAA
-	}
-	question := new(dnsmessage.Msg)
-	question.SetQuestion(dnsmessage.Fqdn(name), qtype)
-	dnsClient := &dnsmessage.Client{Net: "udp", Timeout: 4 * time.Second}
-	answer, _, dnsErr := dnsClient.ExchangeContext(ctx, question, routercore.SocksAddress(s.ports.DNS))
-	if dnsErr != nil || answer == nil || answer.Id != question.Id || answer.Rcode != dnsmessage.RcodeSuccess || len(answer.Answer) == 0 || len(answer.Question) != 1 || answer.Question[0] != question.Question[0] {
+	if !routerVerifyNativeDNS(ctx, routercore.SocksAddress(s.ports.DNS), name, s.conf.Dns.IpVersionPrefer) {
 		return errors.New("core_dns_failed")
 	}
-	transport := &http.Transport{Proxy: nil, DialContext: s.dial, TLSHandshakeTimeout: 6 * time.Second, DisableKeepAlives: true}
+	return routerVerifyNativeHTTP(ctx, target, s.conf.Global.TcpCheckHttpMethod, s.dial)
+}
+
+func routerVerifyNativeDNS(ctx context.Context, address, name string, prefer int) bool {
+	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
+	defer cancel()
+	types := []uint16{dnsmessage.TypeA, dnsmessage.TypeAAAA}
+	if prefer == 4 {
+		types = types[:1]
+	} else if prefer == 6 {
+		types = types[1:]
+	}
+	// With both families enabled, either can prove that DNS is ready. An
+	// empty answer or a slow family must not mask a working family.
+	results := make(chan bool, len(types))
+	for _, qtype := range types {
+		go func() {
+			question := new(dnsmessage.Msg)
+			question.SetQuestion(dnsmessage.Fqdn(name), qtype)
+			answer, err := routerNativeDNSExchange(ctx, "udp", address, question)
+			if err == nil && mhValidDNSAnswer(question, answer) && answer.Truncated {
+				answer, err = routerNativeDNSExchange(ctx, "tcp", address, question)
+			}
+			if err == nil && mhValidDNSAnswer(question, answer) && !answer.Truncated && answer.Rcode == dnsmessage.RcodeSuccess {
+				for _, record := range answer.Answer {
+					if record.Header().Rrtype == qtype {
+						results <- true
+						return
+					}
+				}
+			}
+			results <- false
+		}()
+	}
+	for range types {
+		select {
+		case valid := <-results:
+			if valid {
+				return ctx.Err() == nil
+			}
+		case <-ctx.Done():
+			return false
+		}
+	}
+	return false
+}
+
+func routerNativeDNSExchange(ctx context.Context, network, address string, question *dnsmessage.Msg) (*dnsmessage.Msg, error) {
+	client := dnsmessage.Client{Net: network, Timeout: 4 * time.Second}
+	conn, err := client.DialContext(ctx, address)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stop()
+	answer, _, err := client.ExchangeWithConnContext(ctx, question, conn)
+	return answer, err
+}
+
+func routerVerifyNativeHTTP(ctx context.Context, target *url.URL, method string, dial func(context.Context, string, string) (net.Conn, error)) error {
+	if method == "" {
+		method = http.MethodGet
+	}
+	transport := &http.Transport{Proxy: nil, DialContext: dial, TLSHandshakeTimeout: 6 * time.Second, DisableKeepAlives: true}
 	defer transport.CloseIdleConnections()
-	request, err := http.NewRequestWithContext(ctx, "HEAD", target, nil)
+	request, err := http.NewRequestWithContext(ctx, method, target.String(), nil)
 	if err != nil {
 		return errors.New("invalid_check_url")
 	}
@@ -809,7 +864,7 @@ func routerVerifySingBox(ctx context.Context, s *routerSingBoxSession) error {
 		return errors.New("core_connectivity_failed")
 	}
 	defer response.Body.Close()
-	if response.StatusCode < 200 || response.StatusCode >= 500 {
+	if !routerCheckHTTPStatus(target, response.StatusCode) {
 		return errors.New("core_connectivity_failed")
 	}
 	return nil

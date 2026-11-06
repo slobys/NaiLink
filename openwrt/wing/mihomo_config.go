@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -260,6 +261,11 @@ func mihomoFromCanonical(profile sbObject, conf *daeConfig.Config, ports sbPorts
 				g["interval"] = mhDurationSeconds(node["interval"], 300)
 				g["tolerance"] = node["tolerance"]
 				g["lazy"] = false
+				if target, err := url.Parse(mhString(node["url"])); err == nil {
+					if status := routerExpectedHTTPStatus(target); status != 0 {
+						g["expected-status"] = strconv.Itoa(status)
+					}
+				}
 			}
 			groups = append(groups, g)
 			continue

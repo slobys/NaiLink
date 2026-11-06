@@ -443,8 +443,30 @@ func routerProbeHTTP(ctx context.Context, dialer proxy.ContextDialer, global dae
 func ProbeRouterHTTP(ctx context.Context, dialer proxy.ContextDialer, global daeConfig.Global) RouterCoreProbe {
 	return routerProbeHTTP(ctx, dialer, global)
 }
+
+func routerExpectedHTTPStatus(target *url.URL) int {
+	code, found := strings.CutPrefix(path.Base(target.Path), "generate_")
+	if !found || len(code) != 3 {
+		return 0
+	}
+	status, err := strconv.Atoi(code)
+	if err != nil || status < 100 || status > 599 {
+		return 0
+	}
+	return status
+}
+
+func routerCheckHTTPStatus(target *url.URL, status int) bool {
+	if strings.HasPrefix(path.Base(target.Path), "generate_") {
+		return status == routerExpectedHTTPStatus(target)
+	}
+	return status >= 200 && status < 500
+}
+
 func routerProbeHTTPTimeout(ctx context.Context, dialer proxy.ContextDialer, global daeConfig.Global, timeout time.Duration) RouterCoreProbe {
- if profile,ok:=ctx.Value(serviceProbeKey{}).(string);ok {return routerServiceHTTP(ctx,dialer,profile)}
+	if profile, ok := ctx.Value(serviceProbeKey{}).(string); ok {
+		return routerServiceHTTP(ctx, dialer, profile)
+	}
 	result := RouterCoreProbe{Tested: time.Now(), Message: "check_target_failed"}
 	if len(global.TcpCheckUrl) == 0 {
 		return result
@@ -493,11 +515,7 @@ func routerProbeHTTPTimeout(ctx context.Context, dialer proxy.ContextDialer, glo
 					cold := time.Since(started)
 					_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4097))
 					_ = response.Body.Close()
-					valid := response.StatusCode >= 200 && response.StatusCode < 500
-					if page := path.Base(target.Path); strings.HasPrefix(page, "generate_") {
-						valid = strconv.Itoa(response.StatusCode) == strings.TrimPrefix(page, "generate_")
-					}
-					if valid {
+					if routerCheckHTTPStatus(target, response.StatusCode) {
 						r.Alive, r.Message = true, ""
 						r.Latency = int32(cold.Milliseconds())
 						// Report a second number only when net/http proves reuse.

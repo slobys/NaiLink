@@ -11,18 +11,138 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	daeConfig "github.com/daeuniverse/dae/config"
+	dnsmessage "github.com/miekg/dns"
 )
 
 type routerProbeDialFunc func(context.Context, string, string) (net.Conn, error)
 
 func (f routerProbeDialFunc) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	return f(ctx, network, address)
+}
+
+func TestNativeReadinessChecksConfiguredMethodAndStatus(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.WriteHeader(http.StatusNoContent)
+		} else {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	}))
+	defer server.Close()
+	target, _ := url.Parse(server.URL + "/generate_204")
+	dial := (&net.Dialer{}).DialContext
+	if err := routerVerifyNativeHTTP(context.Background(), target, http.MethodGet, dial); err != nil {
+		t.Fatal("configured GET failed:", err)
+	}
+	if err := routerVerifyNativeHTTP(context.Background(), target, http.MethodHead, dial); err == nil || err.Error() != "core_connectivity_failed" {
+		t.Fatal("readiness accepted a 405 as a successful 204:", err)
+	}
+}
+
+func TestNativeReadinessAcceptsWorkingDNSFamily(t *testing.T) {
+	tcp, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tcp.Close()
+	listener, err := net.ListenPacket("udp4", tcp.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	handler := dnsmessage.HandlerFunc(func(w dnsmessage.ResponseWriter, q *dnsmessage.Msg) {
+		r := new(dnsmessage.Msg)
+		r.SetReply(q)
+		header := dnsmessage.RR_Header{Name: q.Question[0].Name, Rrtype: q.Question[0].Qtype, Class: dnsmessage.ClassINET}
+		if q.Question[0].Qtype == dnsmessage.TypeAAAA {
+			if w.LocalAddr().Network() == "udp" {
+				r.Truncated = true
+			} else {
+				r.Answer = append(r.Answer, &dnsmessage.AAAA{Hdr: header, AAAA: net.ParseIP("2001:db8::42")})
+			}
+		}
+		_ = w.WriteMsg(r)
+	})
+	for _, server := range []*dnsmessage.Server{{PacketConn: listener, Handler: handler}, {Listener: tcp, Handler: handler}} {
+		go func() { _ = server.ActivateAndServe() }()
+		defer server.Shutdown()
+	}
+	for _, check := range []struct {
+		prefer int
+		ready  bool
+	}{{0, true}, {6, true}, {4, false}} {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		ready := routerVerifyNativeDNS(ctx, listener.LocalAddr().String(), "fixture.test", check.prefer)
+		cancel()
+		if ready != check.ready {
+			t.Fatalf("preference %d, ready=%t, want %t", check.prefer, ready, check.ready)
+		}
+	}
+}
+
+func TestMihomoHealthCheckUsesExplicitExpectedStatus(t *testing.T) {
+	conf, dirs := coreFixtureConfig(t)
+	ports := sbPorts{Mixed: 39001, API: 39002, DNS: 39003, Secret: "test-only"}
+	for _, path := range []string{"/generate_204", "/custom"} {
+		conf.Global.TcpCheckUrl = []string{"https://probe.example" + path}
+		canonical, _, err := coreCanonicalConfig(conf, dirs, ports, false, "mihomo")
+		if err != nil {
+			t.Fatal(err)
+		}
+		profile, err := mihomoFromCanonical(canonical, conf, ports)
+		if err != nil {
+			t.Fatal(err)
+		}
+		groups := mhObjects(profile["proxy-groups"])
+		if len(groups) == 0 || groups[0]["type"] != "url-test" {
+			t.Fatal("fixture must generate an automatic group")
+		}
+		expected := ""
+		if path == "/generate_204" {
+			expected = "204"
+		}
+		if got := mhString(groups[0]["expected-status"]); got != expected {
+			t.Fatalf("%s expected-status=%q, want %q", path, got, expected)
+		}
+	}
+}
+
+func TestSingBoxStartsWithLongHealthCheckInterval(t *testing.T) {
+	binary := os.Getenv("DAED_TEST_SINGBOX")
+	if binary == "" {
+		t.Skip("native sing-box binary required")
+	}
+	oldBinary, oldRuntime := routerSingBoxBinary, routerCoreRuntimeDir
+	routerSingBoxBinary, routerCoreRuntimeDir = binary, t.TempDir()
+	t.Cleanup(func() { routerSingBoxBinary, routerCoreRuntimeDir = oldBinary, oldRuntime })
+	if err := os.Chmod(routerCoreRuntimeDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	conf, dirs := coreFixtureConfig(t)
+	conf.Global.WanInterface = []string{"lo"}
+	conf.Global.TcpCheckUrl = []string{"http://127.0.0.1:9/generate_204"}
+	conf.Group[0].CheckInterval = time.Hour
+	before := restartConfigKey(conf)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	session, err := newRouterSingBoxSession(ctx, logrus.New(), conf, dirs, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = routerStopSession(session) })
+	if err := routerSessionReady(ctx, session); err != nil {
+		t.Fatal("sing-box could not start with a valid one-hour check interval:", err)
+	}
+	if before != restartConfigKey(conf) {
+		t.Fatal("changed saved settings to pass readiness")
+	}
 }
 
 func TestPrivateProbePortCollisionRecoveryIsBoundedAndCleansBeforeRetry(t *testing.T) {

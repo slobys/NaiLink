@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/daeuniverse/dae-wing/routercore"
 	daeCommon "github.com/daeuniverse/dae/common"
@@ -194,6 +195,10 @@ func coreCanonicalConfig(conf *daeConfig.Config, dirs []string, ports sbPorts, t
 				return nil, nil, errors.New("invalid_check_interval")
 			}
 			out["interval"] = interval.String()
+			// sing-box rejects a check interval longer than its idle timeout.
+			if engine == "sing-box" && interval > 30*time.Minute {
+				out["idle_timeout"] = interval.String()
+			}
 			tolerance := conf.Global.CheckTolerance
 			if group.CheckTolerance > 0 {
 				tolerance = group.CheckTolerance
