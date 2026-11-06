@@ -4,6 +4,7 @@ package config
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"testing"
 	"time"
@@ -201,5 +202,62 @@ func TestRecordingRunningGroupsNeverRecreatesDeletedGroup(t *testing.T) {
 	var count int64
 	if err := d.Model(&db.Group{}).Count(&count).Error; err != nil || count != 0 {
 		t.Fatal("deleted group was recreated", count, err)
+	}
+}
+
+type applyResultResolver struct{}
+
+func (*applyResultResolver) Run(ctx context.Context, args struct{ Dry bool }) (int32, error) {
+	return Run(db.DB(ctx), args.Dry)
+}
+
+func TestApplyUnconfirmedSurvivesGraphQL(t *testing.T) {
+	previous := dae.ChReloadConfigs
+	dae.ChReloadConfigs = make(chan *dae.ReloadMessage)
+	defer func() { dae.ChReloadConfigs = previous }()
+	// Expire only after acceptance, without waiting ten minutes or starting a core.
+	operation, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	result := make(chan error, 1)
+	go func() { result <- routerApplyReload(context.Background(), operation, dae.EmptyConfig) }()
+	message := <-dae.ChReloadConfigs
+	cancel()
+	unconfirmed := <-result
+	message.Callback <- nil // A late acknowledgement must remain nonblocking.
+	if unconfirmed == nil {
+		t.Fatal("missing unconfirmed result")
+	}
+
+	schema := graphql.MustParseSchema(`type Query { run(dry: Boolean!): Int! }`, &applyResultResolver{})
+	for _, dry := range []bool{false, true} {
+		t.Run(fmt.Sprint(dry), func(t *testing.T) {
+			if err := db.InitDatabase(t.TempDir()); err != nil {
+				t.Fatal(err)
+			}
+			db.SetOutput(io.Discard)
+			ctx, stop := context.WithTimeout(context.Background(), 3*time.Second)
+			defer stop()
+			d := db.DB(ctx)
+			for _, model := range []any{
+				&db.Config{ID: 1, Name: "fixture", Global: "global{}", Selected: true},
+				&db.Dns{ID: 1, Name: "fixture", Dns: "dns{}", Selected: true},
+				&db.Routing{ID: 1, Name: "fixture", Routing: "routing{fallback:direct}", Selected: true},
+			} {
+				if err := d.Create(model).Error; err != nil {
+					t.Fatal(err)
+				}
+			}
+			go func() {
+				select {
+				case message := <-dae.ChReloadConfigs:
+					message.Callback <- unconfirmed
+				case <-ctx.Done():
+				}
+			}()
+			response := schema.Exec(ctx, fmt.Sprintf(`{run(dry:%t)}`, dry), "", nil)
+			if len(response.Errors) != 1 || response.Errors[0].Extensions["code"] != "configuration_result_unconfirmed" {
+				t.Fatalf("accepted reload uncertainty lost across GraphQL: %+v", response.Errors)
+			}
+		})
 	}
 }

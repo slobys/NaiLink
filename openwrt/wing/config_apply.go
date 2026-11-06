@@ -12,6 +12,23 @@ import (
 	"gorm.io/gorm"
 )
 
+var errRouterApplyUnconfirmed = errors.New("应用结果暂未确认，请重新读取状态并查看日志；节点与配置保留，请勿重复提交")
+
+type routerApplyUnconfirmedError struct{ error }
+
+func (e routerApplyUnconfirmedError) Unwrap() error { return e.error }
+func (routerApplyUnconfirmedError) Extensions() map[string]interface{} {
+	return map[string]interface{}{"code": "configuration_result_unconfirmed"}
+}
+
+// Run wraps reload errors with operation context. GraphQL only reads extensions
+// on the outer error, so retain the uncertainty code after those wrappers.
+func routerApplyResult(err *error) {
+	if errors.Is(*err, errRouterApplyUnconfirmed) {
+		*err = routerApplyUnconfirmedError{*err}
+	}
+}
+
 // Once a reload is accepted, finish its acknowledgement and status write even
 // if its browser has disconnected. This bounded lifetime includes Tor startup
 // and rollback; no database connection is held while waiting for the core.
@@ -53,6 +70,6 @@ func routerApplyReload(request, operation context.Context, conf *daeConfig.Confi
 		return err
 	case <-operation.Done():
 		// A late reply must never wedge the core-manager receive loop.
-		return errors.New("应用结果暂未确认，请重新读取状态并查看日志；节点与配置保留，请勿重复提交")
+		return errRouterApplyUnconfirmed
 	}
 }
