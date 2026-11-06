@@ -32,8 +32,8 @@
 </p>
 <pre><code class="language-sh">uclient-fetch -T 60 --header='Accept: application/vnd.github.raw+json' \
   -O /tmp/nailink-install.sh \
-  'https://api.github.com/repos/slobys/NaiLink/contents/openwrt/install.sh?ref=main' \
-  &amp;&amp; sh /tmp/nailink-install.sh --install --update-only</code></pre>
+  'https://api.github.com/repos/slobys/NaiLink/contents/openwrt/install.sh?ref=$release' \
+  &amp;&amp; sh /tmp/nailink-install.sh --install --update-only --release $release</code></pre>
 <p>
   这不是卸载重装。脚本先准备并校验新包和旧版回退包，之后才停止服务与备份。若仍下载失败，不会停用原服务；不要删除节点或反复卸载。
 </p>

@@ -7,6 +7,8 @@ import re
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+from urllib.error import HTTPError
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("docs_builder", ROOT / "docs/site/build.py")
@@ -49,13 +51,11 @@ class HandbookTest(unittest.TestCase):
             with contextlib.redirect_stdout(io.StringIO()):
                 builder.build(self.output)
 
-    def test_version_matches_runtime_and_install_entry_is_fixed(self):
+    def test_public_version_and_latest_install_entry(self):
         config = json.loads((ROOT / "docs/site/site.json").read_text(encoding="utf-8"))
-        makefile = (ROOT / "openwrt/Makefile").read_text(encoding="utf-8")
-        runtime_version = re.search(r"PKG_VERSION:=.*,(\d+\.\d+\.\d+)\)", makefile).group(1)
-        self.assertEqual(config["version"], runtime_version)
-        self.assertEqual(config["release"], "openwrt-v" + runtime_version)
+        self.assertEqual(config["release"], "openwrt-v" + config["version"])
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("/releases/tag/" + config["release"], readme)
         openwrt_readme = (ROOT / "openwrt/README.md").read_text(encoding="utf-8")
         installation = (self.output / "installation.html").read_text(encoding="utf-8")
         for text in (readme, installation):
@@ -72,6 +72,68 @@ class HandbookTest(unittest.TestCase):
         self.assertTrue(entry.endswith(body))
         self.assertNotIn("$release", installation)
         self.assertNotIn("$version", installation)
+
+    def test_pinned_release_links_and_recovery_command_match(self):
+        config = json.loads((ROOT / "docs/site/site.json").read_text(encoding="utf-8"))
+        documents = [ROOT / "README.md", ROOT / "openwrt/README.md", *self.output.glob("*.html")]
+        for path in documents:
+            text = html.unescape(path.read_text(encoding="utf-8"))
+            with self.subTest(document=path.name):
+                tags = re.findall(r"https://github.com/slobys/NaiLink/releases/(?:download|tag)/([^/\s\"<)]+)", text)
+                if tags:
+                    self.assertEqual(set(tags), {config["release"]})
+                arguments = re.findall(r"--release\s+([^\s`<]+)", text)
+                if arguments:
+                    self.assertEqual(set(arguments), {config["release"]})
+        troubleshooting = (self.output / "troubleshooting.html").read_text(encoding="utf-8")
+        self.assertIn("contents/openwrt/install.sh?ref=" + config["release"], troubleshooting)
+        self.assertIn("--install --update-only --release " + config["release"], troubleshooting)
+        self.assertNotIn("install.sh?ref=main", troubleshooting)
+
+    def test_mismatched_or_invalid_public_version_is_rejected(self):
+        for version, tag in (("1.0.0", "openwrt-v1.0.1"), ("invalid", "openwrt-vinvalid")):
+            with self.subTest(version=version, tag=tag), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                (root / "site.json").write_text(json.dumps({"version": version, "release": tag}))
+                with patch.object(builder, "ROOT", root):
+                    with self.assertRaisesRegex(ValueError, "version and release tag must match"):
+                        builder.build(root / "output")
+                self.assertFalse((root / "output").exists())
+
+    def test_public_installer_download_is_anonymous_and_version_pinned(self):
+        response = io.BytesIO(b"#!/bin/sh\nrelease=openwrt-v1.2.3\n")
+        response.status = 200
+        with patch.object(builder, "urlopen", return_value=response) as fetch, contextlib.redirect_stdout(io.StringIO()):
+            builder.check_public_installer("openwrt-v1.2.3")
+        request = fetch.call_args.args[0]
+        self.assertEqual(request.full_url, "https://github.com/slobys/NaiLink/releases/download/openwrt-v1.2.3/install.sh")
+        self.assertIsNone(request.get_header("Authorization"))
+        self.assertIsNone(request.get_header("Cookie"))
+        self.assertEqual(fetch.call_args.kwargs["timeout"], 30)
+
+    def test_unavailable_public_installer_stops_build_before_writing(self):
+        output = self.output / "not-built"
+        unavailable = HTTPError("https://github.com/slobys/NaiLink/releases/download/draft/install.sh", 404, "Not Found", {}, None)
+        with patch.object(builder, "urlopen", side_effect=unavailable):
+            with self.assertRaises(HTTPError):
+                builder.build(output, check_release=True)
+        self.assertFalse(output.exists())
+
+    def test_invalid_public_installer_is_rejected(self):
+        valid = b"#!/bin/sh\nrelease=openwrt-v1.2.3\n"
+        for status, body in (
+            (206, valid),
+            (200, b"<html>Not Found</html>"),
+            (200, b"#!/bin/sh\nrelease=openwrt-v1.2.4\n"),
+            (200, valid + b"release=openwrt-v1.2.3\n"),
+            (200, valid + b"x" * (1024 * 1024)),
+        ):
+            with self.subTest(status=status, prefix=body[:64]):
+                response = io.BytesIO(body)
+                response.status = status
+                with patch.object(builder, "urlopen", return_value=response):
+                    with self.assertRaises(ValueError):
+                        builder.check_public_installer("openwrt-v1.2.3")
 
 
 if __name__ == "__main__":

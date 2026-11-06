@@ -4,6 +4,7 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import unittest
@@ -13,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("publish_openwrt", ROOT / "scripts/publish-openwrt.py")
 release = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(release)
-VERSION = json.loads((ROOT / "docs/site/site.json").read_text())["version"]
+VERSION = re.search(r"PKG_VERSION:=.*,(\d+\.\d+\.\d+)\)", (ROOT / "openwrt/Makefile").read_text())[1]
 SHA = "a" * 40
 
 
@@ -94,6 +95,23 @@ class ReleaseSafetyTest(unittest.TestCase):
     def test_version_must_match_source(self):
         with self.assertRaises(ValueError):
             release.check_version("999.999.999")
+
+    def test_draft_version_can_be_ahead_of_public_documentation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "docs/site").mkdir(parents=True)
+            (root / "docs/site/site.json").write_text(json.dumps({"version": "1.0.0", "release": "openwrt-v1.0.0"}))
+            (root / "openwrt").mkdir()
+            (root / "openwrt/Makefile").write_text("PKG_VERSION:=$(or $(DAED_VERSION),1.0.1)\n")
+            installer = root / "openwrt/install.sh"
+            installer.write_text("#!/bin/sh\nrelease=openwrt-v1.0.1\n")
+            with patch.object(release, "ROOT", root):
+                release.check_version("1.0.1")
+                with self.assertRaisesRegex(ValueError, "source or installer"):
+                    release.check_version("1.0.0")
+                installer.write_text("#!/bin/sh\nrelease=openwrt-v1.0.0\n")
+                with self.assertRaisesRegex(ValueError, "source or installer"):
+                    release.check_version("1.0.1")
 
     def test_invalid_version(self):
         with self.assertRaises(ValueError):

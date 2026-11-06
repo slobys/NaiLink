@@ -3,11 +3,13 @@
 import argparse
 import html
 import json
+import re
 import shutil
 from html.parser import HTMLParser
 from pathlib import Path
 from string import Template
 from urllib.parse import unquote, urlsplit
+from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parent
 
@@ -83,8 +85,30 @@ def validate(output):
             raise ValueError(f"Invalid search result: {item['url']}")
 
 
-def build(output):
+def check_public_installer(tag):
+    """Download, but never execute, the public installer without authentication."""
+    url = f"https://github.com/slobys/NaiLink/releases/download/{tag}/install.sh"
+    request = Request(url, headers={"User-Agent": "NaiLink-handbook-check"})
+    limit = 1024 * 1024
+    with urlopen(request, timeout=30) as response:
+        if response.status != 200:
+            raise ValueError(f"Public installer did not return HTTP 200: {tag}")
+        installer = response.read(limit + 1)
+    if len(installer) > limit or not installer.startswith(b"#!/bin/sh\n"):
+        raise ValueError(f"Invalid public installer: {tag}")
+    versions = re.findall(rb"^release=(openwrt-v\d+\.\d+\.\d+)$", installer, re.M)
+    if versions != [tag.encode("ascii")]:
+        raise ValueError(f"Public installer points to another or ambiguous release: {tag}")
+    print(f"Public installer available and version checked: {tag}")
+
+
+def build(output, check_release=False):
     config = json.loads((ROOT / "site.json").read_text(encoding="utf-8"))
+    if (not re.fullmatch(r"\d+\.\d+\.\d+", config["version"])
+            or config["release"] != "openwrt-v" + config["version"]):
+        raise ValueError("Public documentation version and release tag must match")
+    if check_release:
+        check_public_installer(config["release"])
     pages = [page for group in config["groups"] for page in group["pages"]]
     template = Template((ROOT / "template.html").read_text(encoding="utf-8"))
     output.mkdir(parents=True, exist_ok=True)
@@ -166,5 +190,6 @@ def build(output):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=ROOT.parents[1] / ".build" / "docs-site")
+    parser.add_argument("--check-release", action="store_true", help="Require a matching, anonymously downloadable release installer")
     args = parser.parse_args()
-    build(args.output.resolve())
+    build(args.output.resolve(), check_release=args.check_release)
