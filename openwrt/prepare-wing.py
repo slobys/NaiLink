@@ -59,6 +59,17 @@ def router_dns_expiry_test(text):
     return text[:start] + body + text[end:]
 
 
+def router_health_http(text):
+    if "routerFinishHealthResponse(resp, cancel)" in text:
+        return text
+    request = '\treq, err := http.NewRequestWithContext(ctx, method, u.String(), nil)'
+    close = '\tdefer func() { _ = resp.Body.Close() }()'
+    if text.count(request) != 1 or text.count(close) != 1:
+        raise ValueError("Unknown HTTP health check; review before applying")
+    text = text.replace(request, '\tctx, cancel := context.WithCancel(ctx)\n\tdefer cancel()\n' + request, 1)
+    return text.replace(close, '\tdefer routerFinishHealthResponse(resp, cancel)', 1)
+
+
 def router_node_model(text):
     text = text.replace('if strings.HasPrefix(strings.TrimSpace(link), "singbox://") || strings.HasPrefix(strings.TrimSpace(link), "{")', 'if routercore.IsNativeURI(link) || strings.HasPrefix(strings.TrimSpace(link), "{")')
     if 'routerNativeNode(link, tag, subscriptionId)' not in text:
@@ -484,6 +495,7 @@ func _fetchLinksContext(ctx context.Context, subscriptionLink string, transport 
         "dae-core/control/control_plane.go": ("8b57c9d9635aa6c764319a2263421263a52f4dfde8ac398b1d47929b71e53e76", router_bootstrap),
         "dae-core/control/dns_lifecycle_test.go": ("075d244882bb623dce5e37fae748594ee602611ffa2e2697c51d49f46026f44d", lambda value: value.replace('func(client *http.Client,', 'func(ctx context.Context, client *http.Client,')),
         "dae-core/control/dns_udp_packetconn_test.go": ("ac72b165c59e24795c4581740c5a4657c9ef7c305ef361a378124ca96517eba8", router_udp_pool_test),
+        "dae-core/component/outbound/dialer/connectivity_check.go": ("7315bbb8d7a9a0bf3cecc042a3866bf8e7ab30344d4947c91492dc431f5d42d0", router_health_http),
         "dae-core/component/outbound/dialer/dialer.go": ("c6615ddf375371b1974c6d35ef8660aea8ee907fe88ebe09207560b5da5d39ad", lambda value: value.replace('return &netproxy.FakeNetConn{\n\t\t\t\t\tConn:  conn,\n\t\t\t\t\tLAddr: nil,\n\t\t\t\t\tRAddr: nil,\n\t\t\t\t}, nil', 'return routerCheckConn(conn), nil', 1)),
         "dae-core/component/outbound/dialer/register.go": ("59aa07ff1a3bf7c7dd38353091c3e9cdb2510f256e02e327c1fc768ef4e3ca99", lambda value: value.replace('normalizedLink := normalizeShadowTLSPluginOptions(link)\n\tbaseDialer := newDefaultNetworkDialer(direct.SymmetricDirect, gOption.SoMarkFromDae, gOption.Mptcp)', 'normalizedLink, baseDialer, err := routerProtocolOptions(normalizeShadowTLSPluginOptions(link), newDefaultNetworkDialer(direct.SymmetricDirect, gOption.SoMarkFromDae, gOption.Mptcp), gOption.UDPHopInterval)\n\tif err != nil { return nil, err }', 1)),
         "dae-core/common/subscription/subscription.go": ("c48c3a14937aac13fde5d10af24e6d5774c6b5d2f09f8f23872201c06dcdd05f", lambda value: value.replace('url.Values{"plugin": []string{server.PluginOpts}}.Encode()', 'routerSIP008Plugin(server.Plugin, server.PluginOpts)', 1)),
@@ -516,7 +528,7 @@ type Mutation {
         elif relative in ("graphql/service/node/latency_mutation_utils.go", "graphql/service/node/latency_resolver.go", "dae/runtime.go", "dae/httpclient.go", "dae-core/component/interface_manager.go"):
             replacement = {"latency_mutation_utils.go": "node_latency.go", "latency_resolver.go": "node_latency_resolver.go"}.get(relative.split("/")[-1], relative.split("/")[-1])
             data = (HERE / "wing" / replacement).read_bytes()
-        elif relative in ("cmd/run.go", "dae/run.go") or transform in (router_node_model, router_transactions, router_control_dial, router_dns_recovery, router_dns_transport, router_bootstrap, router_udp_pool_test, router_dns_expiry_test):
+        elif relative in ("cmd/run.go", "dae/run.go") or transform in (router_node_model, router_transactions, router_control_dial, router_dns_recovery, router_dns_transport, router_bootstrap, router_udp_pool_test, router_dns_expiry_test, router_health_http):
             data = transform(data.decode()).encode()
         destination.write_bytes(data)
         generated[relative] = digest(data)
@@ -696,6 +708,9 @@ type Mutation {
         ("graphql/router_udp_test.go", "udp_mutation_test.go"),
         ("dae-core/component/outbound/dialer/router_protocol_compat.go", "protocol_compat.go"),
         ("dae-core/component/outbound/dialer/router_protocol_compat_test.go", "protocol_compat_test.go"),
+        ("dae-core/component/outbound/dialer/router_health_http.go", "health_http.go"),
+        ("dae-core/component/outbound/dialer/router_health_http_test.go", "health_http_test.go"),
+        ("dae-core/component/outbound/dialer/router_health_ws_test.go", "health_ws_test.go"),
         ("dae-core/component/router_interface_manager_test.go", "interface_manager_test.go"),
         ("dae-core/common/subscription/router_sip008.go", "sip008.go"),
         ("dae-core/common/subscription/router_sip008_test.go", "sip008_test.go"),
@@ -791,6 +806,7 @@ def prepare(root):
         "graphql/service/config/global/schema.go", "dae/flat_desc.go",
         "graphql/service/subscription/mutation_utils.go",
         "dae-core/component/outbound/dialer/dialer.go", "dae-core/component/outbound/dialer/register.go",
+        "dae-core/component/outbound/dialer/connectivity_check.go",
         "dae-core/component/interface_manager.go",
         "dae-core/control/dial.go", "dae-core/control/dns_control.go",
         "dae-core/control/dns_control_cache_cleanup_test.go",

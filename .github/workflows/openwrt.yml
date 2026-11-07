@@ -192,7 +192,7 @@ jobs:
           CGO_ENABLED=1 go test -race -count=1 ./graphql ./graphql/service/config ./graphql/service/node ./graphql/service/subscription ./db ./cmd ./dae ./webrender
           CGO_ENABLED=1 go test -race -count=1 github.com/daeuniverse/dae/component -run '^TestRouterInterface'
           CGO_ENABLED=1 go test -race -count=1 github.com/daeuniverse/dae/control -run '^TestRouterDNS|^TestRouterFirstDomain|^TestRouterConnection|^TestRouterCore|^TestRouteDial|^TestDnsForwarder'
-          CGO_ENABLED=1 go test -race -count=1 github.com/daeuniverse/dae/component/outbound/dialer -run '^TestRouter(ProtocolURIOptions|SSClose)'
+          CGO_ENABLED=1 go test -race -count=1 github.com/daeuniverse/dae/component/outbound/dialer -run '^TestRouter(ProtocolURIOptions|SSClose|HealthHTTP)'
       - name: Independent protocol HTTP and UDP regression
         if: matrix.cpu == 'x86_64'
         run: |
