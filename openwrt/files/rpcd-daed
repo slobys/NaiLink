@@ -69,6 +69,12 @@ call)
 		esac
 		json_init
 		json_add_boolean success "$success"
+		# This receipt only acknowledges the service-manager operation. Applied
+		# configuration is reported separately by GraphQL/maintenance receipts.
+		json_add_string scope 'service'
+		case "$action:$success" in
+		start:1|restart:1) json_add_string message '服务启动请求已受理；代理是否生效请查看管理面板的配置状态。' ;;
+		esac
 		json_dump
 		;;
 	*) exit 1 ;;

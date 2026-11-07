@@ -425,7 +425,7 @@ func (m *maintenanceManager) maintainConfiguration(ctx context.Context, job *mai
 }
 
 func maintenanceCode(err error) string {
-	if err.Error() == "configuration_apply_failed" || err.Error() == "configuration_result_unconfirmed" {
+	if err.Error() == "configuration_apply_failed" || err.Error() == "configuration_result_unconfirmed" || err.Error() == "configuration_fixed_group_members" {
 		return err.Error()
 	}
 	for _, code := range downloadFailureCodes {
@@ -1002,6 +1002,9 @@ func (m *maintenanceManager) graphQL(ctx context.Context, query string, value an
 				// text may include user configuration and must stay private.
 				if (query == "mutation {run(dry:false)}" || query == "mutation {run(dry:true)}") && item.Extensions.Code == "configuration_result_unconfirmed" {
 					return errors.New("configuration_result_unconfirmed")
+				}
+				if (query == "mutation {run(dry:false)}" || query == "mutation {run(dry:true)}") && item.Extensions.Code == "configuration_fixed_group_members" {
+					return errors.New("configuration_fixed_group_members")
 				}
 				if code := coreMaintenanceCode(item.Message); code != "" {
 					return errors.New(code)
