@@ -1,7 +1,7 @@
 # NaiLink · 奶油互联
 
 支持 OpenWrt、ImmortalWrt、iStoreOS 的现代 LuCI，提供 x86_64 / ARM64 及试验性 ARMv7 / MIPS32 / MIPSel32 的
-IPK 和 APK v3 安装包。当前正式版 [openwrt-v0.6.75](https://github.com/slobys/NaiLink/releases/tag/openwrt-v0.6.75)。
+IPK 和 APK v3 安装包。当前正式版 [openwrt-v0.6.76](https://github.com/slobys/NaiLink/releases/tag/openwrt-v0.6.76)。
 
 本项目从 0.6.14 起更名为 NaiLink（奶油互联），侧边栏显示 **NaiLink**。0.6.13 及更早版本显示 **Daed**。沿用原有包名、服务、路径和配置，可继续保留数据升级。
 
@@ -634,7 +634,7 @@ node --test tests/openwrt/ui.test.cjs
 
 `--cpu` 可选 `x86_64`、`arm64`、`armv7`、`mips`、`mipsle`；各有 `ipk-` / `apk-` SDK 目标。MIPS 必须使用上述构建器准备 CGO 静态 SQLite，不能直接套用 `CGO_ENABLED=0`，否则会生成启动即失败的数据库占位驱动。SDK URL、哈希和
 feed 提交固定在 `sdk-matrix.json`，原生打包后逐一验证文件、架构和权限。
-手动运行 **OpenWrt plugin** 工作流，版本号必须与源码、安装器和在线文档一致，默认只生成 artifact。
+手动运行 **OpenWrt plugin** 工作流，版本号必须与软件包源码和安装器一致，默认只生成 artifact。在线文档的固定链接在安装包公开后更新。
 在 `main` 勾选 `publish` 后，所有测试、内核探针和 SDK 打包通过才创建测试版草稿；上传前再次核对 SHA-256、完整架构清单和源码提交。
 同名已发布版本及指向其他提交的标签不会被覆盖，同一提交的草稿允许重试。维护者核验草稿后发布，不需要创建发布 PR 或原项目组织权限。
 

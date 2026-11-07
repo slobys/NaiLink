@@ -11,16 +11,15 @@
 </p>
 <h2 id="current-version">v$version 更新与验证范围</h2>
 <p>
-  <a href="https://github.com/slobys/NaiLink/releases/tag/$release">v$version 正式版</a>改善连接失败时的恢复和内核切换。
+  <a href="https://github.com/slobys/NaiLink/releases/tag/$release">v$version 正式版</a>改善配置应用的结果提示、dae 健康探测和安装文档校验。
 </p>
 <ul>
-  <li>dae 在有同群组备用节点时，根据近期探测适当缩短首选节点的连接等待。</li>
-  <li>sing-box 支持长于默认空闲超时的健康检查间隔。</li>
-  <li>mihomo 对明确要求特定 HTTP 状态的检测地址校验返回值。</li>
-  <li>sing-box 和 mihomo 的就绪检查遵循配置的 HTTP 方法和 DNS 地址族。</li>
+  <li>已接受的重载请求若未收到回执，会显示结果暂未确认，可重新读取状态并查看日志。</li>
+  <li>dae 对带小正文的 HTTP 探测响应限量读取，便于复用已有连接。</li>
+  <li>构建安装文档前验证发行安装脚本可匿名下载，备用升级命令与文档版本保持一致。</li>
 </ul>
 <p>
-  已在隔离环境验证三内核协议互通、连续传输、DNS 与切换回退。公开线路延迟、持续视频带宽和实体路由器运行效果需要单独实测。
+  已在隔离环境验证配置回执、连接复用和更新恢复。公开线路、实体路由器及 Cloudflare Workers 的性能需要现场测量。
   <a href="https://github.com/slobys/NaiLink/blob/main/openwrt/VALIDATION.md">查看验证记录</a>。
 </p>
 <h2 id="menu">打开安装管理菜单</h2>
