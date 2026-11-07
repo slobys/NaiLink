@@ -21,7 +21,6 @@ class ManifestTests(unittest.TestCase):
         self.assertIn("," + version + ")", (OPENWRT / "Makefile").read_text())
         self.assertIn("default: '" + version + "'", (OPENWRT.parent / ".github/workflows/openwrt.yml").read_text())
         readme = (OPENWRT.parent / "README.md").read_text(encoding="utf-8")
-        self.assertIn("/releases/tag/openwrt-v" + version, readme)
         self.assertIn('nl=$(uclient-fetch -O- https://slobys.github.io/NaiLink/install.sh) && sh -c "${nl:?下载为空}" -- --menu', readme)
 
     def setUp(self):

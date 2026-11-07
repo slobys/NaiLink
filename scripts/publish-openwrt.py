@@ -14,13 +14,13 @@ ROOT = Path(__file__).resolve().parents[1]
 def check_version(version):
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
         raise ValueError("Version must be X.Y.Z")
-    site = json.loads((ROOT / "docs/site/site.json").read_text(encoding="utf-8"))
     make = (ROOT / "openwrt/Makefile").read_text(encoding="utf-8")
     installer = (ROOT / "openwrt/install.sh").read_text(encoding="utf-8")
-    if (site["version"] != version or site["release"] != "openwrt-v" + version
-            or not re.search(r"^PKG_VERSION:=.*," + re.escape(version) + r"\)$", make, re.M)
+    # Public documentation stays on the published release while this source is
+    # built and reviewed as a draft. Only the package and installer must match.
+    if (not re.search(r"^PKG_VERSION:=.*," + re.escape(version) + r"\)$", make, re.M)
             or "\nrelease=openwrt-v" + version + "\n" not in installer):
-        raise ValueError("Release version differs from source, installer or handbook")
+        raise ValueError("Release version differs from source or installer")
 
 
 def validate_assets(directory, version, sha):
