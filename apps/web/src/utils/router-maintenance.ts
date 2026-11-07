@@ -93,6 +93,8 @@ export function geodataVersionState(
 }
 
 export const maintenanceMessages: Record<string, string> = {
+  configuration_fixed_group_members:
+    '固定策略要求群组恰好有一个节点，订阅中的节点也会计入。请检查手动节点，移除群组的订阅绑定或用名称筛选保留一个节点，也可改用自动策略。本次编辑未生效，节点、订阅与配置保留。',
   configuration_apply_failed: '配置应用未完成，请查看运行日志；节点、订阅与配置保留。',
   configuration_result_unconfirmed: '应用结果暂未确认，请重新读取状态并查看日志，请勿重复提交；节点与配置保留。',
   invalid_core_mode: '接管模式无效，请重新选择。',

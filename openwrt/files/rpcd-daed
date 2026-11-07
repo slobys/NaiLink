@@ -40,7 +40,13 @@ call)
 		action=''
 		json_get_var action action
 		case "$action" in start|restart|stop|boot_enable|boot_disable) ;; *)
-			json_init; json_add_boolean success 0; json_dump; exit 0 ;;
+			json_init
+			json_add_boolean success 0
+			json_add_string code 'invalid_action'
+			json_add_string scope 'service'
+			json_add_string message '此入口不支持该服务操作。应用配置请使用管理面板，或通过 maintain 提交 config_apply 并读取任务结果。'
+			json_dump
+			exit 0 ;;
 		esac
 		mkdir -p /var/lock
 		exec 9>/var/lock/daed-install.lock
@@ -69,6 +75,12 @@ call)
 		esac
 		json_init
 		json_add_boolean success "$success"
+		# This receipt only acknowledges the service-manager operation. Applied
+		# configuration is reported separately by GraphQL/maintenance receipts.
+		json_add_string scope 'service'
+		case "$action:$success" in
+		start:1|restart:1) json_add_string message '服务启动请求已受理；代理是否生效请查看管理面板的配置状态。' ;;
+		esac
 		json_dump
 		;;
 	*) exit 1 ;;

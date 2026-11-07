@@ -569,6 +569,21 @@ HTTPS 成功只能说明当前路径可用，使用 PassWall 时的成功不代�
 配置的 `[direct]` 不代表重载后的最终路由。Netkit 回退 veth 后继续成功启动时，
 应先核对真实绑定和实际连接结果，避免仅根据该回退提示更换 iproute2。
 
+## 配置应用与服务启动的 RPC 区别
+
+`ubus call daed-router action '{"action":"apply"}'` 不是配置应用入口。`action` 仅支持 `start`、`restart`、`stop`、`boot_enable`、`boot_disable`；不支持的操作在调用配置后端前就被拒绝，因此返回 `false` 后仍看到旧的 `direct` 日志，并不能证明发生了编译或配置回退。
+
+通常请在管理面板应用配置。需要通过命令行执行时，配置应用使用维护任务：
+
+```sh
+ubus call daed-router maintain '{"action":"config_apply"}'
+ubus call daed-router maintenance '{}'
+```
+
+第一条返回的 `success` 表示任务受理；记下 `job.id`，通过第二条读取同一任务的 `job.state` 和 `job.code`。只有该任务的 `state=success` 才确认应用完成。请求超时或结果未确认时，先读取任务状态，不要重复提交。服务 `start` 的成功不代表配置已应用。
+
+启动恢复也不能一概当作“只加载上次已应用配置”：普通启动在 `systems.running=false` 时保留未启用的管理核心；为 `true` 时会从当前选中配置调用应用流程。内核切换中断恢复还有独立的快照路径。直接改库会绕过界面的版本递增及参数保存，不能替代正常的配置应用测试。
+
 ## 兼容性与架构范围
 
 | 程序架构        | 固件包标签                                                       | 状态与基线                                 |
