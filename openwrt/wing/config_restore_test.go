@@ -64,6 +64,9 @@ func TestFixedConfigurationRestoreStatus(t *testing.T) {
 				if !tc.wantReload {
 					t.Error("invalid configuration sent to core")
 				}
+				if message.Config == dae.EmptyConfig || len(message.Config.Node) != tc.members || len(message.Config.Group) != 1 || message.Config.Group[0].Name != "proxy" {
+					t.Fatal("startup did not compile the current selected configuration")
+				}
 				message.Callback <- tc.reloadError
 				err = <-done
 			case err = <-done:

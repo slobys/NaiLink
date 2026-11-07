@@ -323,12 +323,15 @@ func TestFixedSubscriptionApplyPersistence(t *testing.T) {
 	dae.ChReloadConfigs = make(chan *dae.ReloadMessage)
 	defer func() { dae.ChReloadConfigs = previous }()
 	var loaded *daeConfig.Config
+	var coreTrace strings.Builder
+	coreTrace.WriteString("fixture: initial direct management core\n")
 	apply := func(dry bool, reply error, wantReload bool) error {
 		t.Helper()
 		done := make(chan error, 1)
 		go func() { _, err := Run(d, dry); done <- err }()
 		select {
 		case message := <-dae.ChReloadConfigs:
+			fmt.Fprintf(&coreTrace, "fixture: reload requested, dry=%t\n", dry)
 			if !wantReload {
 				t.Error("invalid snapshot reached core")
 			}
@@ -386,6 +389,7 @@ func TestFixedSubscriptionApplyPersistence(t *testing.T) {
 	}
 	check(1, true, false, 2)
 	old := loaded
+	oldCoreTrace := coreTrace.String()
 	if _, err := group.SetPolicy(ctx, groupID, "fixed", []config_parser.Param{{Key: "", Val: "0"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -403,8 +407,8 @@ func TestFixedSubscriptionApplyPersistence(t *testing.T) {
 			}
 		}
 		check(1, true, true, 2)
-		if loaded != old {
-			t.Fatal("rejected edit replaced working core")
+		if loaded != old || coreTrace.String() != oldCoreTrace {
+			t.Fatal("rejected edit replaced working core or produced a core reload")
 		}
 	}
 	// Only this explicit removal clears group_nodes; apply does not.
