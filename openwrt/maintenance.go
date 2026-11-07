@@ -992,8 +992,17 @@ func (m *maintenanceManager) graphQL(ctx context.Context, query string, value an
 	}
 	if len(envelope.Errors) > 0 {
 		for _, raw := range envelope.Errors {
-			var item struct{ Message string }
+			var item struct {
+				Message    string
+				Extensions struct{ Code string }
+			}
 			if json.Unmarshal(raw, &item) == nil {
+				// An accepted reload can outlive its acknowledgement deadline.
+				// Only its structured code establishes uncertainty; arbitrary error
+				// text may include user configuration and must stay private.
+				if (query == "mutation {run(dry:false)}" || query == "mutation {run(dry:true)}") && item.Extensions.Code == "configuration_result_unconfirmed" {
+					return errors.New("configuration_result_unconfirmed")
+				}
 				if code := coreMaintenanceCode(item.Message); code != "" {
 					return errors.New(code)
 				}

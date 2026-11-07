@@ -258,6 +258,9 @@ def replace_go_function(text, signature, body):
 def router_apply_transactions(text):
     text = text.replace('d.Model(&sys).Association("RunningGroups").Replace(groups)',
                         'routerRecordRunningGroups(d, sys.ID, groups)')
+    if 'defer routerApplyResult(&err)' not in text:
+        text = text.replace('defer runLock.Unlock()',
+                            'defer runLock.Unlock()\n    defer routerApplyResult(&err)', 1)
     if 'routerApplyReload(' in text:
         return text
     begin = text.index('func Run(d *gorm.DB, noLoad bool)')

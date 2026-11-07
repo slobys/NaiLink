@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -140,6 +141,48 @@ func TestConfigurationRequestIDIsIdempotentAndValidated(t *testing.T) {
 	}
 	if result := m.startTask("geodata", id); result.Success {
 		t.Fatal("configuration ID accepted for unrelated action")
+	}
+}
+
+func TestConfigurationGraphQLErrorClassification(t *testing.T) {
+	for _, fixture := range []struct {
+		name, message, code, want string
+	}{
+		{"unconfirmed", "应用结果暂未确认", "configuration_result_unconfirmed", "configuration_result_unconfirmed"},
+		{"validation", "groups not defined but referenced by routing: fixture", "", "configuration_apply_failed"},
+		{"unknown_extension", "fixture validation error", "unknown", "configuration_apply_failed"},
+		{"message_is_not_code", "configuration_result_unconfirmed", "", "configuration_apply_failed"},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			m := maintenanceFixture(t)
+			identity, _ := json.Marshal(credentials{"fixture", "fixture-secret"})
+			if err := os.WriteFile(filepath.Join(m.configDir, credentialName), identity, 0600); err != nil {
+				t.Fatal(err)
+			}
+			calls := 0
+			backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				json.NewEncoder(w).Encode(map[string]any{"errors": []any{map[string]any{
+					"message": fixture.message, "extensions": map[string]string{"code": fixture.code},
+				}}})
+			}))
+			defer backend.Close()
+			target, _ := url.Parse(backend.URL)
+			bin := t.TempDir()
+			if err := os.WriteFile(filepath.Join(bin, "uci"), []byte("#!/bin/sh\nprintf '%s\\n' '"+target.Port()+"'\n"), 0700); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+			for _, action := range []string{"config_apply", "config_stop"} {
+				result := runFixtureJob(t, m, action)
+				if result.Job.State != "error" || result.Job.Code != fixture.want {
+					t.Errorf("%s receipt = %+v, want %s", action, result.Job, fixture.want)
+				}
+			}
+			if calls != 2 {
+				t.Fatalf("unexpected replay: %d backend calls", calls)
+			}
+		})
 	}
 }
 func releaseFixture(tag string, draft bool) map[string]any {
