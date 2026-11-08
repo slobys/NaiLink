@@ -173,6 +173,11 @@
   "disableWaitingNetwork": "禁用网络等待",
   "disconnected": "未连接",
   "display name": "展示名",
+  "routingEditor": {
+    "label": "路由规则",
+    "hint": "长规则自动折行，粘贴时整理空格。",
+    "format": "整理格式"
+  },
   "routingSimple": {
     "label": "路由模式",
     "note": "切换简单模式会覆盖当前路由规则。",

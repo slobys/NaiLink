@@ -173,6 +173,11 @@
   "disableWaitingNetwork": "Disable Waiting Network",
   "disconnected": "disconnected",
   "display name": "Display Name",
+  "routingEditor": {
+    "label": "Routing rules",
+    "hint": "Long rules wrap. Pasted rules get consistent spacing.",
+    "format": "Format rules"
+  },
   "routingSimple": {
     "label": "Routing Mode",
     "note": "Changing simple mode will replace current routing rules.",

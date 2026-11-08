@@ -8,6 +8,7 @@ export interface DaeEditorProps {
   configType?: DaeConfigType
   height?: string | number
   disabled?: boolean
+  routingTools?: boolean
 }
 
 const Editor = lazy(() => import('./DaeEditorImpl').then((module) => ({ default: module.DaeEditor })))

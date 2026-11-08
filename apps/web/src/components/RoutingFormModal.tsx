@@ -425,13 +425,14 @@ export function RoutingFormModal({
               <p className="text-xs text-muted-foreground">{t('routingSimple.note')}</p>
             </TabsContent>
 
-            <TabsContent value="advanced" className="flex flex-col gap-1 min-h-0 flex-1">
-              <div className="flex-1 rounded border min-h-[200px] relative">
+            <TabsContent value="advanced" className="flex min-h-0 min-w-0 flex-1 flex-col gap-1">
+              <div className="relative min-h-[200px] min-w-0 flex-1 rounded border">
                 <DaeEditor
                   value={formValues.text || ''}
                   onChange={(value) => setValue('text', value)}
                   configType={configType}
                   height="100%"
+                  routingTools
                 />
               </div>
 
