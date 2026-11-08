@@ -16,7 +16,9 @@
 
 管理节点、订阅和群组，测试节点延迟，查看实时流量，配置 DNS 与路由。支持电脑、手机和多种主题，沿用路由器 LuCI 登录，无需另设账户。
 
-基于 [daed](https://github.com/daeuniverse/daed) 二次开发，独立维护。当前版本为 **[0.6.76 正式版](https://github.com/slobys/NaiLink/releases/tag/openwrt-v0.6.76)**，提供 IPK / APK v3 安装包。
+基于 [daed](https://github.com/daeuniverse/daed) 二次开发，独立维护。当前版本为 **[0.6.77 正式版](https://github.com/slobys/NaiLink/releases/tag/openwrt-v0.6.77)**，提供 IPK / APK v3 安装包。
+
+**0.6.77 路由编辑器**。进阶模式支持长规则自动折行、粘贴整理和手动整理格式。可点击面板版本号更新。
 
 **0.6.76 配置回执与健康探测**。修复应用配置的失败误报，减少 dae HTTP 健康探测重复建连，校验安装文档指向的公开安装脚本。可点击面板版本号更新。
 
@@ -108,7 +110,7 @@ nl=$(uclient-fetch -O- https://slobys.github.io/NaiLink/install.sh) && sh -c "${
 
 ## 源码与交流
 
-[完整源码包](https://github.com/slobys/NaiLink/releases/download/openwrt-v0.6.76/daed-openwrt-source.tar.gz) · [构建说明](openwrt/README.md#开发) · [验证记录](openwrt/VALIDATION.md) · [Logo](docs/site/assets/nailink-logo.png)
+[完整源码包](https://github.com/slobys/NaiLink/releases/download/openwrt-v0.6.77/daed-openwrt-source.tar.gz) · [构建说明](openwrt/README.md#开发) · [验证记录](openwrt/VALIDATION.md) · [Logo](docs/site/assets/nailink-logo.png)
 
 编译请使用完整源码包，或 `git clone --recurse-submodules https://github.com/slobys/NaiLink.git`。GitHub 的 Download ZIP 不包含后端子模块。
 
