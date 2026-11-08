@@ -11,9 +11,9 @@ import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
-SDK_SPEC = importlib.util.spec_from_file_location("openwrt_build", ROOT / "openwrt/build.py")
-sdk_build = importlib.util.module_from_spec(SDK_SPEC)
-SDK_SPEC.loader.exec_module(sdk_build)
+SDK_SPEC = importlib.util.spec_from_file_location("fetch_openwrt_sdk", ROOT / "scripts/fetch-openwrt-sdk.py")
+sdk_download = importlib.util.module_from_spec(SDK_SPEC)
+SDK_SPEC.loader.exec_module(sdk_download)
 SPEC = importlib.util.spec_from_file_location("publish_openwrt", ROOT / "scripts/publish-openwrt.py")
 release = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(release)
@@ -39,9 +39,9 @@ class SdkDownloadTest(unittest.TestCase):
                 raise subprocess.CalledProcessError(18, args)
             output.write_bytes(sdk)
 
-        with tempfile.TemporaryDirectory() as directory, patch.object(sdk_build.subprocess, "run", fetch), contextlib.redirect_stdout(io.StringIO()):
+        with tempfile.TemporaryDirectory() as directory, patch.object(sdk_download.subprocess, "run", fetch), contextlib.redirect_stdout(io.StringIO()):
             archive = Path(directory) / "sdk.tar.zst"
-            sdk_build.download_sdk(target, archive)
+            sdk_download.download_sdk(target, archive)
             self.assertEqual(archive.read_bytes(), sdk)
             self.assertEqual(list(Path(directory).iterdir()), [archive])
         self.assertEqual(attempts, [target["url"], "https://downloads.staging.openwrt.org/releases/sdk.tar.zst"])
@@ -52,9 +52,9 @@ class SdkDownloadTest(unittest.TestCase):
         def fetch(args, **kwargs):
             Path(args[args.index("--output") + 1]).write_bytes(b"wrong archive")
 
-        with tempfile.TemporaryDirectory() as directory, patch.object(sdk_build.subprocess, "run", fetch), contextlib.redirect_stdout(io.StringIO()):
+        with tempfile.TemporaryDirectory() as directory, patch.object(sdk_download.subprocess, "run", fetch), contextlib.redirect_stdout(io.StringIO()):
             with self.assertRaisesRegex(ValueError, "checksum-pinned"):
-                sdk_build.download_sdk(target, Path(directory) / "sdk.tar.zst")
+                sdk_download.download_sdk(target, Path(directory) / "sdk.tar.zst")
             self.assertEqual(list(Path(directory).iterdir()), [])
 
 

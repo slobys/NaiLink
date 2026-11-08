@@ -12,6 +12,7 @@ import struct
 import subprocess
 import tarfile
 import tempfile
+import urllib.request
 
 HERE = Path(__file__).resolve().parent
 ARCHITECTURES = {
@@ -62,8 +63,13 @@ def prepare_sdk(target, work):
     work.mkdir(parents=True, exist_ok=True)
     archive = work / (target["name"] + ".tar.zst")
     if not archive.exists():
-        download_sdk(target, archive)
-    elif sha256(archive) != target["sha256"]:
+        partial = archive.with_suffix(".download")
+        urllib.request.urlretrieve(target["url"], partial)
+        if sha256(partial) != target["sha256"]:
+            partial.unlink()
+            raise ValueError("SDK checksum mismatch")
+        partial.replace(archive)
+    if sha256(archive) != target["sha256"]:
         raise ValueError("SDK checksum mismatch; remove the failed download and retry")
     sdk = work / target["name"]
     if not sdk.exists():
@@ -71,32 +77,6 @@ def prepare_sdk(target, work):
             run("tar", "--zstd", "-xf", str(archive), "--strip-components=1", "-C", temporary, cwd=work)
             Path(temporary).rename(sdk)
     return sdk
-
-
-def download_sdk(target, archive):
-    primary = target["url"]
-    origin = "https://downloads.openwrt.org/"
-    protocol = "=file" if primary.startswith("file:") else "=https"
-    urls = [primary]
-    if primary.startswith(origin):
-        urls.append("https://downloads.staging.openwrt.org/" + primary[len(origin):])
-    with tempfile.TemporaryDirectory(prefix=".sdk-download-", dir=archive.parent) as temporary:
-        partial = Path(temporary) / archive.name
-        for url in urls:
-            try:
-                subprocess.run(["curl", "--fail", "--location", "--proto", protocol, "--proto-redir", "=https",
-                                "--silent", "--show-error", "--connect-timeout", "15",
-                                "--max-time", "240", "--speed-limit", "65536", "--speed-time", "30",
-                                "--output", str(partial), url], check=True)
-                if sha256(partial) != target["sha256"]:
-                    raise ValueError("SDK checksum mismatch")
-            except (subprocess.CalledProcessError, ValueError) as error:
-                print(f"SDK download failed for {url}: {error}", flush=True)
-                partial.unlink(missing_ok=True)
-                continue
-            partial.replace(archive)
-            return
-    raise ValueError("Failed to download the checksum-pinned OpenWrt SDK")
 
 
 def sha256(path):
