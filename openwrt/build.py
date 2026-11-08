@@ -76,6 +76,7 @@ def prepare_sdk(target, work):
 def download_sdk(target, archive):
     primary = target["url"]
     origin = "https://downloads.openwrt.org/"
+    protocol = "=file" if primary.startswith("file:") else "=https"
     urls = [primary]
     if primary.startswith(origin):
         urls.append("https://downloads.staging.openwrt.org/" + primary[len(origin):])
@@ -83,7 +84,7 @@ def download_sdk(target, archive):
         partial = Path(temporary) / archive.name
         for url in urls:
             try:
-                subprocess.run(["curl", "--fail", "--location", "--proto", "=https",
+                subprocess.run(["curl", "--fail", "--location", "--proto", protocol, "--proto-redir", "=https",
                                 "--silent", "--show-error", "--connect-timeout", "15",
                                 "--max-time", "240", "--speed-limit", "65536", "--speed-time", "30",
                                 "--output", str(partial), url], check=True)
