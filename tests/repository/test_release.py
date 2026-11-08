@@ -21,7 +21,7 @@ VERSION = re.search(r"PKG_VERSION:=.*,(\d+\.\d+\.\d+)\)", (ROOT / "openwrt/Makef
 SHA = "a" * 40
 
 
-class SdkDownloadTest(unittest.TestCase):
+class OpenWrtDownloadTest(unittest.TestCase):
     def test_interrupted_download_uses_checksum_verified_mirror(self):
         sdk = b"pinned OpenWrt SDK"
         target = {
@@ -41,7 +41,7 @@ class SdkDownloadTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory, patch.object(sdk_download.subprocess, "run", fetch), contextlib.redirect_stdout(io.StringIO()):
             archive = Path(directory) / "sdk.tar.zst"
-            sdk_download.download_sdk(target, archive)
+            sdk_download.download_openwrt_file(target, archive)
             self.assertEqual(archive.read_bytes(), sdk)
             self.assertEqual(list(Path(directory).iterdir()), [archive])
         self.assertEqual(attempts, [target["url"], "https://mirror.sjtu.edu.cn/openwrt/releases/sdk.tar.zst"])
@@ -54,8 +54,16 @@ class SdkDownloadTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory, patch.object(sdk_download.subprocess, "run", fetch), contextlib.redirect_stdout(io.StringIO()):
             with self.assertRaisesRegex(ValueError, "checksum-pinned"):
-                sdk_download.download_sdk(target, Path(directory) / "sdk.tar.zst")
+                sdk_download.download_openwrt_file(target, Path(directory) / "sdk.tar.zst")
             self.assertEqual(list(Path(directory).iterdir()), [])
+
+    def test_kernel_prefetch_uses_the_pinned_image_for_the_requested_cpu(self):
+        kernels = json.loads((ROOT / "tests/openwrt/kernel-vm-matrix.json").read_text())
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            sdk_download, "download_openwrt_file"
+        ) as download, patch("sys.argv", ["fetch-openwrt-sdk.py", "--kernel", "mipsle", "--work", directory]):
+            sdk_download.main()
+            download.assert_called_once_with(kernels["mipsle"], Path(directory) / "kernel")
 
 
 class ReleaseSafetyTest(unittest.TestCase):
