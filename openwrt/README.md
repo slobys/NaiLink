@@ -633,7 +633,7 @@ node --test tests/openwrt/ui.test.cjs
 构建前执行上述准备命令即可复现，不依赖未推送的子模块提交。
 
 `--cpu` 可选 `x86_64`、`arm64`、`armv7`、`mips`、`mipsle`；各有 `ipk-` / `apk-` SDK 目标。MIPS 必须使用上述构建器准备 CGO 静态 SQLite，不能直接套用 `CGO_ENABLED=0`，否则会生成启动即失败的数据库占位驱动。SDK URL、哈希和
-feed 提交固定在 `sdk-matrix.json`，原生打包后逐一验证文件、架构和权限。
+feed 提交固定在 `sdk-matrix.json`。构建环境需要 curl 下载 SDK，主站下载失败时尝试 OpenWrt 备用站点，两处都按同一 SHA-256 校验。原生打包后逐一验证文件、架构和权限。
 手动运行 **OpenWrt plugin** 工作流，版本号必须与软件包源码和安装器一致，默认只生成 artifact。在线文档的固定链接在安装包公开后更新。
 在 `main` 勾选 `publish` 后，所有测试、内核探针和 SDK 打包通过才创建测试版草稿；上传前再次核对 SHA-256、完整架构清单和源码提交。
 同名已发布版本及指向其他提交的标签不会被覆盖，同一提交的草稿允许重试。维护者核验草稿后发布，不需要创建发布 PR 或原项目组织权限。
