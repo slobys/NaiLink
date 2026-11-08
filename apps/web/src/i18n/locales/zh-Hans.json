@@ -491,6 +491,30 @@
     "upstreamNamePlaceholder": "名称 (如 alidns)",
     "upstreamLinkPlaceholder": "链接 (如 udp://223.5.5.5:53)"
   },
+  "chainProxy": {
+    "label": "链式代理",
+    "add": "添加链式代理",
+    "edit": "编辑链式代理",
+    "description": "流量先到入口节点，再经落地节点访问目标网站。",
+    "entry": "入口节点",
+    "landing": "落地节点",
+    "choose": "请选择节点",
+    "swap": "交换入口和落地",
+    "noCandidates": "没有其他符合条件的节点",
+    "name": "名称（可选）",
+    "namePlaceholder": "默认使用「入口 → 落地」命名",
+    "invalidTag": "名称不能包含英文冒号或单引号。",
+    "snapshot": "保存时复制两条节点链接。订阅更新后，可在这里重新选择节点。落地节点如果需要 UDP，入口也须支持 UDP。",
+    "saved": {
+      "entry": "已保存的入口节点",
+      "landing": "已保存的落地节点"
+    },
+    "create": "创建链式节点",
+    "save": "保存链式节点",
+    "duplicate": "这条链式代理已存在。",
+    "savedSuccess": "链式节点已保存",
+    "saveFailed": "保存失败。请检查节点格式、名称是否重复，或稍后重试。"
+  },
   "panel": {
     "title": "代理管理",
     "description": "管理群组、节点和订阅，再将更改应用到代理。",

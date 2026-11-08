@@ -530,9 +530,73 @@
 .subscription-filters-row > span {
   margin-left: auto;
 }
-.subscription-node-grid {
+.subscription-node-grid,
+.chain-proxy-dialog [cmdk-list-sizer] {
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr));
   gap: 10px;
+}
+.chain-proxy-dialog {
+  max-width: 880px;
+}
+.chain-proxy-dialog [cmdk-list-sizer] {
+  display: grid;
+  align-items: stretch;
+}
+.chain-proxy-dialog [data-slot='command-empty'] {
+  grid-column: 1 / -1;
+}
+.chain-proxy-dialog [data-slot='command-input-wrapper'] {
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.chain-proxy-dialog [data-slot='command-input-wrapper']:focus-within {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.chain-proxy-dialog input[data-slot='command-input']:focus-visible {
+  outline: none;
+}
+.chain-proxy-dialog .chain-node-option {
+  align-items: start;
+  justify-content: center;
+  min-height: 64px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.chain-proxy-dialog:has([cmdk-input]:focus-visible) .chain-node-option[data-selected='true']:not([data-active='true']) {
+  background: var(--console-node-hover);
+}
+.chain-node-meta {
+  color: var(--console-secondary);
+  font-size: 11px;
+  line-height: 16px;
+}
+.chain-node-option[data-active='true'] .chain-node-meta {
+  color: var(--console-selected-text);
+}
+.chain-hop-name .node-name {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+@media (hover: none), (pointer: coarse) {
+  .chain-proxy-dialog .chain-node-option .node-name {
+    display: -webkit-box;
+    overflow-wrap: anywhere;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+  .chain-proxy-dialog .node-name-text {
+    display: inline;
+  }
+  .chain-proxy-dialog input,
+  .chain-proxy-dialog [data-slot='command-input-wrapper'] {
+    font-size: 16px;
+  }
+  .chain-proxy-dialog .node-picker-footer button {
+    min-height: 44px;
+  }
 }
 .subscription-node-tile {
   min-width: 0;
@@ -690,7 +754,8 @@
     gap: 6px;
   }
   .picker-node-grid,
-  .subscription-node-grid {
+  .subscription-node-grid,
+  .chain-proxy-dialog [cmdk-list-sizer] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
   }
@@ -774,7 +839,8 @@
 }
 @media (max-width: 329px) {
   .picker-node-grid,
-  .subscription-node-grid {
+  .subscription-node-grid,
+  .chain-proxy-dialog [cmdk-list-sizer] {
     grid-template-columns: minmax(0, 1fr);
   }
 }

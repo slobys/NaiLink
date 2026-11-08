@@ -7,6 +7,7 @@ import (
 	"github.com/daeuniverse/dae-wing/routercore"
 	daeCommon "github.com/daeuniverse/dae/common"
 	daeConfig "github.com/daeuniverse/dae/config"
+	"strings"
 )
 
 func RouterCoreCapabilities() string {
@@ -31,6 +32,13 @@ func routerDaeNodeProblems(conf *daeConfig.Config) []string {
 	var p []string
 	for i, n := range conf.Node {
 		_, link := daeCommon.GetTagFromLinkLikePlaintext(string(n))
+		if strings.Count(link, routercore.ChainSeparator) == 1 {
+			entry, landing, err := routercore.ChainLinks(link)
+			if err != nil || routercore.IsNativeURI(entry) || routercore.IsNativeURI(landing) {
+				p = append(p, fmt.Sprintf("节点 %d：链式代理的入口和落地节点都必须支持 dae。", i+1))
+			}
+			continue
+		}
 		if routercore.IsNativeURI(link) {
 			p = append(p, fmt.Sprintf("节点 %d：sing-box 原生节点仅能在 sing-box 中运行。原节点保留，请先从 dae 运行群组移除此节点。", i+1))
 		}

@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -77,8 +78,16 @@ func nativeNodeOutbounds(conf *daeConfig.Config, engine string) ([]sbObject, map
 		out, err := routerParseCoreNode(engine, link, "node:"+name, routercore.NodeOptions{AllowInsecure: conf.Global.AllowInsecure, UTLS: fingerprint,
 			Warn: func(message string) { warnings = append(warnings, label+"："+message) },
 		})
+		var expanded []sbObject
+		if err == nil {
+			expanded = routercore.ExpandNode(out)
+		}
 		if err == nil && engine == "mihomo" {
-			for _, node := range routercore.ExpandNode(out) {
+			// Mihomo resolves dialer-proxy while reading the proxy list.
+			if strings.Contains(link, routercore.ChainSeparator) {
+				slices.Reverse(expanded)
+			}
+			for _, node := range expanded {
 				if _, err = routercore.MihomoNode(node); err != nil {
 					break
 				}
@@ -89,7 +98,7 @@ func nativeNodeOutbounds(conf *daeConfig.Config, engine string) ([]sbObject, map
 			continue
 		}
 		names[name] = true
-		outbounds = append(outbounds, routercore.ExpandNode(out)...)
+		outbounds = append(outbounds, expanded...)
 	}
 	return outbounds, names, warnings, problems
 }

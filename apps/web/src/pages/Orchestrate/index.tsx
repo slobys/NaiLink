@@ -169,6 +169,10 @@ export function OrchestratePage({ area = 'all' }: { area?: 'all' | 'dashboard' |
     () => orderNodeLibrary(buildNodeLibrary(nodes, []), nodeSortOrder),
     [nodes, nodeSortOrder],
   )
+  const chainNodes = useMemo(
+    () => (area === 'dashboard' ? [] : buildNodeLibrary(nodes, subscriptions)),
+    [area, nodes, subscriptions],
+  )
   const sortedNodeIds = useMemo(() => nodeLibrary.map((entry) => entry.node.id), [nodeLibrary])
   const filteredNodes = useMemo(
     () => filterNodeLibrary(nodeLibrary, nodeFilters, nodeLatencies),
@@ -794,6 +798,7 @@ export function OrchestratePage({ area = 'all' }: { area?: 'all' | 'dashboard' |
                 {area !== 'dashboard' && (
                   <NodeResource
                     library={nodeLibrary}
+                    chainNodes={chainNodes}
                     nodes={visibleNodes}
                     totalCount={nodeLibrary.length}
                     filters={nodeFilters}

@@ -17,9 +17,7 @@ import (
 )
 
 func routerParseCoreNode(engine, link, tag string, opt routercore.NodeOptions) (sbObject, error) {
-	if engine == "mihomo" && strings.HasPrefix(strings.TrimSpace(link), "ssr://") {
-		return routercore.MihomoSSR(strings.TrimSpace(link), tag)
-	}
+	opt.Mihomo = engine == "mihomo"
 	return routercore.Node(link, tag, opt)
 }
 func routerMihomoInstalled() bool {

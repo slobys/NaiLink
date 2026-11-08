@@ -74,6 +74,8 @@ def router_node_model(text):
     text = text.replace('if strings.HasPrefix(strings.TrimSpace(link), "singbox://") || strings.HasPrefix(strings.TrimSpace(link), "{")', 'if routercore.IsNativeURI(link) || strings.HasPrefix(strings.TrimSpace(link), "{")')
     if 'routerNativeNode(link, tag, subscriptionId)' not in text:
         text = text.replace('if !strings.Contains(link, "://") {', 'if routercore.IsNativeURI(link) || strings.HasPrefix(strings.TrimSpace(link), "{") { return routerNativeNode(link, tag, subscriptionId) }\n\tif !strings.Contains(link, "://") {', 1)
+    if 'routerChainNode(link, tag, subscriptionId)' not in text:
+        text = text.replace('if routercore.IsNativeURI(link)', 'if strings.Count(link, routercore.ChainSeparator) == 1 { return routerChainNode(link, tag, subscriptionId) }\n\tif routercore.IsNativeURI(link)', 1)
     if '"github.com/daeuniverse/dae-wing/routercore"' not in text:
         text = text.replace('import (', 'import (\n\t"github.com/daeuniverse/dae-wing/routercore"', 1)
     text = text.replace("dialer.InstanceOption{DisableCheck: false}", "dialer.InstanceOption{DisableCheck: true}")
@@ -564,9 +566,21 @@ type Mutation {
         generated[relative] = digest(value.encode())
     register_file = root / "dae-core/component/outbound/dialer/register.go"
     register_text = register_file.read_text(encoding="utf-8")
+    if 'routerChainDialer(ctx' not in register_text:
+        start = 'normalizedLink, baseDialer, err := routerProtocolOptions'
+        register_text = register_text.replace(start, '''if routerIsTwoHopLink(link) {
+		return routerChainDialer(ctx, gOption, iOption, link, subscriptionTag, proxyCache)
+	}
+	return routerSingleHopDialer(ctx, gOption, iOption, link, subscriptionTag, proxyCache, false)
+}
+
+func routerSingleHopDialer(ctx context.Context, gOption *GlobalOption, iOption InstanceOption, link, subscriptionTag string, proxyCache *ProxyIpCache, forceConnect bool) (*Dialer, error) {
+	''' + start, 1)
     if 'routerProtocolExtraOption(normalizedLink' not in register_text:
         register_text = register_text.replace('// First, create the protocol dialer', 'extraOption, err := routerProtocolExtraOption(normalizedLink, gOption.ExtraOption)\n\tif err != nil { return nil, err }\n\t// First, create the protocol dialer', 1)
     register_text = register_text.replace('&gOption.ExtraOption, normalizedLink', '&extraOption, normalizedLink')
+    register_text = re.sub(r'D\.NewNetproxyDialerFromLink\((scoped\w+), &extraOption, normalizedLink\)', r'routerChainProtocolDialer(\1, &extraOption, normalizedLink, forceConnect)', register_text)
+    register_text = register_text.replace('\tD "github.com/daeuniverse/outbound/dialer"\n', '')
     register_text = register_text.replace('daeDialer := NewDialerContext(ctx, d, gOption, iOption, &p)', 'daeDialer := NewDialerContext(ctx, routerProtocolDialer(normalizedLink, d), gOption, iOption, &p)')
     register_file.write_text(register_text, encoding="utf-8", newline="\n")
     generated["dae-core/component/outbound/dialer/register.go"] = digest(register_text.encode())
@@ -663,6 +677,7 @@ type Mutation {
         ("dae/router_mihomo_dns_transport_test.go", "mihomo_dns_transport_test.go"),
         ("dae/router_mihomo_runtime.go", "mihomo_runtime.go"),
         ("dae/router_mihomo_test.go", "mihomo_test.go"),
+        ("dae/router_chain_test.go", "chain_test.go"),
         ("dae/router_singbox_runtime.go", "singbox_runtime.go"),
         ("dae/router_core_network.go", "core_network.go"),
         ("dae/router_core_tproxy.go", "core_tproxy.go"),
