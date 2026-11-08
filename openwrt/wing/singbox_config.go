@@ -104,6 +104,53 @@ func coreOutbound(name string) (string, error) {
 	}
 	return "group:" + name, nil
 }
+
+// Native engines schedule URL tests per group, so a group containing a Workers
+// hop uses the slower cadence. Resolve detours as well as top-level nodes.
+func routerWorkerProbeNodes(outbounds []sbObject) map[string]bool {
+	worker, parent := map[string]bool{}, map[string][]string{}
+	var queue []string
+	for _, node := range outbounds {
+		tag, _ := node["tag"].(string)
+		if detour, _ := node["detour"].(string); detour != "" {
+			parent[detour] = append(parent[detour], tag)
+		}
+		server, _ := node["server"].(string)
+		tls, _ := node["tls"].(sbObject)
+		sni, _ := tls["server_name"].(string)
+		transport, _ := node["transport"].(sbObject)
+		headers, _ := transport["headers"].(sbObject)
+		isWorker := daeCommon.NaiLinkWorkerHost(server) || daeCommon.NaiLinkWorkerHost(sni)
+		for key, value := range headers {
+			if !strings.EqualFold(key, "Host") {
+				continue
+			}
+			switch host := value.(type) {
+			case string:
+				isWorker = isWorker || daeCommon.NaiLinkWorkerHost(host)
+			case []any:
+				for _, entry := range host {
+					name, _ := entry.(string)
+					isWorker = isWorker || daeCommon.NaiLinkWorkerHost(name)
+				}
+			}
+		}
+		if isWorker {
+			queue = append(queue, tag)
+			worker[tag] = true
+		}
+	}
+	for i := 0; i < len(queue); i++ {
+		for _, tag := range parent[queue[i]] {
+			if !worker[tag] {
+				queue = append(queue, tag)
+				worker[tag] = true
+			}
+		}
+	}
+	return worker
+}
+
 func singBoxConfig(conf *daeConfig.Config, dirs []string, ports sbPorts, transparent bool) (sbObject, []string, error) {
 	return coreCanonicalConfig(conf, dirs, ports, transparent, "sing-box")
 }
@@ -135,6 +182,7 @@ func coreCanonicalConfig(conf *daeConfig.Config, dirs []string, ports sbPorts, t
 	if len(conf.Dns.Routing.Response.Rules) > 0 || len(conf.Dns.FixedDomainTtl) > 0 || conf.Dns.MaxCacheSize != 0 {
 		return nil, nil, errors.New("unsupported_dns_option")
 	}
+	workerNodes := routerWorkerProbeNodes(outbounds)
 	for _, group := range conf.Group {
 		for _, annotations := range group.FilterAnnotation {
 			if len(annotations) > 0 {
@@ -193,6 +241,13 @@ func coreCanonicalConfig(conf *daeConfig.Config, dirs []string, ports sbPorts, t
 			}
 			if interval <= 0 {
 				return nil, nil, errors.New("invalid_check_interval")
+			}
+			for _, member := range members {
+				if workerNodes[member] && interval < daeCommon.NaiLinkWorkerProbeInterval {
+					interval = daeCommon.NaiLinkWorkerProbeInterval
+					c.warnings = append(c.warnings, "群组「"+group.Name+"」含 Cloudflare Workers 节点，自动测试至少间隔 5 分钟，手动测试不受影响。")
+					break
+				}
 			}
 			out["interval"] = interval.String()
 			// sing-box rejects a check interval longer than its idle timeout.

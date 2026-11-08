@@ -60,14 +60,74 @@ def router_dns_expiry_test(text):
 
 
 def router_health_http(text):
-    if "routerFinishHealthResponse(resp, cancel)" in text:
+    if "routerFinishHealthResponse(resp, cancel)" not in text:
+        request = '\treq, err := http.NewRequestWithContext(ctx, method, u.String(), nil)'
+        close = '\tdefer func() { _ = resp.Body.Close() }()'
+        if text.count(request) != 1 or text.count(close) != 1:
+            raise ValueError("Unknown HTTP health check; review before applying")
+        text = text.replace(request, '\tctx, cancel := context.WithCancel(ctx)\n\tdefer cancel()\n' + request, 1)
+        text = text.replace(close, '\tdefer routerFinishHealthResponse(resp, cancel)', 1)
+    if "common.NaiLinkWorkerLink(" in text:
         return text
-    request = '\treq, err := http.NewRequestWithContext(ctx, method, u.String(), nil)'
-    close = '\tdefer func() { _ = resp.Body.Close() }()'
-    if text.count(request) != 1 or text.count(close) != 1:
-        raise ValueError("Unknown HTTP health check; review before applying")
-    text = text.replace(request, '\tctx, cancel := context.WithCancel(ctx)\n\tdefer cancel()\n' + request, 1)
-    return text.replace(close, '\tdefer routerFinishHealthResponse(resp, cancel)', 1)
+    changes = (
+        ('\tcycle := d.CheckInterval\n', '''\tcycle := d.CheckInterval
+\tworker := d.property != nil && common.NaiLinkWorkerLink(d.property.Link, d.property.Address)
+\tif worker {
+\t\tcycle = max(cycle, common.NaiLinkWorkerProbeInterval)
+\t}
+\tvar nextWorkerCheck time.Time
+'''),
+        ('initialConnectivityCheckJitterWindow(cycle, getActiveDialerCount())', 'initialConnectivityCheckJitterWindow(d.CheckInterval, getActiveDialerCount())'),
+        ('\t\tinitialDelay += cycle\n', '''\t\tinitialDelay += cycle
+\t\tif worker {
+\t\t\tnextWorkerCheck = time.Now().Add(cycle)
+\t\t}
+'''),
+        ('\t\td.TcpCheckOptionRaw.Reset()\n', '''\t\t// Network-ready and emergency notifications share the same budget.
+\t\t// A skipped notification does not change the timer or node health.
+\t\tif worker {
+\t\t\tnow := time.Now()
+\t\t\tif now.Before(nextWorkerCheck) {
+\t\t\t\tcontinue
+\t\t\t}
+\t\t\tnextWorkerCheck = now.Add(cycle)
+\t\t\t// Update all transports in this round without triggering another
+\t\t\t// round when the other protocol is notified immediately after it.
+\t\t\tcheckFamily = ""
+\t\t}
+\n\t\td.TcpCheckOptionRaw.Reset()
+'''),
+        ('\t\tif isFirstCheck {\n\t\t\tnextDelay = time.Duration(fastrand.Int63n(int64(cycle)))',
+         '''\t\tif isFirstCheck {
+\t\t\tif !worker {
+\t\t\t\tnextDelay = time.Duration(fastrand.Int63n(int64(cycle)))
+\t\t\t}'''),
+    )
+    for before, after in changes:
+        if text.count(before) != 1:
+            raise ValueError("Unknown automatic health scheduler; review before applying")
+        text = text.replace(before, after, 1)
+    if '"github.com/daeuniverse/dae/common"' not in text:
+        text = text.replace('import (\n', 'import (\n\t"github.com/daeuniverse/dae/common"\n', 1)
+    return text
+
+
+def router_health_dialer(text):
+    text = text.replace('return &netproxy.FakeNetConn{\n\t\t\t\t\tConn:  conn,\n\t\t\t\t\tLAddr: nil,\n\t\t\t\t\tRAddr: nil,\n\t\t\t\t}, nil', 'return routerCheckConn(conn), nil', 1)
+    if 'IdleConnTimeout:       idleTimeout,' in text:
+        return text
+    client = '\tcli := &http.Client{\n'
+    timeout = 'IdleConnTimeout:       90 * time.Second,'
+    if text.count(client) != 1 or text.count(timeout) != 1:
+        raise ValueError("Unknown HTTP health transport; review before applying")
+    text = text.replace(client, '''\t// Keep an already reusable Worker tunnel across the longer check interval.
+\tidleTimeout := 90 * time.Second
+\tif d.CheckInterval <= common.NaiLinkWorkerProbeInterval && d.property != nil &&
+\t\tcommon.NaiLinkWorkerLink(d.property.Link, d.property.Address) {
+\t\tidleTimeout = common.NaiLinkWorkerProbeInterval + time.Minute
+\t}
+''' + client, 1)
+    return text.replace(timeout, 'IdleConnTimeout:       idleTimeout,', 1)
 
 
 def router_node_model(text):
@@ -496,7 +556,7 @@ func _fetchLinksContext(ctx context.Context, subscriptionLink string, transport 
         "dae-core/control/dns_lifecycle_test.go": ("075d244882bb623dce5e37fae748594ee602611ffa2e2697c51d49f46026f44d", lambda value: value.replace('func(client *http.Client,', 'func(ctx context.Context, client *http.Client,')),
         "dae-core/control/dns_udp_packetconn_test.go": ("ac72b165c59e24795c4581740c5a4657c9ef7c305ef361a378124ca96517eba8", router_udp_pool_test),
         "dae-core/component/outbound/dialer/connectivity_check.go": ("7315bbb8d7a9a0bf3cecc042a3866bf8e7ab30344d4947c91492dc431f5d42d0", router_health_http),
-        "dae-core/component/outbound/dialer/dialer.go": ("c6615ddf375371b1974c6d35ef8660aea8ee907fe88ebe09207560b5da5d39ad", lambda value: value.replace('return &netproxy.FakeNetConn{\n\t\t\t\t\tConn:  conn,\n\t\t\t\t\tLAddr: nil,\n\t\t\t\t\tRAddr: nil,\n\t\t\t\t}, nil', 'return routerCheckConn(conn), nil', 1)),
+        "dae-core/component/outbound/dialer/dialer.go": ("c6615ddf375371b1974c6d35ef8660aea8ee907fe88ebe09207560b5da5d39ad", router_health_dialer),
         "dae-core/component/outbound/dialer/register.go": ("59aa07ff1a3bf7c7dd38353091c3e9cdb2510f256e02e327c1fc768ef4e3ca99", lambda value: value.replace('normalizedLink := normalizeShadowTLSPluginOptions(link)\n\tbaseDialer := newDefaultNetworkDialer(direct.SymmetricDirect, gOption.SoMarkFromDae, gOption.Mptcp)', 'normalizedLink, baseDialer, err := routerProtocolOptions(normalizeShadowTLSPluginOptions(link), newDefaultNetworkDialer(direct.SymmetricDirect, gOption.SoMarkFromDae, gOption.Mptcp), gOption.UDPHopInterval)\n\tif err != nil { return nil, err }', 1)),
         "dae-core/common/subscription/subscription.go": ("c48c3a14937aac13fde5d10af24e6d5774c6b5d2f09f8f23872201c06dcdd05f", lambda value: value.replace('url.Values{"plugin": []string{server.PluginOpts}}.Encode()', 'routerSIP008Plugin(server.Plugin, server.PluginOpts)', 1)),
         "dae/runtime.go": ("582676a55373d44220dced8552f094482d7d35a423d13de98ae0865cbe687062", lambda value: (HERE / "wing/runtime.go").read_text(encoding="utf-8")),
@@ -528,7 +588,7 @@ type Mutation {
         elif relative in ("graphql/service/node/latency_mutation_utils.go", "graphql/service/node/latency_resolver.go", "dae/runtime.go", "dae/httpclient.go", "dae-core/component/interface_manager.go"):
             replacement = {"latency_mutation_utils.go": "node_latency.go", "latency_resolver.go": "node_latency_resolver.go"}.get(relative.split("/")[-1], relative.split("/")[-1])
             data = (HERE / "wing" / replacement).read_bytes()
-        elif relative in ("cmd/run.go", "dae/run.go") or transform in (router_node_model, router_transactions, router_control_dial, router_dns_recovery, router_dns_transport, router_bootstrap, router_udp_pool_test, router_dns_expiry_test, router_health_http):
+        elif relative in ("cmd/run.go", "dae/run.go") or transform in (router_node_model, router_transactions, router_control_dial, router_dns_recovery, router_dns_transport, router_bootstrap, router_udp_pool_test, router_dns_expiry_test, router_health_http, router_health_dialer):
             data = transform(data.decode()).encode()
         destination.write_bytes(data)
         generated[relative] = digest(data)
@@ -709,6 +769,7 @@ type Mutation {
         ("dae-core/component/outbound/dialer/router_protocol_compat.go", "protocol_compat.go"),
         ("dae-core/component/outbound/dialer/router_protocol_compat_test.go", "protocol_compat_test.go"),
         ("dae-core/component/outbound/dialer/router_health_http.go", "health_http.go"),
+        ("dae-core/common/router_worker_probe.go", "worker_probe.go"),
         ("dae-core/component/outbound/dialer/router_health_http_test.go", "health_http_test.go"),
         ("dae-core/component/outbound/dialer/router_health_ws_test.go", "health_ws_test.go"),
         ("dae-core/component/router_interface_manager_test.go", "interface_manager_test.go"),
