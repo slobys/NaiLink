@@ -11,11 +11,51 @@ import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
+SDK_SPEC = importlib.util.spec_from_file_location("fetch_openwrt_sdk", ROOT / "scripts/fetch-openwrt-sdk.py")
+sdk_download = importlib.util.module_from_spec(SDK_SPEC)
+SDK_SPEC.loader.exec_module(sdk_download)
 SPEC = importlib.util.spec_from_file_location("publish_openwrt", ROOT / "scripts/publish-openwrt.py")
 release = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(release)
 VERSION = re.search(r"PKG_VERSION:=.*,(\d+\.\d+\.\d+)\)", (ROOT / "openwrt/Makefile").read_text())[1]
 SHA = "a" * 40
+
+
+class SdkDownloadTest(unittest.TestCase):
+    def test_interrupted_download_uses_checksum_verified_mirror(self):
+        sdk = b"pinned OpenWrt SDK"
+        target = {
+            "url": "https://downloads.openwrt.org/releases/sdk.tar.zst",
+            "sha256": hashlib.sha256(sdk).hexdigest(),
+        }
+        attempts = []
+
+        def fetch(args, **kwargs):
+            attempts.append(args[-1])
+            output = Path(args[args.index("--output") + 1])
+            self.assertFalse(output.exists())
+            if len(attempts) == 1:
+                output.write_bytes(b"partial")
+                raise subprocess.CalledProcessError(18, args)
+            output.write_bytes(sdk)
+
+        with tempfile.TemporaryDirectory() as directory, patch.object(sdk_download.subprocess, "run", fetch), contextlib.redirect_stdout(io.StringIO()):
+            archive = Path(directory) / "sdk.tar.zst"
+            sdk_download.download_sdk(target, archive)
+            self.assertEqual(archive.read_bytes(), sdk)
+            self.assertEqual(list(Path(directory).iterdir()), [archive])
+        self.assertEqual(attempts, [target["url"], "https://mirror.sjtu.edu.cn/openwrt/releases/sdk.tar.zst"])
+
+    def test_never_keeps_an_archive_with_invalid_checksum(self):
+        target = {"url": "https://downloads.openwrt.org/releases/sdk.tar.zst", "sha256": "a" * 64}
+
+        def fetch(args, **kwargs):
+            Path(args[args.index("--output") + 1]).write_bytes(b"wrong archive")
+
+        with tempfile.TemporaryDirectory() as directory, patch.object(sdk_download.subprocess, "run", fetch), contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(ValueError, "checksum-pinned"):
+                sdk_download.download_sdk(target, Path(directory) / "sdk.tar.zst")
+            self.assertEqual(list(Path(directory).iterdir()), [])
 
 
 class ReleaseSafetyTest(unittest.TestCase):

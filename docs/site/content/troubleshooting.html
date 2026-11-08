@@ -373,11 +373,25 @@ done</code></pre>
   <a href="https://t.me/naiyous">Telegram 群组</a>反馈。不要公开订阅链接、完整节点链接、密码、UUID、Cookie 或令牌。
 </p>
 
-<h2 id="node-timeout">节点超时、握手失败怎样区分？</h2>
+  <h2 id="worker-quota">Cloudflare Workers 的请求额度为什么消耗很快？</h2>
+  <p>
+    如果节点用 Workers 中转，正常访问和自动测试新开的 WebSocket 都可能消耗请求额度。多个节点共用一个
+    Worker，或同一个节点加入多个自动选择群组时，探测也会叠加。可在
+    <a href="https://developers.cloudflare.com/workers/platform/pricing/#workers">Cloudflare 的计费说明</a>
+    查看请求的计算方式。
+  </p>
+  <p>
+    NaiLink 识别到 <code>*.workers.dev</code> 中转时，dae 对该节点、sing-box 和 mihomo 对包含它的自动群组，
+    两轮周期探测之间至少间隔 5 分钟。手动测试和正常访问仍可使用。自定义域名无法自动识别时，可在高级设置的配置中调大「检测间隔」，
+    并检查群组是否设置了更短的间隔。若额度仍然快速消耗，可在 Cloudflare 后台对照暂停代理前后的请求量，
+    检查同账号的其他 Worker 和客户端。
+  </p>
+
+  <h2 id="node-timeout">节点超时、握手失败怎样区分？</h2>
 <p>
   0.6.43 起，三内核手动 HTTP 测试包含完整连接与协议握手，普通节点单次最多等待 8 秒，Tor
   等长引导协议沿用原期限；排队和私有内核启动不计入延迟。显示 4000 ms 表示确实花了约 4
-  秒，不会人为扣减。自动健康检查和选路策略保持原设置，手动结果不能与自动复用连接的延迟直接等同。
+    秒，不会人为扣减。手动结果不能与自动复用连接的延迟直接等同。
 </p>
 <ul>
   <li>

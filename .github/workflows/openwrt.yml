@@ -14,7 +14,7 @@ on:
     inputs:
       version:
         description: 'Package version (X.Y.Z), must match source'
-        default: '0.6.77'
+        default: '0.6.78'
         required: true
       publish:
         description: 'After all checks, upload to a release draft (main only)'
@@ -166,6 +166,9 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends clang llvm zstd
           mkdir -p .build/runtime
+          if [[ '${{ matrix.cpu }}' == mips || '${{ matrix.cpu }}' == mipsle ]]; then
+            python3 scripts/fetch-openwrt-sdk.py --target 'ipk-${{ matrix.cpu }}' --work /tmp/daed-runtime-sdk
+          fi
           python3 openwrt/runtime.py --cpu '${{ matrix.cpu }}' --wing wing --web dist --version "$VERSION" --work /tmp/daed-runtime-sdk --output .build/runtime
       - name: BTF parser tests
         if: matrix.cpu == 'x86_64'
@@ -322,6 +325,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends build-essential gawk gettext libncurses-dev libssl-dev python3 rsync unzip zstd
+          python3 scripts/fetch-openwrt-sdk.py --target '${{ matrix.target }}' --work /tmp/daed-sdk
           python3 openwrt/build.py --target '${{ matrix.target }}' --binary .build/runtime/daed --btf-probe .build/runtime/btf-probe --luci-proxy .build/runtime/luci-proxy --version "$VERSION" --work /tmp/daed-sdk --output .build/packages
       - name: Real APK architecture, preflight and uninstall tests
         if: matrix.target == 'apk-x86_64'
