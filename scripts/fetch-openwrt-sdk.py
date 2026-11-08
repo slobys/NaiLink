@@ -9,17 +9,18 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 SDK_ORIGIN = "https://downloads.openwrt.org/"
-SDK_MIRROR = "https://downloads.staging.openwrt.org/"
+SDK_MIRRORS = ("https://mirror.sjtu.edu.cn/openwrt/", "https://downloads.staging.openwrt.org/")
 
 
 def download_sdk(target, archive):
     primary = target["url"]
     if not primary.startswith(SDK_ORIGIN):
         raise ValueError("Expected a pinned OpenWrt SDK URL")
-    mirror = SDK_MIRROR + primary[len(SDK_ORIGIN):]
+    relative = primary[len(SDK_ORIGIN):]
+    mirrors = [origin + relative for origin in SDK_MIRRORS]
     with tempfile.TemporaryDirectory(prefix=".sdk-download-", dir=archive.parent) as temporary:
         partial = Path(temporary) / archive.name
-        for url in (primary, mirror):
+        for url in (primary, *mirrors):
             try:
                 subprocess.run(["curl", "--fail", "--location", "--proto", "=https",
                                 "--silent", "--show-error", "--connect-timeout", "15",

@@ -44,7 +44,7 @@ class SdkDownloadTest(unittest.TestCase):
             sdk_download.download_sdk(target, archive)
             self.assertEqual(archive.read_bytes(), sdk)
             self.assertEqual(list(Path(directory).iterdir()), [archive])
-        self.assertEqual(attempts, [target["url"], "https://downloads.staging.openwrt.org/releases/sdk.tar.zst"])
+        self.assertEqual(attempts, [target["url"], "https://mirror.sjtu.edu.cn/openwrt/releases/sdk.tar.zst"])
 
     def test_never_keeps_an_archive_with_invalid_checksum(self):
         target = {"url": "https://downloads.openwrt.org/releases/sdk.tar.zst", "sha256": "a" * 64}
