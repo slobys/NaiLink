@@ -4,11 +4,13 @@ package config
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/daeuniverse/dae-wing/dae"
 	"github.com/daeuniverse/dae-wing/db"
 	daeConfig "github.com/daeuniverse/dae/config"
+	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
@@ -21,12 +23,40 @@ func (routerApplyUnconfirmedError) Extensions() map[string]interface{} {
 	return map[string]interface{}{"code": "configuration_result_unconfirmed"}
 }
 
+const routerFixedGroupMembersCode = "configuration_fixed_group_members"
+
+// Only numeric identifiers/counts cross the diagnostic boundary. Names, links,
+// regexes and core errors can contain subscription credentials.
+type routerFixedGroupMembersError struct {
+	groupID uint
+	count   int
+}
+
+func (e routerFixedGroupMembersError) Error() string {
+	return fmt.Sprintf("fixed group %d resolves to %d nodes (including subscription members); keep exactly one node by checking explicit nodes and subscription bindings/name filters, or use an automatic policy", e.groupID, e.count)
+}
+func (e routerFixedGroupMembersError) Extensions() map[string]interface{} {
+	return map[string]interface{}{"code": routerFixedGroupMembersCode, "groupId": e.groupID, "nodeCount": e.count}
+}
+
 // Run wraps reload errors with operation context. GraphQL only reads extensions
 // on the outer error, so retain the uncertainty code after those wrappers.
 func routerApplyResult(err *error) {
+	if *err == nil {
+		return
+	}
 	if errors.Is(*err, errRouterApplyUnconfirmed) {
 		*err = routerApplyUnconfirmedError{*err}
+		logrus.WithField("code", "configuration_result_unconfirmed").Warn("Configuration operation result unconfirmed; read current status before retrying")
+		return
 	}
+	var members routerFixedGroupMembersError
+	if errors.As(*err, &members) {
+		logrus.WithFields(logrus.Fields{"code": routerFixedGroupMembersCode, "group_id": members.groupID, "node_count": members.count}).Warn(members.Error())
+		return
+	}
+	// Never log raw compiler/core errors here: they may contain credential URLs.
+	logrus.WithField("code", "configuration_apply_failed").Warn("Configuration operation failed; inspect configuration and core status")
 }
 
 // Once a reload is accepted, finish its acknowledgement and status write even

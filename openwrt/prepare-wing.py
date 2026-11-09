@@ -329,6 +329,11 @@ def replace_go_function(text, signature, body):
 
 
 def router_apply_transactions(text):
+    if 'routerFixedGroupMembersError{g.ID, len(sNodes)}' not in text:
+        text = text.replace('for g, sNodes := range mGroupNode {', 'for g, sNodes := range mGroupNode {\n        if g.Policy == "fixed" && len(sNodes) != 1 { return 0, routerFixedGroupMembersError{g.ID, len(sNodes)} }', 1)
+        begin = text.index('\t\t// fiexed group cannot have more than one node.')
+        end = text.index('\t\t// Node names to filter.', begin)
+        text = text[:begin] + text[end:]
     text = text.replace('d.Model(&sys).Association("RunningGroups").Replace(groups)',
                         'routerRecordRunningGroups(d, sys.ID, groups)')
     if 'defer routerApplyResult(&err)' not in text:
@@ -764,6 +769,7 @@ func routerSingleHopDialer(ctx context.Context, gOption *GlobalOption, iOption I
         ("graphql/router_core_mutations.go", "core_mutations.go"),
         ("graphql/service/config/router_apply.go", "config_apply.go"),
         ("graphql/service/config/router_apply_test.go", "config_apply_test.go"),
+        ("cmd/router_config_restore_test.go", "config_restore_test.go"),
         ("graphql/router_geodata_mutation.go", "geodata_mutation.go"),
         ("graphql/router_geodata_mutation_test.go", "geodata_mutation_test.go"),
         ("dae/router_restart_state.go", "restart_state.go"),

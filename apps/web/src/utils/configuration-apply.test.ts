@@ -83,3 +83,17 @@ describe('configuration task acknowledgement', () => {
     expect(io.start).toHaveBeenCalledTimes(2)
   })
 })
+
+it('shows fixed membership guidance from a confirmed receipt without replay', async () => {
+  const io = {
+    start: vi.fn(async () => receipt('error', 'original', 'configuration_fixed_group_members')),
+    read: vi.fn(async () => receipt('success')),
+    wait: async () => {},
+    now: () => 0,
+    timeout: 100,
+    id: () => 'original',
+  }
+  await expect(applyRouterConfiguration(false, () => {}, io)).rejects.toThrow('订阅中的节点也会计入')
+  expect(io.start).toHaveBeenCalledExactlyOnceWith('config_apply', 'original')
+  expect(io.read).not.toHaveBeenCalled()
+})

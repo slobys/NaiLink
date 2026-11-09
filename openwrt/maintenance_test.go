@@ -150,6 +150,8 @@ func TestConfigurationGraphQLErrorClassification(t *testing.T) {
 	}{
 		{"unconfirmed", "应用结果暂未确认", "configuration_result_unconfirmed", "configuration_result_unconfirmed"},
 		{"validation", "groups not defined but referenced by routing: fixture", "", "configuration_apply_failed"},
+		{"fixed_members", "https://fixture.invalid/?token=synthetic-secret", "configuration_fixed_group_members", "configuration_fixed_group_members"},
+		{"fixed_message_is_not_code", "configuration_fixed_group_members", "", "configuration_apply_failed"},
 		{"unknown_extension", "fixture validation error", "unknown", "configuration_apply_failed"},
 		{"message_is_not_code", "configuration_result_unconfirmed", "", "configuration_apply_failed"},
 	} {
@@ -178,6 +180,10 @@ func TestConfigurationGraphQLErrorClassification(t *testing.T) {
 				if result.Job.State != "error" || result.Job.Code != fixture.want {
 					t.Errorf("%s receipt = %+v, want %s", action, result.Job, fixture.want)
 				}
+			}
+			serialized, _ := json.Marshal(m.status())
+			if strings.Contains(string(serialized), "synthetic-secret") || strings.Contains(string(serialized), "fixture.invalid") {
+				t.Fatal("GraphQL details leaked into job receipt")
 			}
 			if calls != 2 {
 				t.Fatalf("unexpected replay: %d backend calls", calls)
