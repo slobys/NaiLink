@@ -14,7 +14,7 @@ on:
     inputs:
       version:
         description: 'Package version (X.Y.Z), must match source'
-        default: '0.6.76'
+        default: '0.6.79'
         required: true
       publish:
         description: 'After all checks, upload to a release draft (main only)'
@@ -166,6 +166,9 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends clang llvm zstd
           mkdir -p .build/runtime
+          if [[ '${{ matrix.cpu }}' == mips || '${{ matrix.cpu }}' == mipsle ]]; then
+            python3 scripts/fetch-openwrt-sdk.py --target 'ipk-${{ matrix.cpu }}' --work /tmp/daed-runtime-sdk
+          fi
           python3 openwrt/runtime.py --cpu '${{ matrix.cpu }}' --wing wing --web dist --version "$VERSION" --work /tmp/daed-runtime-sdk --output .build/runtime
       - name: BTF parser tests
         if: matrix.cpu == 'x86_64'
@@ -235,8 +238,10 @@ jobs:
           mkdir -p /tmp/nailink-mihomo-static
           tar -xzf .build/mihomo-core/nailink-mihomo-1.19.33-x86_64.tar.gz -C /tmp/nailink-mihomo-static
           tar -xzf /tmp/nailink-mihomo-static/data.tar.gz -C /tmp/nailink-mihomo-static
-          (cd wing && DAED_TEST_MIHOMO=/tmp/nailink-mihomo-static/usr/bin/mihomo DAED_TEST_SINGBOX=/tmp/nailink-core-static/usr/bin/sing-box go test -count=1 ./routercore ./dae)
+          (cd wing && DAED_TEST_MIHOMO=/tmp/nailink-mihomo-static/usr/bin/mihomo DAED_TEST_SINGBOX=/tmp/nailink-core-static/usr/bin/sing-box go test -count=1 -skip '^TestRouterChainTrafficAndEntryFailure$' ./routercore ./dae)
           (cd wing && go test -c ./dae -o /tmp/nailink-dae-tests)
+          # The production sing-box profile sets SO_MARK on the chain's entry socket.
+          sudo env DAED_TEST_MIHOMO=/tmp/nailink-mihomo-static/usr/bin/mihomo DAED_TEST_SINGBOX=/tmp/nailink-core-static/usr/bin/sing-box /tmp/nailink-dae-tests -test.run '^TestRouterChainTrafficAndEntryFailure$' -test.v
           sudo unshare -n sh -c 'ip link set lo up; DAED_TEST_TPROXY_ROUTING=1 /tmp/nailink-dae-tests -test.run "^TestRouterTProxyRoutingRepairsInIsolatedNamespace$" -test.v'
           sudo unshare -n sh -c 'ip link set lo up; echo "40000 40031" > /proc/sys/net/ipv4/ip_local_port_range; DAED_ISOLATED_PORT_EXHAUSTION=1 /tmp/nailink-dae-tests -test.run "^TestPrivateListenerRealPortExhaustion$" -test.v'
           sudo env "PATH=$PATH" "GOCACHE=$(go env GOCACHE)" "GOMODCACHE=$(go env GOMODCACHE)" python3 tests/openwrt/protocol_interop.py --wing wing --sing-box /tmp/nailink-protocol-servers/sing-box-1.14.3-linux-amd64/sing-box --juicity-server /tmp/nailink-protocol-servers/juicity/juicity-server --client-singbox /tmp/nailink-core-static/usr/bin/sing-box --client-extra /tmp/nailink-extra-native --client-mihomo /tmp/nailink-mihomo-static/usr/bin/mihomo
@@ -322,6 +327,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends build-essential gawk gettext libncurses-dev libssl-dev python3 rsync unzip zstd
+          python3 scripts/fetch-openwrt-sdk.py --target '${{ matrix.target }}' --work /tmp/daed-sdk
           python3 openwrt/build.py --target '${{ matrix.target }}' --binary .build/runtime/daed --btf-probe .build/runtime/btf-probe --luci-proxy .build/runtime/luci-proxy --version "$VERSION" --work /tmp/daed-sdk --output .build/packages
       - name: Real APK architecture, preflight and uninstall tests
         if: matrix.target == 'apk-x86_64'
@@ -381,7 +387,7 @@ jobs:
           mkdir -p .build/kernel-vm
           (cd wing && go build -o ../.build/kernel-vm/init ../tests/openwrt/kernel_probe_init.go)
           (cd wing && go build -o ../.build/kernel-vm/probe ../openwrt/btf-probe.go)
-          python3 -c 'import hashlib,json,urllib.request; r=json.load(open("tests/openwrt/kernel-vm-matrix.json"))["${{ matrix.cpu }}"]; p=".build/kernel-vm/kernel"; urllib.request.urlretrieve(r["url"],p); assert hashlib.sha256(open(p,"rb").read()).hexdigest()==r["sha256"]'
+          python3 scripts/fetch-openwrt-sdk.py --kernel '${{ matrix.cpu }}' --work .build/kernel-vm
       - name: Verify real kernel acceptance or expected incompatibility
         run: |
           sudo apt-get update -qq

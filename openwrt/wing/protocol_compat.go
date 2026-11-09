@@ -2,24 +2,178 @@
 package dialer
 
 import (
+	"bufio"
 	"context"
 	"crypto/rand"
+	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"net/netip"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	outboundCommon "github.com/daeuniverse/outbound/common"
 	proxyurl "github.com/daeuniverse/outbound/common/url"
 	D "github.com/daeuniverse/outbound/dialer"
+	httpdialer "github.com/daeuniverse/outbound/dialer/http"
 	"github.com/daeuniverse/outbound/netproxy"
 	"github.com/daeuniverse/outbound/pool"
 	"github.com/daeuniverse/outbound/protocol/hysteria2/udphop"
 	"golang.org/x/crypto/blake2b"
 )
+
+func routerIsTwoHopLink(link string) bool {
+	_, raw := outboundCommon.GetTagFromLinkLikePlaintext(link)
+	return strings.Count(raw, "->") == 1
+}
+
+// Keep the first hop on dae's usual marked and DNS-aware dialing path. The
+// landing hop only dials through that path, including for health probes.
+func routerChainDialer(ctx context.Context, global *GlobalOption, instance InstanceOption, link, subscription string, cache *ProxyIpCache) (result *Dialer, err error) {
+	name, raw := outboundCommon.GetTagFromLinkLikePlaintext(link)
+	landingLink, entryLink, _ := strings.Cut(raw, "->")
+	landingLink, entryLink = strings.TrimSpace(landingLink), strings.TrimSpace(entryLink)
+	if !strings.Contains(landingLink, "://") || !strings.Contains(entryLink, "://") {
+		return nil, errors.New("invalid_proxy_chain")
+	}
+	// Transport pools key on the address and namespace. Give each hop its
+	// own namespace so a landing connection can never reuse a direct socket.
+	entryOption := *global
+	entryOption.TransportCacheNamespace = newTransportCacheNamespace()
+	entry, err := routerSingleHopDialer(ctx, &entryOption, InstanceOption{DisableCheck: true}, entryLink, subscription, cache, true)
+	if err != nil {
+		CleanupTransportCacheNamespace(entryOption.TransportCacheNamespace)
+		return nil, errors.New("invalid_proxy_chain")
+	}
+	chain := &routerChainTransport{entry: entry, landingNamespace: newTransportCacheNamespace()}
+	defer func() {
+		if result == nil {
+			_ = chain.Close()
+		}
+	}()
+	normalized, base, err := routerProtocolOptions(normalizeShadowTLSPluginOptions(landingLink), entry, global.UDPHopInterval)
+	if err != nil {
+		return nil, errors.New("invalid_proxy_chain")
+	}
+	extra, err := routerProtocolExtraOption(normalized, global.ExtraOption)
+	if err != nil {
+		return nil, errors.New("invalid_proxy_chain")
+	}
+	landing, property, err := D.NewNetproxyDialerFromLink(scopeTransportCacheDialer(base, chain.landingNamespace), &extra, normalized)
+	if err != nil {
+		return nil, errors.New("invalid_proxy_chain")
+	}
+	chain.Dialer = routerProtocolDialer(normalized, landing)
+	if name == "" {
+		name = entry.Property().Name + " → " + property.Name
+	}
+	p := &Property{
+		Property:        D.Property{Name: name, Address: entry.Property().Address, Protocol: "chain", Link: raw},
+		SubscriptionTag: subscription,
+	}
+	result = NewDialerContext(ctx, chain, global, instance, p)
+	result.stickyIpDialer = entry.stickyIpDialer
+	return result, nil
+}
+
+// A plain HTTP dialer may rewrite HTTP-looking payloads as forward requests.
+// The chain entry must tunnel opaque bytes, including the next hop's headers.
+func routerChainProtocolDialer(base netproxy.Dialer, option *D.ExtraOption, link string, forceConnect bool) (netproxy.Dialer, *D.Property, error) {
+	if !forceConnect || !strings.HasPrefix(link, "http://") {
+		return D.NewNetproxyDialerFromLink(base, option, link)
+	}
+	proxy, err := httpdialer.ParseHTTPURL(link)
+	if err != nil {
+		return nil, nil, err
+	}
+	address := net.JoinHostPort(proxy.Server, strconv.Itoa(proxy.Port))
+	d := &routerHTTPConnectDialer{next: base, address: address}
+	if proxy.Username != "" {
+		d.auth = "Basic " + base64.StdEncoding.EncodeToString([]byte(proxy.Username+":"+proxy.Password))
+	}
+	return d, &D.Property{Name: proxy.Name, Address: address, Protocol: "http", Link: link}, nil
+}
+
+type routerHTTPConnectDialer struct {
+	next          netproxy.Dialer
+	address, auth string
+}
+
+func (d *routerHTTPConnectDialer) DialContext(ctx context.Context, network, address string) (netproxy.Conn, error) {
+	magic, err := netproxy.ParseMagicNetwork(network)
+	if err != nil || magic.Network != "tcp" {
+		return nil, netproxy.UnsupportedTunnelTypeError
+	}
+	if _, _, err := net.SplitHostPort(address); err != nil || strings.ContainsAny(address, "\r\n\t ") {
+		return nil, errors.New("invalid CONNECT destination")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	conn, err := d.next.DialContext(ctx, network, d.address)
+	if err != nil {
+		return nil, err
+	}
+	ready := false
+	defer func() {
+		if !ready {
+			_ = conn.Close()
+		}
+	}()
+	restoreDeadline, err := netproxy.ApplyConnDeadlineFromContext(ctx, conn)
+	if err != nil {
+		return nil, err
+	}
+	defer restoreDeadline()
+	req := &http.Request{Method: http.MethodConnect, URL: &url.URL{Opaque: address}, Host: address, Header: make(http.Header)}
+	if d.auth != "" {
+		req.Header.Set("Proxy-Authorization", d.auth)
+	}
+	if err := req.Write(conn); err != nil {
+		return nil, err
+	}
+	reader := bufio.NewReader(conn)
+	response, err := http.ReadResponse(reader, req)
+	if err != nil {
+		return nil, err
+	}
+	if response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP entry CONNECT status %d", response.StatusCode)
+	}
+	ready = true
+	return &routerHTTPConnectConn{Conn: conn, reader: reader}, nil
+}
+
+type routerHTTPConnectConn struct {
+	netproxy.Conn
+	reader *bufio.Reader
+}
+
+func (c *routerHTTPConnectConn) Read(p []byte) (int, error) { return c.reader.Read(p) }
+
+type routerChainTransport struct {
+	netproxy.Dialer
+	entry            *Dialer
+	landingNamespace string
+	closeOnce        sync.Once
+}
+
+func (d *routerChainTransport) Close() error {
+	d.closeOnce.Do(func() {
+		if closer, ok := d.Dialer.(io.Closer); ok {
+			_ = closer.Close()
+		}
+		CleanupTransportCacheNamespace(d.landingNamespace)
+		_ = d.entry.Close()
+		CleanupTransportCacheNamespace(d.entry.TransportCacheNamespace)
+	})
+	return nil
+}
 
 // The pinned VLESS reader hard-codes AllowInsecure=false. Pass an explicit
 // node preference through a private copy of ExtraOption, never the shared

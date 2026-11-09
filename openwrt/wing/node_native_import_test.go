@@ -2,10 +2,29 @@
 package db
 
 import (
-	"github.com/daeuniverse/dae-wing/routercore"
 	"strings"
 	"testing"
+
+	"github.com/daeuniverse/dae-wing/routercore"
+	_ "github.com/daeuniverse/outbound/dialer/http"
+	_ "github.com/daeuniverse/outbound/dialer/socks"
 )
+
+func TestRouterChainImportPreservesBothLinks(t *testing.T) {
+	entry := "socks5://user:fixture@entry.invalid:1080#入口"
+	landing := "http://user:fixture@landing.invalid:8080#落地"
+	link := landing + " -> " + entry
+	model, err := NewNodeModel(link, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if model.Link != link || model.Protocol != "chain" || model.Name != "入口 → 落地" || model.Address != "landing.invalid:8080" {
+		t.Fatal("saved chain metadata or URI changed")
+	}
+	if _, err = NewNodeModel(entry+" -> "+strings.Replace(entry, "#入口", "#other", 1), nil, nil); err == nil {
+		t.Fatal("accepted the same hop with two labels")
+	}
+}
 
 func TestRouterNativeImportPreservesOptions(t *testing.T) {
 	raw := `{"type":"ssh","tag":"测试 SSH","server":"fixture.invalid","server_port":22,"user":"fixture","password":"private-value","host_key":["ssh-ed25519 fixture"]}`

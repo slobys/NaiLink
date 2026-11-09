@@ -173,6 +173,11 @@
   "disableWaitingNetwork": "Disable Waiting Network",
   "disconnected": "disconnected",
   "display name": "Display Name",
+  "routingEditor": {
+    "label": "Routing rules",
+    "hint": "Long rules wrap. Pasted rules get consistent spacing.",
+    "format": "Format rules"
+  },
   "routingSimple": {
     "label": "Routing Mode",
     "note": "Changing simple mode will replace current routing rules.",
@@ -485,6 +490,30 @@
     "targetPlaceholder": "Target",
     "upstreamNamePlaceholder": "Name (e.g. alidns)",
     "upstreamLinkPlaceholder": "Link (e.g. udp://223.5.5.5:53)"
+  },
+  "chainProxy": {
+    "label": "Chain proxy",
+    "add": "Add chain proxy",
+    "edit": "Edit chain proxy",
+    "description": "Traffic goes through the entry node, then the exit node, before reaching the destination.",
+    "entry": "Entry node",
+    "landing": "Exit node",
+    "choose": "Choose a node",
+    "swap": "Swap entry and exit",
+    "noCandidates": "No other matching nodes",
+    "name": "Name (optional)",
+    "namePlaceholder": "Defaults to Entry → Exit",
+    "invalidTag": "Names cannot contain a colon or single quote.",
+    "snapshot": "Saving copies both node links. Choose the nodes again to pick up subscription changes. If the exit requires UDP, the entry must support UDP as well.",
+    "saved": {
+      "entry": "Saved entry node",
+      "landing": "Saved exit node"
+    },
+    "create": "Create chain node",
+    "save": "Save chain node",
+    "duplicate": "This chain proxy already exists.",
+    "savedSuccess": "Chain node saved",
+    "saveFailed": "Could not save. Check the node format and name, or try again."
   },
   "panel": {
     "title": "Proxy management",

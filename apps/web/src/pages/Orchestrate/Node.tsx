@@ -11,6 +11,7 @@ import {
   FileInput,
   Gauge,
   GripVertical,
+  Link2,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -20,6 +21,7 @@ import {
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useImportNodesMutation, useRemoveNodesMutation } from '~/apis'
+import { ChainProxyDialog, isChainProxy, isEditableChainProxy } from '~/components/ChainProxyDialog'
 import { ConfigureNodeFormModal } from '~/components/ConfigureNodeFormModal'
 import { EditNodeFormModal } from '~/components/EditNodeFormModal'
 import { ImportResourceFormModal } from '~/components/ImportResourceFormModal'
@@ -52,6 +54,10 @@ import { NODE_ROW_HEIGHT, nodeWindow } from '~/utils/node-window'
 export const NODE_DROPPABLE_ID = 'node-list'
 
 type NodeAction = 'details' | 'edit' | 'qr' | 'remove' | 'join'
+
+function canEditNode({ node, editable }: LibraryNode) {
+  return editable && (!isChainProxy(node.link) || isEditableChainProxy(node.link))
+}
 
 function NodeRow({
   entry,
@@ -106,7 +112,9 @@ function NodeRow({
             <NodeActiveMark groups={activeGroups} />
           </span>
           <span className="panel-node-meta" title={sources.map((source) => source.name).join(' · ')}>
-            <span className="panel-node-protocol">{node.protocol}</span>
+            <span className="panel-node-protocol">
+              {isChainProxy(node.link) ? t('chainProxy.label') : node.protocol}
+            </span>
             <span className="truncate">
               {sources.length ? sources.map((source) => source.name).join(' · ') : t('panel.manual')}
             </span>
@@ -158,7 +166,7 @@ function NodeRow({
             <Eye aria-hidden="true" />
             {t('actions.viewQRCode')}
           </DropdownMenuItem>
-          {editable && (
+          {canEditNode(entry) && (
             <DropdownMenuItem onSelect={() => onAction(entry, 'edit')}>
               <Pencil aria-hidden="true" />
               {t('actions.edit')}
@@ -179,6 +187,7 @@ function NodeRow({
 
 export function NodeResource({
   library,
+  chainNodes,
   nodes,
   totalCount,
   filters,
@@ -192,6 +201,7 @@ export function NodeResource({
   dragging,
 }: {
   library: LibraryNode[]
+  chainNodes: LibraryNode[]
   nodes: LibraryNode[]
   totalCount: number
   filters: NodeFilters
@@ -221,6 +231,7 @@ export function NodeResource({
   const [openedImportNodeFormModal, setOpenedImportNodeFormModal] = useState(false)
   const [openedConfigureNodeFormModal, setOpenedConfigureNodeFormModal] = useState(false)
   const [openedEditNodeFormModal, setOpenedEditNodeFormModal] = useState(false)
+  const [chainDialog, setChainDialog] = useState<'new' | { id: string; link: string } | null>(null)
   const [editingNode, setEditingNode] = useState<{ id: string; link: string; tag: string; name: string }>()
   const [addingNode, setAddingNode] = useState<{ id: string; name: string; type: 'node' } | null>(null)
   const qrCodeModalRef = useRef<QRCodeModalRef>(null)
@@ -257,6 +268,11 @@ export function NodeResource({
       setShowLink(false)
       setDetailNodeId(entry.node.id)
     } else if (action === 'edit') {
+      if (isChainProxy(node.link)) {
+        setDetailNodeId(null)
+        setChainDialog({ id: node.id, link: node.link })
+        return
+      }
       setEditingNode({ id: node.id, link: node.link, tag: node.tag || '', name: node.name || '' })
       setOpenedEditNodeFormModal(true)
     } else if (action === 'qr') {
@@ -312,7 +328,13 @@ export function NodeResource({
           </>
         }
       >
-        <p className="shrink-0 text-xs text-muted-foreground">{t('panel.manualNodesHint')}</p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="min-w-0 text-xs text-muted-foreground">{t('panel.manualNodesHint')}</p>
+          <Button size="sm" variant="outline" disabled={dragging} onClick={() => setChainDialog('new')}>
+            <Link2 aria-hidden="true" className="size-4" />
+            {t('chainProxy.add')}
+          </Button>
+        </div>
         <LatencyStatus tests={latencyTests} scope="manual" />
         {totalCount > 0 && (
           <div className="shrink-0 space-y-2" data-node-toolbar>
@@ -497,7 +519,9 @@ export function NodeResource({
                 )}
                 <div>
                   <dt className="text-muted-foreground">{t('panel.protocol')}</dt>
-                  <dd className="mt-1">{detailNode.node.protocol}</dd>
+                  <dd className="mt-1">
+                    {isChainProxy(detailNode.node.link) ? t('chainProxy.label') : detailNode.node.protocol}
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-muted-foreground">{t('panel.source')}</dt>
@@ -517,7 +541,7 @@ export function NodeResource({
                 <Button variant="outline" onClick={() => onAction(detailNode, 'join')}>
                   {t('panel.addToGroup')}
                 </Button>
-                {detailNode.editable && (
+                {canEditNode(detailNode) && (
                   <Button variant="outline" onClick={() => onAction(detailNode, 'edit')}>
                     {t('actions.edit')}
                   </Button>
@@ -600,6 +624,13 @@ export function NodeResource({
         onClose={() => setOpenedEditNodeFormModal(false)}
         node={editingNode}
       />
+      {chainDialog && (
+        <ChainProxyDialog
+          nodes={chainNodes}
+          editing={chainDialog === 'new' ? undefined : chainDialog}
+          onClose={() => setChainDialog(null)}
+        />
+      )}
     </>
   )
 }

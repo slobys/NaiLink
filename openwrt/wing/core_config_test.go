@@ -46,6 +46,92 @@ func TestRouterCoreReportsEveryInvalidNodeInChinese(t *testing.T) {
 	}
 }
 
+func TestRouterCoreWorkerProbeInterval(t *testing.T) {
+	for _, tc := range []struct {
+		name, endpoint, options string
+		configured, want        time.Duration
+	}{
+		{"Worker address", "relay.demo.workers.dev", "", 30 * time.Second, 5 * time.Minute},
+		{"Worker WebSocket host", "edge.example.test", "&host=relay.demo.workers.dev", 30 * time.Second, 5 * time.Minute},
+		{"Worker longer interval", "relay.demo.workers.dev", "", 10 * time.Minute, 10 * time.Minute},
+		{"ordinary node", "relay.example.test", "", 30 * time.Second, 30 * time.Second},
+		{"lookalike host", "relay.demo.workers.dev.example.test", "", 30 * time.Second, 30 * time.Second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			conf, dirs := coreFixtureConfig(t)
+			conf.Group[0].CheckInterval = tc.configured
+			conf.Node[0] = daeConfig.KeyableString("fixture:vless://00000000-0000-0000-0000-000000000001@" +
+				tc.endpoint + ":443?type=ws&security=tls" + tc.options)
+			before := restartConfigKey(conf)
+			ports := sbPorts{Mixed: 39001, API: 39002, DNS: 39003, Secret: "fixture"}
+			profile, _, err := singBoxConfig(conf, dirs, ports, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			found := false
+			for _, outbound := range mhObjects(profile["outbounds"]) {
+				if outbound["tag"] == "group:proxy" {
+					found = true
+					if outbound["type"] != "urltest" || outbound["interval"] != tc.want.String() {
+						t.Fatal("sing-box automatic group cadence", outbound)
+					}
+				}
+			}
+			if !found {
+				t.Fatal("missing sing-box automatic group")
+			}
+			if tc.name == "Worker address" {
+				if binary := os.Getenv("DAED_TEST_SINGBOX"); binary != "" {
+					checkWorkerProfile(t, profile, binary, "check", "-c")
+				}
+			}
+			profile, _, err = coreCanonicalConfig(conf, dirs, ports, true, "mihomo")
+			if err != nil {
+				t.Fatal(err)
+			}
+			profile, err = mihomoFromCanonical(profile, conf, ports)
+			if err != nil {
+				t.Fatal(err)
+			}
+			found = false
+			for _, group := range mhObjects(profile["proxy-groups"]) {
+				if group["type"] == "url-test" {
+					found = true
+					if group["interval"] != int(tc.want/time.Second) {
+						t.Fatal("mihomo automatic group cadence", group)
+					}
+				}
+			}
+			if !found || restartConfigKey(conf) != before {
+				t.Fatal("missing mihomo automatic group or source configuration changed")
+			}
+			if tc.name == "Worker address" {
+				if binary := os.Getenv("DAED_TEST_MIHOMO"); binary != "" {
+					delete(profile, "_nailink_dns")
+					checkWorkerProfile(t, profile, binary, "-t", "-d", t.TempDir(), "-f")
+				}
+			}
+		})
+	}
+}
+
+func checkWorkerProfile(t *testing.T, profile sbObject, binary string, args ...string) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "profile.json")
+	data, err := json.Marshal(profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if output, err := exec.CommandContext(ctx, binary, append(args, path)...).CombinedOutput(); err != nil {
+		t.Fatalf("%v: %s", err, output)
+	}
+}
+
 func TestRouterCorePreservesDomainDialAfterRouteSelection(t *testing.T) {
 	conf, dirs := coreFixtureConfig(t)
 	for _, mode := range []string{"domain", "ip"} {

@@ -19,6 +19,7 @@ type NodeOptions struct {
 	AllowInsecure bool
 	UTLS          string
 	Warn          func(string)
+	Mihomo        bool
 }
 
 func decode64(s string) ([]byte, error) {
@@ -30,6 +31,12 @@ func decode64(s string) ([]byte, error) {
 	return nil, errors.New("invalid_node")
 }
 func Node(link, tag string, opt NodeOptions) (Object, error) {
+	if strings.Contains(link, ChainSeparator) {
+		return chainNode(link, tag, opt)
+	}
+	if opt.Mihomo && strings.HasPrefix(strings.TrimSpace(link), "ssr://") {
+		return MihomoSSR(strings.TrimSpace(link), tag)
+	}
 	if strings.HasPrefix(strings.TrimSpace(link), "naive+https://") {
 		return naiveNode(link, tag)
 	}

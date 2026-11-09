@@ -11,15 +11,16 @@
 </p>
 <h2 id="current-version">v$version 更新与验证范围</h2>
 <p>
-  <a href="https://github.com/slobys/NaiLink/releases/tag/$release">v$version 正式版</a>改善配置应用的结果提示、dae 健康探测和安装文档校验。
+  v$version 改进「高级设置 → 路由 → 进阶模式」的编辑体验。
+  <a href="https://github.com/slobys/NaiLink/releases/tag/$release">查看 v$version 正式版</a>。
 </p>
 <ul>
-  <li>已接受的重载请求若未收到回执，会显示结果暂未确认，可重新读取状态并查看日志。</li>
-  <li>dae 对带小正文的 HTTP 探测响应限量读取，便于复用已有连接。</li>
-  <li>构建安装文档前验证发行安装脚本可匿名下载，备用升级命令与文档版本保持一致。</li>
+  <li>长规则随编辑器宽度折行，并显示原有行号。</li>
+  <li>粘贴时整理常用符号间距，保留实际换行、注释和引号内的内容。</li>
+  <li>可以手动整理格式，也可以撤销整理。</li>
 </ul>
 <p>
-  已在隔离环境验证配置回执、连接复用和更新恢复。公开线路、实体路由器及 Cloudflare Workers 的性能需要现场测量。
+  已在 ARM64 的 NanoPi R4S（iStoreOS 25.12.6）验证升级、原有配置保留、编辑器交互及代理恢复。
   <a href="https://github.com/slobys/NaiLink/blob/main/openwrt/VALIDATION.md">查看验证记录</a>。
 </p>
 <h2 id="menu">打开安装管理菜单</h2>

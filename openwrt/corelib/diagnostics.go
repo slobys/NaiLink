@@ -87,6 +87,8 @@ var problemMessages = map[string]string{
 	"invalid_udp_option":                  "UDP 开关必须为 0、1、true 或 false",
 	"invalid_spider_path":                 "REALITY 爬虫路径格式异常，或被用于非 REALITY 节点",
 	"invalid_node":                        "节点链接、认证信息、地址或端口格式异常",
+	"invalid_proxy_chain":                 "链式代理需要两个不同的节点，不能嵌套其他链式代理",
+	"unsupported_chain_hop":               "此链包含扩展协议或已有转发组合，当前内核无法安全地将它作为一跳",
 	"invalid_node_name":                   "节点缺少可用名称",
 	"conflicting_node_options":            "同一设置的别名参数互相冲突",
 	"invalid_tls_option":                  "证书校验开关格式异常",
