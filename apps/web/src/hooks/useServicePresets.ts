@@ -16,6 +16,7 @@ export function useServicePresets() {
         name: string
         createdGroups: string[]
         selected: boolean
+        updatedRouting?: boolean
       }
     },
     onSuccess: async () => {

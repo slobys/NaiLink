@@ -439,7 +439,9 @@ export function GroupResource({
       )}
       {presets.isSuccess && (
         <p role="status" className="text-xs text-muted-foreground">
-          AI、Netflix 与“{presets.data.name}”预设已就绪。现有路由保持不变，可在高级设置中选择分流并应用。
+          {presets.data.updatedRouting
+            ? `已补齐“${presets.data.name}”的 Gemini 规则。请选择这套路由并应用配置。`
+            : `AI、Netflix 与“${presets.data.name}”预设已就绪。可在高级设置中选择路由并应用配置。`}
         </p>
       )}
       {presets.isError && (

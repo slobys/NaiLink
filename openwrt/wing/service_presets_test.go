@@ -4,6 +4,7 @@ package config
 import (
 	"context"
 	"github.com/daeuniverse/dae-wing/common"
+	"github.com/daeuniverse/dae-wing/dae"
 	"github.com/daeuniverse/dae-wing/db"
 	"github.com/daeuniverse/dae-wing/graphql/service/group"
 	"github.com/graph-gophers/graphql-go"
@@ -138,6 +139,101 @@ func TestServicePresetsFreshSelectionAndConflict(t *testing.T) {
 		t.Fatal("name collision overwrote existing group")
 	}
 }
+func TestGeminiWebUsesExistingAIGroup(t *testing.T) {
+	ctx := serviceFixture(t)
+	d := db.DB(ctx)
+	if err := d.Create(&db.Group{Name: "MyAI", Policy: "random", ServiceProfile: "ai", FallbackGroupID: 1}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := EnsureServicePresets(ctx, common.EncodeCursor(1), "分流", true); err != nil {
+		t.Fatal(err)
+	}
+	var route db.Routing
+	if err := d.Where("selected = ?", true).First(&route).Error; err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := dae.ParseConfig(nil, nil, &route.Routing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]bool{
+		"gemini.google.com": true, "generativelanguage.googleapis.com": true,
+		"gemini.gstatic.com": true, "geminiweb-pa.clients.google.com": true,
+		"geminiweb-pa.clients6.google.com": true, "waa-pa.clients6.google.com": true,
+		"jnn-pa.googleapis.com": true, "accounts.google.com": true, "accounts.google.com.hk": true,
+	}
+	for _, rule := range parsed.Routing.Rules {
+		if rule.Outbound.Name != "MyAI" {
+			continue
+		}
+		for _, function := range rule.AndFunctions {
+			for _, domain := range function.Params {
+				if domain.Key == "full" {
+					delete(want, domain.Val)
+				}
+				switch domain.Val {
+				case "google.com", "googleapis.com", "gstatic.com":
+					t.Fatalf("unexpected broad Google match: %s", domain.Val)
+				}
+			}
+		}
+	}
+	if len(want) != 0 || strings.Index(route.Routing, "full:geminiweb-pa.clients6.google.com") > strings.Index(route.Routing, "dip(geoip:cn)") {
+		t.Fatalf("Gemini hosts missing from AI before CN rules: %v", want)
+	}
+	var count int64
+	d.Model(&db.Group{}).Count(&count)
+	if count != 3 {
+		t.Fatal("unexpected groups", count)
+	}
+}
+
+func TestGeminiPresetRefreshPreservesUserEdits(t *testing.T) {
+	ctx := serviceFixture(t)
+	d := db.DB(ctx)
+	const routeBody = "routing {\ndip(geoip:private) -> direct\ndip(geoip:cn) -> direct\ndomain(geosite:cn) -> direct\nfallback: proxy\n}"
+	if _, err := EnsureServicePresets(ctx, common.EncodeCursor(1), "分流", true); err != nil {
+		t.Fatal(err)
+	}
+	var preset db.Routing
+	if err := d.Where("preset_key = ?", servicePresetKey).First(&preset).Error; err != nil {
+		t.Fatal(err)
+	}
+	stock := serviceRouting(routeBody, "AI", "Netflix")
+	old := strings.Replace(stock, geminiWebRule+"AI\n", "", 1)
+	for _, tc := range []struct {
+		name, body, want string
+		version          uint
+	}{
+		{"stock", old, stock, 0},
+		{"already refreshed", stock, stock, 1},
+		{"edited", old + "\n# Custom", old + "\n# Custom", 2},
+		{"nonstandard route", strings.Replace(old, "dip(geoip:cn)", "dip(192.0.2.1)", 1), strings.Replace(old, "dip(geoip:cn)", "dip(192.0.2.1)", 1), 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := d.Model(&db.Routing{}).Where("id = ?", preset.ID).Updates(map[string]any{"routing": tc.body, "version": tc.version}).Error; err != nil {
+				t.Fatal(err)
+			}
+			for range 2 {
+				if _, err := EnsureServicePresets(ctx, common.EncodeCursor(1), "分流", false); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var got db.Routing
+			if err := d.First(&got, preset.ID).Error; err != nil {
+				t.Fatal(err)
+			}
+			version := tc.version
+			if tc.body != tc.want {
+				version++
+			}
+			if got.Routing != tc.want || got.Version != version || !got.Selected {
+				t.Fatalf("unexpected preset state: %+v", got)
+			}
+		})
+	}
+}
+
 func TestServiceFallbackIsSnapshotOnlyAndOwnNodesWin(t *testing.T) {
 	ctx := serviceFixture(t)
 	d := db.DB(ctx)
