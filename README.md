@@ -16,7 +16,9 @@
 
 管理节点、订阅和群组，测试节点延迟，查看实时流量，配置 DNS 与路由。支持电脑、手机和多种主题，沿用路由器 LuCI 登录，无需另设账户。
 
-基于 [daed](https://github.com/daeuniverse/daed) 二次开发，独立维护。当前版本为 **[0.6.79 正式版](https://github.com/slobys/NaiLink/releases/tag/openwrt-v0.6.79)**，提供 IPK / APK v3 安装包。
+基于 [daed](https://github.com/daeuniverse/daed) 二次开发，独立维护。当前版本为 **[0.6.80 正式版](https://github.com/slobys/NaiLink/releases/tag/openwrt-v0.6.80)**，提供 IPK / APK v3 安装包。
+
+**0.6.80 补齐 Gemini 分流**。Gemini 的网页资源、聊天后端和登录请求可走现有 AI 群组。旧版内置预设可通过「常用分流」补齐，保留自定义路由。本版也细化了固定群组成员与配置应用的报错提示。 [排查方法](https://slobys.github.io/NaiLink/troubleshooting.html#gemini-latency)
 
 **0.6.79 新增链式代理**。在“节点和订阅 → 节点”选择两个已有节点，分别用作入口和落地。三个内核均支持兼容的两跳组合，并保留 Workers 自动探测限频和手动节点测试。已安装用户可点击面板版本号更新。 [使用方法](https://slobys.github.io/NaiLink/nodes.html#chain-proxy)
 
@@ -110,7 +112,7 @@ nl=$(uclient-fetch -O- https://slobys.github.io/NaiLink/install.sh) && sh -c "${
 
 ## 源码与交流
 
-[完整源码包](https://github.com/slobys/NaiLink/releases/download/openwrt-v0.6.79/daed-openwrt-source.tar.gz) · [构建说明](openwrt/README.md#开发) · [验证记录](openwrt/VALIDATION.md) · [Logo](docs/site/assets/nailink-logo.png)
+[完整源码包](https://github.com/slobys/NaiLink/releases/download/openwrt-v0.6.80/daed-openwrt-source.tar.gz) · [构建说明](openwrt/README.md#开发) · [验证记录](openwrt/VALIDATION.md) · [Logo](docs/site/assets/nailink-logo.png)
 
 编译请使用完整源码包，或 `git clone --recurse-submodules https://github.com/slobys/NaiLink.git`。GitHub 的 Download ZIP 不包含后端子模块。
 
