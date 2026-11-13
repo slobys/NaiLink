@@ -23,6 +23,7 @@ export function SortableResourceBadge({
   onRemove,
   children,
   nodeId,
+  groupName,
 }: {
   id: string
   index: number
@@ -34,10 +35,13 @@ export function SortableResourceBadge({
   onRemove?: () => void
   children?: React.ReactNode
   nodeId?: string
+  groupName: string
 }) {
   const { t } = useTranslation()
   const runtime = useRuntimeNodes(!!nodeId)
-  const activeGroups = nodeId ? runtime.active.get(nodeId) : undefined
+  // This surface represents membership in one group, not use anywhere in the
+  // node library. A shared candidate can be selected by a different group.
+  const activeGroups = nodeId ? runtime.active.get(nodeId)?.filter((name) => name === groupName) : undefined
   const isNode = !!nodeId || !!protocol
   const card = (provided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
     <div

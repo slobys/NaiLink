@@ -371,6 +371,7 @@ export function GroupResource({
           disabled={applying}
           showAddButtons={!quickAdd}
           groupId={groupId}
+          groupName={name}
           nodes={groupNodes}
           subscriptions={groupSubscriptions}
           nodeLatencies={nodeLatencies}

@@ -8,6 +8,13 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class RepositoryReferencesTest(unittest.TestCase):
+    def test_frontend_changes_trigger_openwrt_validation(self):
+        workflow = (ROOT / ".github/workflows/openwrt.yml").read_text()
+        pull_request = workflow.split("  pull_request:", 1)[1].split("  workflow_dispatch:", 1)[0]
+        patterns = re.findall(r"'([^']+)'", pull_request)
+        # GitHub requires ** to cover nested component, page and test paths.
+        self.assertIn("apps/web/**", patterns)
+
     def test_maintained_markdown_links_resolve(self):
         documents = [ROOT / name for name in ("README.md", "CONTRIBUTING.md", "docs/build.md", "docs/getting-started.md")]
         for path in documents:

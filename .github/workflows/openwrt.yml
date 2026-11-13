@@ -2,14 +2,7 @@ name: OpenWrt plugin
 
 on:
   pull_request:
-    paths:
-      [
-        'openwrt/**',
-        'tests/openwrt/**',
-        'apps/web/src/utils/endpoint*',
-        'apps/web/src/constants/default.ts',
-        '.github/workflows/openwrt.yml',
-      ]
+    paths: ['openwrt/**', 'tests/openwrt/**', 'apps/web/**', '.github/workflows/openwrt.yml']
   workflow_dispatch:
     inputs:
       version:

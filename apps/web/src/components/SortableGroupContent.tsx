@@ -151,6 +151,7 @@ function GroupDropZone({
 
 export function SortableGroupContent({
   groupId,
+  groupName,
   nodes,
   subscriptions,
   nodeLatencies,
@@ -166,6 +167,7 @@ export function SortableGroupContent({
   disabled = false,
 }: {
   groupId: string
+  groupName: string
   nodes: GroupNode[]
   subscriptions: GroupSubscription[]
   nodeLatencies?: Record<string, NodeLatencyProbeResult>
@@ -271,6 +273,7 @@ export function SortableGroupContent({
           <SortableResourceBadge
             disabled={disabled}
             key={nodeId}
+            groupName={groupName}
             nodeId={nodeId}
             id={`${groupId}-node-${nodeId}`}
             index={columns === 2 ? index % Math.ceil(sortedNodes.length / 2) : index}
@@ -306,6 +309,7 @@ export function SortableGroupContent({
           <SortableResourceBadge
             disabled={disabled}
             key={subscription.id}
+            groupName={groupName}
             id={`${groupId}-sub-${subscription.id}`}
             index={columns === 2 ? index % Math.ceil(sortedSubscriptions.length / 2) : index}
             name={subscription.tag || subscription.link}
