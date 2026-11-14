@@ -18,8 +18,14 @@ import (
 const servicePresetKey = "service-split-v1"
 
 const serviceSplitStart = "# NaiLink service split\n"
-const serviceAIRule = "domain(suffix:chatgpt.com, suffix:openai.com, suffix:oaistatic.com, suffix:oaiusercontent.com, suffix:claude.ai, suffix:anthropic.com, full:gemini.google.com, full:generativelanguage.googleapis.com) -> "
-const geminiWebRule = "domain(full:gemini.gstatic.com, full:geminiweb-pa.clients.google.com, full:geminiweb-pa.clients6.google.com, full:waa-pa.clients6.google.com, full:jnn-pa.googleapis.com, full:accounts.google.com, full:accounts.google.com.hk) -> "
+
+var serviceAIMatches = []string{
+	"suffix:chatgpt.com", "suffix:openai.com", "suffix:oaistatic.com",
+	"suffix:oaiusercontent.com", "suffix:auth0.com",
+	"suffix:claude.ai", "suffix:anthropic.com",
+	"full:gemini.google.com", "suffix:generativelanguage.googleapis.com", "suffix:ai.google.dev",
+	"suffix:perplexity.ai", "suffix:poe.com",
+}
 
 type groupService struct {
 	ID           graphql.ID `json:"id"`
@@ -55,8 +61,11 @@ func SetGroupService(ctx context.Context, encoded graphql.ID, profile string) (i
 	return int32(q.RowsAffected), q.Error
 }
 func serviceRouting(base, ai, netflix string) string {
-	block := serviceSplitStart + serviceAIRule + ai + "\n" + geminiWebRule + ai + "\n" +
-		"domain(geosite:netflix) -> " + netflix + "\n# End NaiLink service split\n"
+	block := serviceSplitStart
+	for _, match := range serviceAIMatches {
+		block += "domain(" + match + ") -> " + ai + "\n"
+	}
+	block += "domain(geosite:netflix) -> " + netflix + "\n# End NaiLink service split\n"
 	// Keep custom blocking/private rules ahead of the preset. Place service
 	// domains before the ordinary CN shortcut, or before the final fallback.
 	position := strings.Index(base, "dip(geoip:cn)")
@@ -70,35 +79,6 @@ func serviceRouting(base, ai, netflix string) string {
 		return strings.TrimSpace(base) + "\n" + block
 	}
 	return base[:position] + block + base[position:]
-}
-
-// Refresh only an unedited preset that still has the original managed block.
-// A custom routing may deliberately send these hosts to another exit.
-func refreshGeminiPreset(tx *gorm.DB, route *db.Routing) (bool, error) {
-	if route.Version != 0 {
-		return false, nil
-	}
-	prefix, aiAndRest, ok := strings.Cut(route.Routing, "\n"+serviceSplitStart+serviceAIRule)
-	if !ok {
-		return false, nil
-	}
-	ai, rest, ok := strings.Cut(aiAndRest, "\n")
-	if !ok || !strings.HasPrefix(rest, "domain(geosite:netflix) -> ") {
-		return false, nil
-	}
-	_, tail, ok := strings.Cut(rest, "\n# End NaiLink service split\n")
-	if !ok || !strings.HasPrefix(tail, "dip(geoip:cn) -> direct\ndomain(geosite:cn) -> direct\nfallback: ") || strings.Count(tail, "\n") != 3 {
-		return false, nil
-	}
-	text := prefix + "\n" + serviceSplitStart + serviceAIRule + ai + "\n" + geminiWebRule + ai + "\n" + rest
-	if _, err := dae.ParseConfig(nil, nil, &text); err != nil {
-		return false, fmt.Errorf("Gemini 分流规则校验失败: %w", err)
-	}
-	update := tx.Model(route).Where("version = ?", route.Version).Updates(map[string]any{
-		"routing": text,
-		"version": gorm.Expr("version + 1"),
-	})
-	return update.RowsAffected == 1, update.Error
 }
 
 func EnsureServicePresets(ctx context.Context, proxyID graphql.ID, name string, selectRoute bool) (string, error) {
@@ -115,21 +95,16 @@ func EnsureServicePresets(ctx context.Context, proxyID graphql.ID, name string, 
 	}
 	var route db.Routing
 	created := []string{}
-	var updatedRouting bool
+
 	err = db.DB(ctx).Transaction(func(tx *gorm.DB) error {
 		var proxy db.Group
 		if e := tx.First(&proxy, id).Error; e != nil {
 			return e
 		}
 		existing := tx.Where("preset_key = ?", servicePresetKey).First(&route).Error
-		// Keep existing groups and user-edited routing. The stock preset can
-		// pick up additional Gemini hosts when the user opens 常用分流 again.
+		// Existing routes, including an unedited older preset, belong to the
+		// user. Never add domains or change exits during upgrade/reopening.
 		if existing == nil {
-			var refreshErr error
-			updatedRouting, refreshErr = refreshGeminiPreset(tx, &route)
-			if refreshErr != nil {
-				return refreshErr
-			}
 			if selectRoute && !route.Selected {
 				if e := tx.Model(&db.Routing{}).Where("selected = ?", true).Update("selected", false).Error; e != nil {
 					return e
@@ -228,7 +203,7 @@ func EnsureServicePresets(ctx context.Context, proxyID graphql.ID, name string, 
 	if err != nil {
 		return "", err
 	}
-	result, _ := json.Marshal(map[string]any{"routingId": common.EncodeCursor(route.ID), "name": route.Name, "createdGroups": created, "selected": route.Selected, "updatedRouting": updatedRouting})
+	result, _ := json.Marshal(map[string]any{"routingId": common.EncodeCursor(route.ID), "name": route.Name, "createdGroups": created, "selected": route.Selected, "updatedRouting": false})
 	return string(result), nil
 }
 

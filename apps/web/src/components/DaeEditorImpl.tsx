@@ -17,6 +17,7 @@ import {
 } from '~/monaco'
 
 import { colorSchemeAtom } from '~/store'
+import { watchEditorLayout } from '~/utils/editor-layout'
 import { routingFormatEdits } from '~/utils/routing-format'
 
 type CodeEditor = Parameters<OnMount>[0]
@@ -73,12 +74,15 @@ export function DaeEditor({
   const monacoRef = useRef<Monaco | null>(null)
   const lspSyncRef = useRef<{ dispose: () => void } | null>(null)
   const modelRef = useRef<monacoEditor.editor.ITextModel | null>(null)
+  const layoutCleanup = useRef<(() => void) | null>(null)
 
   // Cleanup LSP sync on unmount
   useEffect(() => {
     return () => {
       lspSyncRef.current?.dispose()
       lspSyncRef.current = null
+      layoutCleanup.current?.()
+      layoutCleanup.current = null
     }
   }, [])
 
@@ -93,6 +97,8 @@ export function DaeEditor({
   const handleEditorDidMount = useCallback(
     async (editor: CodeEditor, monacoInstance: Monaco) => {
       monacoRef.current = monacoInstance
+      layoutCleanup.current?.()
+      layoutCleanup.current = watchEditorLayout(editor, monacoInstance)
 
       if (routingTools) {
         setRoutingEditor(editor)
@@ -149,6 +155,9 @@ export function DaeEditor({
           lineNumbersMinChars: 2,
           wordWrap: 'on',
           wrappingIndent: 'indent',
+          wrappingStrategy: 'advanced',
+          scrollbar: { horizontal: 'hidden', vertical: 'auto', alwaysConsumeMouseWheel: false },
+          padding: { top: 12, bottom: 24 },
         }),
         readOnly: disabled,
       }}
@@ -163,7 +172,7 @@ export function DaeEditor({
   if (!routingTools) return editor
 
   return (
-    <div className="flex h-full min-w-0 flex-col">
+    <div className="flex h-full min-h-0 min-w-0 flex-col">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-1">
         <p className="min-w-0 text-xs text-muted-foreground">{t('routingEditor.hint')}</p>
         <Button
@@ -181,7 +190,9 @@ export function DaeEditor({
           {t('routingEditor.format')}
         </Button>
       </div>
-      <div className="min-h-0 min-w-0 flex-1">{editor}</div>
+      <div className="relative min-h-0 min-w-0 flex-1">
+        <div className="absolute inset-0">{editor}</div>
+      </div>
     </div>
   )
 }

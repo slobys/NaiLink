@@ -7,7 +7,7 @@ set -eu
 umask 077
 
 REPOSITORY=slobys/NaiLink
-release=openwrt-v0.6.80
+release=openwrt-v0.6.81
 asset_dir=''
 mode=install
 action=install
@@ -616,7 +616,52 @@ probe_record=$(record support "$probe_cpu" btf-probe) || fail 'Manifest has no u
 [ "$(printf '%s\n' "$probe_record" | cut -f6)" = "$(printf '%s\n' "$support" | cut -f6)" ] || fail 'BTF parser and checker versions do not match.'
 verify_record "$probe_record"
 chmod 700 "$stage/btf-probe-$probe_cpu"
-DAED_BTF_PROBE="$stage/btf-probe-$probe_cpu" sh "$stage/daed-check" --check || fail 'Compatibility check failed. No packages or network settings were changed.'
+run_compatibility_check() {
+	DAED_BTF_PROBE="$stage/btf-probe-$probe_cpu" sh "$stage/daed-check" --check > "$stage/compatibility.json"
+}
+btf_package() {
+	if command -v timeout >/dev/null 2>&1; then timeout 90 "$@"; else "$@"; fi
+}
+repair_missing_btf() {
+	# Only a real install may add a dependency. Read-only checks and dry runs
+	# never refresh feeds or install anything. Other kernel errors stay fatal.
+	[ "$mode" = install ] || return 1
+	[ "$(jsonfilter -i "$stage/compatibility.json" -e '@.core')" = dae ] || return 1
+	[ "$(jsonfilter -i "$stage/compatibility.json" -e '@.checks[*].status' | grep -c '^error$')" = 1 ] || return 1
+	jsonfilter -i "$stage/compatibility.json" -e '@.checks[*].code' | grep -qx btf_missing || return 1
+	btf_kernel=$(uname -r)
+	printf 'NaiLink: 检查本固件软件源中是否有内核 %s 对应的 vmlinux-btf…\n' "$btf_kernel"
+	# Keep native signatures, architecture and dependency checks. Do not add
+	# external feeds, replace the kernel, or force an incompatible package.
+	if [ "$format" = apk ]; then
+		btf_package apk update || return 1
+		btf_version=$(apk search -x vmlinux-btf | awk '$1 ~ /^vmlinux-btf-/ {sub(/^vmlinux-btf-/, "", $1); print $1}' | sort -u)
+	else
+		btf_package opkg update || return 1
+		btf_version=$(opkg info vmlinux-btf | awk '$1 == "Version:" {print $2}' | sort -u)
+	fi
+	# Refuse missing/ambiguous versions and a same-CPU but different kernel.
+	btf_revision=${btf_version#"$btf_kernel"-}
+	[ "$btf_revision" != "$btf_version" ] || return 1
+	printf '%s\n' "$btf_revision" | grep -Eq '^r?[0-9]+$' || return 1
+	if [ "$format" = apk ]; then
+		btf_package apk add "vmlinux-btf=$btf_version" || return 1
+	else
+		btf_package opkg install vmlinux-btf || return 1
+	fi
+	printf 'NaiLink: 已补齐匹配的 BTF，重新验证解析和内核能力…\n'
+	run_compatibility_check
+}
+if ! run_compatibility_check; then
+	if ! repair_missing_btf; then
+		cat "$stage/compatibility.json"
+		if jsonfilter -i "$stage/compatibility.json" -e '@.checks[*].code' | grep -qx btf_missing; then
+			fail "内核 $(uname -r) 缺少可用 BTF。请安装本固件、当前内核对应的 vmlinux-btf，或使用带 BTF 的固件。未安装/替换 NaiLink，也未改动节点和代理配置。"
+		fi
+		fail 'Compatibility check failed. No NaiLink packages or network settings were changed.'
+	fi
+fi
+cat "$stage/compatibility.json"
 [ "$mode" != check ] || exit 0
 
 plugin=$(record "$format" all luci-app-daed-router) || fail 'Manifest has no unique LuCI package.'

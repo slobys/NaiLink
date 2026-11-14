@@ -236,9 +236,56 @@ esac''')
         self.assertNotEqual(self.install().returncode, 0)
         self.write("/tmp/kernel", "6.6.73\n")
         (self.root / "sys/kernel/btf/vmlinux").unlink()
-        result = self.install()
+        result = self.install("--dry-run")
         self.assertNotEqual(result.returncode, 0)
         self.assertNotIn("update", (self.root / "tmp/pm-calls").read_text())
+
+    def test_missing_btf_can_be_repaired_only_from_matching_firmware_package(self):
+        for fmt in ("ipk", "apk"):
+            with self.subTest(format=fmt):
+                if fmt == "apk": self.use_apk()
+                (self.root / "sys/kernel/btf/vmlinux").unlink(missing_ok=True)
+                pm = "/bin/apk" if fmt == "apk" else "/bin/opkg"
+                original = (self.root / pm.lstrip("/")).read_text()
+                # Native manager stand-in: real ash/jshn/installer exercise the
+                # exact-version selection; it is not a real kernel package.
+                self.write(pm, original.replace("#!/bin/sh\n", """#!/bin/sh
+case "$*" in
+"search -x vmlinux-btf") echo "vmlinux-btf-6.6.73-r6 x86_64"; exit 0 ;;
+"info vmlinux-btf") echo "Version: 6.6.73-6"; exit 0 ;;
+"install vmlinux-btf"|"add vmlinux-btf=6.6.73-r6")
+ echo "BTF repaired" >> /tmp/pm-calls
+ mkdir -p /usr/lib/debug/boot
+ echo fixture > /usr/lib/debug/boot/vmlinux-6.6.73
+ exit 0 ;;
+esac
+""", 1), True)
+                result = self.install()
+                self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+                self.assertIn("BTF repaired", (self.root / "tmp/pm-calls").read_text())
+                self.assertTrue(json.loads(self.check("--check").stdout)["compatible"])
+                # Restore only fixture-owned state between managers.
+                self.write(pm, original, True)
+                (self.root / "usr/lib/debug/boot/vmlinux-6.6.73").unlink()
+
+    def test_missing_btf_mismatch_and_readonly_modes_preserve_service(self):
+        (self.root / "sys/kernel/btf/vmlinux").unlink()
+        original = (self.root / "bin/opkg").read_text()
+        self.write("/bin/opkg", original.replace("#!/bin/sh\n", """#!/bin/sh
+if [ "$*" = "info vmlinux-btf" ]; then echo "Version: 6.6.72-6"; exit 0; fi
+""", 1), True)
+        self.managed()
+        self.write("/etc/daed/wing.db", "preserved")
+        for args in (("--check",), ("--dry-run",), ()):
+            self.write("/tmp/pm-calls", "")
+            result = self.install(*args)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("BTF", result.stdout + result.stderr)
+            self.assertEqual((self.root / "etc/daed/wing.db").read_text(), "preserved")
+            calls = (self.root / "tmp/pm-calls").read_text()
+            self.assertNotIn("install vmlinux-btf", calls)
+            self.assertNotIn("stop", (self.root / "tmp/service-calls").read_text() if (self.root / "tmp/service-calls").exists() else "")
+            if args: self.assertNotIn("update", calls)
 
     def test_missing_kernel_config_is_an_explicit_warning(self):
         (self.root / "proc/config.gz").unlink()

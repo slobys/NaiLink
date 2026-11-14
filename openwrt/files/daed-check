@@ -59,6 +59,7 @@ add_check() {
 	json_add_string name "$1"
 	json_add_string status "$2"
 	json_add_string message "$3"
+	[ -z "${4:-}" ] || json_add_string code "$4"
 	json_close_object
 	[ "$2" != error ] || compatible=0
 }
@@ -116,7 +117,7 @@ for candidate in /sys/kernel/btf/vmlinux \
 done
 probe=${DAED_BTF_PROBE:-/usr/libexec/daed/btf-probe}
 if [ -z "$btf_path" ]; then
-	add_check btf error 'No native BTF or current-kernel vmlinux file was found. Existing external BTF packages are supported; no firmware or BTF is downloaded automatically.'
+	add_check btf error "当前内核 $kernel 缺少 BTF，dae 暂时无法运行。安装时会尝试从本固件软件源补齐同版本 vmlinux-btf；源中没有匹配包时需使用提供 BTF 的固件。不会下载其他固件的 BTF 或跳过内核检查。" btf_missing
 elif [ -x "$probe" ]; then
 	if probe_result=$("$probe" --file "$btf_path" 2>&1); then
 		add_check btf ok "BTF parsed: $btf_path. Required network types exist."

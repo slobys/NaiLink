@@ -61,7 +61,10 @@
 <pre><code class="language-sh">nl=$$(uclient-fetch -O- ${url}install.sh) &amp;&amp; sh -c "$${nl:?下载为空}" -- --menu</code></pre>
 <p>选择 <strong>1 安装 / 更新</strong> 后，脚本自动查找最新公开的 NaiLink 版本（包含测试版），无需填写版本号。</p>
 <ol>
-  <li>等待环境检查、依赖安装与包校验完成。不要同时执行第二次安装。</li>
+  <li>
+    等待环境检查、依赖安装与包校验完成。不要同时执行第二次安装。仅缺少 BTF
+    时，安装器会尝试从当前固件软件源安装同内核版本的 <code>vmlinux-btf</code>，重新通过解析及内核探针后才继续。
+  </li>
   <li>安装成功后刷新路由器后台，进入 <strong>服务 → NaiLink</strong>。</li>
   <li>继续阅读<a href="quick-start.html">首次设置</a>，导入节点并应用配置。</li>
 </ol>

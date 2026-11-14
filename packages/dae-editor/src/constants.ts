@@ -30,10 +30,11 @@ export const EDITOR_THEME_LIGHT_FALLBACK = 'vs'
  */
 export const EDITOR_OPTIONS: EditorProps['options'] = {
   fontSize: 14,
-  fontWeight: 'bold',
-  fontFamily: 'Source Code Pro',
+  fontWeight: '400',
+  fontFamily: '"Source Code Pro", Consolas, "Liberation Mono", monospace',
+  fontLigatures: false,
   'semanticHighlighting.enabled': true,
-  lineHeight: 1.6,
+  lineHeight: 22,
   minimap: {
     enabled: false,
   },

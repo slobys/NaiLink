@@ -84,8 +84,7 @@ function detectSimpleMode(text: string, proxyGroupName: string) {
 
   const hasGfw = withoutMac.includes(`domain(geosite:gfw) -> ${proxyGroupName}`)
   const hasCnDirect =
-    withoutMac.includes('dip(geoip:cn) -> direct') &&
-    withoutMac.includes('domain(geosite:cn) -> direct')
+    withoutMac.includes('dip(geoip:cn) -> direct') && withoutMac.includes('domain(geosite:cn) -> direct')
   const hasCnProxy =
     withoutMac.includes(`dip(geoip:cn) -> ${proxyGroupName}`) &&
     withoutMac.includes(`domain(geosite:cn) -> ${proxyGroupName}`)
@@ -218,15 +217,22 @@ export function RoutingFormModal({
     if (opened && proxyGroupReady && !editingID && activeTab === 'simple' && formValues.text === '') {
       setValue(
         'text',
-        buildRoutingTemplate(
-          simpleMode,
-          proxyGroupName,
-          macControlEnabled ? cleanedMacList : undefined,
-          macAction,
-        ),
+        buildRoutingTemplate(simpleMode, proxyGroupName, macControlEnabled ? cleanedMacList : undefined, macAction),
       )
     }
-  }, [opened, proxyGroupReady, editingID, activeTab, formValues.text, simpleMode, proxyGroupName, macControlEnabled, cleanedMacList, macAction, setValue])
+  }, [
+    opened,
+    proxyGroupReady,
+    editingID,
+    activeTab,
+    formValues.text,
+    simpleMode,
+    proxyGroupName,
+    macControlEnabled,
+    cleanedMacList,
+    macAction,
+    setValue,
+  ])
 
   const initOrigins = useCallback(
     (nextOrigins: FormValues) => {
@@ -318,7 +324,7 @@ export function RoutingFormModal({
 
   return (
     <Dialog open={opened} onOpenChange={handleClose}>
-      <ScrollableDialogContent size="full" className="h-[calc(100vh-2rem)] sm:h-[90vh]">
+      <ScrollableDialogContent size="full" className="h-[calc(100dvh-2rem)] sm:h-[90dvh]">
         <ScrollableDialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </ScrollableDialogHeader>
@@ -334,7 +340,11 @@ export function RoutingFormModal({
             className="shrink-0"
           />
 
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'simple' | 'advanced')} className="flex-1">
+          <Tabs
+            value={activeTab}
+            onValueChange={(v) => setActiveTab(v as 'simple' | 'advanced')}
+            className="min-h-0 min-w-0 flex-1"
+          >
             <TabsList className="w-full justify-start">
               <TabsTrigger value="simple">{t('actions.simple mode')}</TabsTrigger>
               <TabsTrigger value="advanced">{t('actions.advanced mode')}</TabsTrigger>

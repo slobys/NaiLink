@@ -7,7 +7,15 @@
     <strong>ARMv7 / MIPS 回调加载失败：</strong
     >属于已确认的内核限制，当前不推荐作为透明代理使用，不能靠换一个同名架构安装包解决。
   </li>
-  <li><strong>BTF 无效或不匹配：</strong>需要与当前内核对应的 BTF，不能下载任意 vmlinux 覆盖。</li>
+  <li>
+    <strong>缺少 BTF：</strong>安装器会尝试从当前固件软件源安装同内核版本的 <code>vmlinux-btf</code>，并重新运行 BTF
+    解析与内核探针。若软件源不提供匹配包，需使用提供匹配 BTF 的固件；不会下载其他固件的 BTF 强装。菜单“检查环境”和
+    <code>--dry-run</code> 只检查，不安装依赖。
+  </li>
+  <li>
+    <strong>BTF 无效或不匹配：</strong>仍会停止安装，不能下载任意 vmlinux 覆盖。CPU 和内核版本符合要求也不能替代 BTF 与
+    eBPF 实测。
+  </li>
   <li><strong>缺少内核模块：</strong>从当前固件软件源安装匹配 ABI 的依赖，不使用其他固件模块强装。</li>
   <li><strong>空间不足：</strong>同时检查临时目录和 overlay，包含解压与备份所需空间，不只看压缩包大小。</li>
 </ul>
@@ -227,13 +235,14 @@ done</code></pre>
   流量命中的群组及实际节点；<strong>查看生效出口</strong>可辅助核对已应用的候选节点。
 </p>
 <p>
-  如果页面能打开但发消息报错，先核对 <code>gemini.google.com</code>、<code>geminiweb-pa.clients6.google.com</code> 和
-  <code>accounts.google.com</code> 是否命中同一个 AI
-  出口。使用内置“分流”的旧版用户可在管理面板点击<strong>常用分流</strong>补齐未编辑的预设，再应用配置。
+  新安装采用按服务逐行分流的默认规则，Gemini 主站、生成接口及开发站点走现有 AI 群组，其他 Google
+  请求按其余规则处理。升级会保留已有路由，不再自动扩展旧预设的 Google 域名。
   使用自定义路由时，可将下面的规则放在国内直连和其他会提前命中的规则前。若群组已改名，把末尾的
   <code>AI</code> 换成实际名称。
 </p>
-<pre><code>domain(full:gemini.google.com, full:generativelanguage.googleapis.com, full:gemini.gstatic.com, full:geminiweb-pa.clients.google.com, full:geminiweb-pa.clients6.google.com, full:waa-pa.clients6.google.com, full:jnn-pa.googleapis.com, full:accounts.google.com, full:accounts.google.com.hk) -&gt; AI</code></pre>
+<pre><code>domain(full:gemini.google.com) -&gt; AI
+domain(suffix:generativelanguage.googleapis.com) -&gt; AI
+domain(suffix:ai.google.dev) -&gt; AI</code></pre>
 <p>
   如果同一出口的其他网站正常，仍需用 Gemini 实际发送消息验证。线路不稳定时，可在“节点和订阅”添加一条
   <a href="nodes.html#chain-proxy">链式代理</a>作为对照，验证后加入现有 AI
@@ -368,25 +377,26 @@ done</code></pre>
   <a href="https://t.me/naiyous">Telegram 群组</a>反馈。不要公开订阅链接、完整节点链接、密码、UUID、Cookie 或令牌。
 </p>
 
-  <h2 id="worker-quota">Cloudflare Workers 的请求额度为什么消耗很快？</h2>
-  <p>
-    如果节点用 Workers 中转，正常访问和自动测试新开的 WebSocket 都可能消耗请求额度。多个节点共用一个
-    Worker，或同一个节点加入多个自动选择群组时，探测也会叠加。可在
-    <a href="https://developers.cloudflare.com/workers/platform/pricing/#workers">Cloudflare 的计费说明</a>
-    查看请求的计算方式。
-  </p>
-  <p>
-    NaiLink 识别到 <code>*.workers.dev</code> 中转时，dae 对该节点、sing-box 和 mihomo 对包含它的自动群组，
-    两轮周期探测之间至少间隔 5 分钟。手动测试和正常访问仍可使用。自定义域名无法自动识别时，可在高级设置的配置中调大「检测间隔」，
-    并检查群组是否设置了更短的间隔。若额度仍然快速消耗，可在 Cloudflare 后台对照暂停代理前后的请求量，
-    检查同账号的其他 Worker 和客户端。
-  </p>
+<h2 id="worker-quota">Cloudflare Workers 的请求额度为什么消耗很快？</h2>
+<p>
+  如果节点用 Workers 中转，正常访问和自动测试新开的 WebSocket 都可能消耗请求额度。多个节点共用一个
+  Worker，或同一个节点加入多个自动选择群组时，探测也会叠加。可在
+  <a href="https://developers.cloudflare.com/workers/platform/pricing/#workers">Cloudflare 的计费说明</a>
+  查看请求的计算方式。
+</p>
+<p>
+  NaiLink 识别到 <code>*.workers.dev</code> 中转时，dae 对该节点、sing-box 和 mihomo 对包含它的自动群组，
+  两轮周期探测之间至少间隔 5
+  分钟。手动测试和正常访问仍可使用。自定义域名无法自动识别时，可在高级设置的配置中调大「检测间隔」，
+  并检查群组是否设置了更短的间隔。若额度仍然快速消耗，可在 Cloudflare 后台对照暂停代理前后的请求量， 检查同账号的其他
+  Worker 和客户端。
+</p>
 
-  <h2 id="node-timeout">节点超时、握手失败怎样区分？</h2>
+<h2 id="node-timeout">节点超时、握手失败怎样区分？</h2>
 <p>
   0.6.43 起，三内核手动 HTTP 测试包含完整连接与协议握手，普通节点单次最多等待 8 秒，Tor
   等长引导协议沿用原期限；排队和私有内核启动不计入延迟。显示 4000 ms 表示确实花了约 4
-    秒，不会人为扣减。手动结果不能与自动复用连接的延迟直接等同。
+  秒，不会人为扣减。手动结果不能与自动复用连接的延迟直接等同。
 </p>
 <ul>
   <li>
