@@ -643,6 +643,7 @@ repair_missing_btf() {
 	# Refuse missing/ambiguous versions and a same-CPU but different kernel.
 	btf_revision=${btf_version#"$btf_kernel"-}
 	[ "$btf_revision" != "$btf_version" ] || return 1
+	case "$btf_revision" in ''|*[!0-9r]*) return 1 ;; esac
 	printf '%s\n' "$btf_revision" | grep -Eq '^r?[0-9]+$' || return 1
 	if [ "$format" = apk ]; then
 		btf_package apk add "vmlinux-btf=$btf_version" || return 1

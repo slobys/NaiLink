@@ -287,6 +287,20 @@ if [ "$*" = "info vmlinux-btf" ]; then echo "Version: 6.6.72-6"; exit 0; fi
             self.assertNotIn("stop", (self.root / "tmp/service-calls").read_text() if (self.root / "tmp/service-calls").exists() else "")
             if args: self.assertNotIn("update", calls)
 
+    def test_missing_btf_ambiguous_versions_do_not_install_any_package(self):
+        (self.root / "sys/kernel/btf/vmlinux").unlink()
+        original = (self.root / "bin/opkg").read_text()
+        self.write("/bin/opkg", original.replace("#!/bin/sh\n", """#!/bin/sh
+if [ "$*" = "info vmlinux-btf" ]; then
+ printf 'Version: 6.6.73-6\\nVersion: 6.6.73-7\\n'
+ exit 0
+fi
+""", 1), True)
+        result = self.install()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn("install vmlinux-btf", (self.root / "tmp/pm-calls").read_text())
+        self.assertFalse((self.root / "tmp/installed-daed-router").exists())
+
     def test_missing_kernel_config_is_an_explicit_warning(self):
         (self.root / "proc/config.gz").unlink()
         data = json.loads(self.check().stdout)
