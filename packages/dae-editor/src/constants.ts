@@ -29,12 +29,12 @@ export const EDITOR_THEME_LIGHT_FALLBACK = 'vs'
  * Default editor options for Monaco
  */
 export const EDITOR_OPTIONS: EditorProps['options'] = {
-  fontSize: 14,
+  fontSize: 18,
   fontWeight: '400',
   fontFamily: '"Source Code Pro", Consolas, "Liberation Mono", monospace',
   fontLigatures: false,
   'semanticHighlighting.enabled': true,
-  lineHeight: 22,
+  lineHeight: 28,
   minimap: {
     enabled: false,
   },
