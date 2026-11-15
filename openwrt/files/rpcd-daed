@@ -23,7 +23,7 @@ call)
 		json_load "${input:-\{\}}" || exit 1
 		action=''; json_get_var action action
 		request_id=''; json_get_var request_id request_id || :
-		case "$action" in config_apply|config_stop|check|update|geodata|core_prepare_tproxy|core_prepare_tun|core_check_dae|core_check_singbox|core_check_mihomo|core_install_singbox|core_install_mihomo|core_install_extra|core_switch_dae|core_switch_singbox|core_switch_mihomo|core_check_singbox_tproxy|core_check_singbox_tun|core_check_mihomo_tproxy|core_check_mihomo_tun|core_switch_singbox_tproxy|core_switch_singbox_tun|core_switch_mihomo_tproxy|core_switch_mihomo_tun) /usr/libexec/daed/luci-proxy --maintenance "$action" --maintenance-job "$request_id" ;;
+		case "$action" in config_apply|config_stop|check|update|geodata|core_prepare_tproxy|core_prepare_tun|core_version_singbox|core_version_mihomo|core_update_singbox|core_update_mihomo|core_check_dae|core_check_singbox|core_check_mihomo|core_install_singbox|core_install_mihomo|core_install_extra|core_switch_dae|core_switch_singbox|core_switch_mihomo|core_check_singbox_tproxy|core_check_singbox_tun|core_check_mihomo_tproxy|core_check_mihomo_tun|core_switch_singbox_tproxy|core_switch_singbox_tun|core_switch_mihomo_tproxy|core_switch_mihomo_tun) /usr/libexec/daed/luci-proxy --maintenance "$action" --maintenance-job "$request_id" ;;
 		*) printf '%s\n' '{"success":false,"code":"invalid_action"}' ;; esac
 		;;
 	logs)

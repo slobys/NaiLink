@@ -1,5 +1,11 @@
 # NaiLink · 奶油互联
 
+### 可选内核更新通道
+
+0.6.83 起，内核窗口可检查和更新 sing-box / mihomo 的 NaiLink 兼容版。先切换到其他内核，再更新当前未使用的目标，更新后重新检查兼容性。保留节点、订阅和路由；dae 仍随插件更新。
+
+维护者通过 `core-updates-sources.json` 固定来源和原始摘要，用 `python3 openwrt/core-updates-build.py --engine sing-box --cpu x86_64 --work /tmp/nailink-core-build --output .build/reviewed-cores` 构建，mihomo / ARM64 同理。脚本核对最终归档与 `core-updates.json`，CI 验证真实协议和数据面后，独立发布 `nailink-cores-日期` 归档与对应源码；审核目录记录每个架构的摘要及适配器范围，版本须递增。无需为了发布内核而修改用户的群组、路由或插件版本。
+
 支持 OpenWrt、ImmortalWrt、iStoreOS 的现代 LuCI，提供 x86_64 / ARM64 及试验性 ARMv7 / MIPS32 / MIPSel32 的
 IPK 和 APK v3 安装包。当前正式版 [openwrt-v0.6.82](https://github.com/slobys/NaiLink/releases/tag/openwrt-v0.6.82)。
 

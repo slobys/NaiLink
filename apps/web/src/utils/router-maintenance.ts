@@ -1,4 +1,5 @@
 export type MaintenanceAction =
+  | `core_${'version' | 'update'}_${'singbox' | 'mihomo'}`
   | 'config_apply'
   | 'config_stop'
   | 'check'
@@ -27,9 +28,16 @@ export interface CorePlan {
   nodes: number
   groups: number
 }
+export interface OptionalCoreStatus {
+  installed: boolean
+  supported: boolean
+  version: string
+  bundled_version?: string
+  update?: { version?: string; checked: number; code?: string }
+}
 export interface CoreStatus {
   mode?: 'tun' | 'tproxy'
-  engines?: Record<string, { installed: boolean; supported: boolean; version: string }>
+  engines?: Record<string, OptionalCoreStatus>
   current: string
   phase: string
   code?: string
@@ -93,6 +101,9 @@ export function geodataVersionState(
 }
 
 export const maintenanceMessages: Record<string, string> = {
+  core_update_plugin_required: '新的内核兼容版需要更新 NaiLink，请先更新插件后重新检查。',
+  core_update_active: '这个内核正在使用，请先切换到其他内核，再更新它。现有节点和配置保留。',
+  core_update_version_invalid: '下载的内核版本不符合更新记录，已停止替换，原内核保留。',
   configuration_fixed_group_members:
     '固定策略要求群组恰好有一个节点，订阅中的节点也会计入。请检查手动节点，移除群组的订阅绑定或用名称筛选保留一个节点，也可改用自动策略。本次编辑未生效，节点、订阅与配置保留。',
   configuration_apply_failed: '配置应用未完成，请查看运行日志；节点、订阅与配置保留。',
@@ -157,14 +168,14 @@ export const maintenanceMessages: Record<string, string> = {
   core_starting: '内核正在启动或恢复，请稍后重新读取状态；原配置保留。',
   core_configuration_changed: '运行配置或规则库已变化，请重新检查兼容性再切换。',
   mihomo_not_installed: '请先按需安装 mihomo 内核，当前内核和配置保留。',
-  mihomo_version_mismatch: 'mihomo 版本校验未通过，请切换到其他内核后重新安装。',
+  mihomo_version_mismatch: 'mihomo 版本校验未通过，请切换到其他内核后修复安装或检查更新。',
   mihomo_configuration_invalid: 'mihomo 配置检查未通过，当前内核继续运行。请查看兼容性报告。',
   mihomo_protocol_unsupported: '此协议暂未适配 mihomo，节点保留；可选择其他内核。',
   mihomo_option_unsupported: '节点包含尚不能等价转换为 mihomo 的参数，原节点保留。',
   mihomo_rule_unsupported: '当前路由匹配不能安全转换为 mihomo，原内核和规则保留。',
   mihomo_dns_unsupported: '当前 DNS 规则不能安全转换为 mihomo，原内核和 DNS 配置保留。',
   singbox_not_installed: '请先安装可选 sing-box 内核。',
-  singbox_version_mismatch: 'sing-box 版本校验未通过，请重新安装管理的固定版本。',
+  singbox_version_mismatch: 'sing-box 版本校验未通过，请切换到其他内核后修复安装或检查更新。',
   singbox_configuration_invalid: 'sing-box 配置校验未通过，原内核仍在运行。',
   core_configuration_check_timeout: '内核配置检查超时，原内核仍在运行。规则库较大时请稍后重试，并检查 CPU 和内存状态。',
   core_environment_unsupported: '系统能力检查未通过，请查看高级设置中的兼容性信息。',

@@ -28,11 +28,17 @@ func routerMihomoVersion(ctx context.Context) error {
 	if !routerMihomoInstalled() {
 		return errors.New("mihomo_not_installed")
 	}
+	lock, err := routercore.LockBinary(routerMihomoBinary, false)
+	if err != nil {
+		return errors.New("mihomo_version_mismatch")
+	}
+	defer lock.Close()
 	command := exec.CommandContext(ctx, routerMihomoBinary, "-v")
 	var output routerCoreBoundedWriter
 	command.Stdout = &output
 	command.Stderr = io.Discard
-	if command.Run() != nil || !strings.HasPrefix(string(output.data), "Mihomo Meta v"+routercore.MihomoVersion+" ") {
+	version, versionErr := routercore.ExpectedCoreVersion(routerMihomoBinary, "mihomo")
+	if command.Run() != nil || versionErr != nil || !strings.HasPrefix(string(output.data), "Mihomo Meta v"+version+" ") {
 		return errors.New("mihomo_version_mismatch")
 	}
 	return nil

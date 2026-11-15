@@ -168,7 +168,7 @@ func (m *routerCoreManager) plan(ctx context.Context, target string, modes ...st
 	result.Nodes = len(conf.Node)
 	result.Groups = len(conf.Group)
 	result.Installed = target == "dae" || target == "sing-box" && routerSingBoxInstalled() || target == "mihomo" && routerMihomoInstalled()
-	result.Revision = routercore.Fingerprint([]any{current, currentMode, target, mode, conf, routerCurrentGeodataIdentity(m.dirs), result.Installed, routercore.SingBoxVersion, routercore.AdapterRevision, routerExtraIdentity(), routercore.MihomoVersion})
+	result.Revision = routercore.Fingerprint([]any{current, currentMode, target, mode, conf, routerCurrentGeodataIdentity(m.dirs), result.Installed, routercore.SingBoxVersion, routercore.AdapterRevision, routerExtraIdentity(), routercore.MihomoVersion, routercore.CoreBinaryIdentity(routerSingBoxBinary), routercore.CoreBinaryIdentity(routerMihomoBinary)})
 	var profile sbObject
 	if target == "dae" {
 		result.Problems = append(result.Problems, routerDaeNodeProblems(conf)...)
@@ -291,6 +291,19 @@ func (m *routerCoreManager) save(state routercore.State, phase string) error {
 	return nil
 }
 func (m *routerCoreManager) start(ctx context.Context, name string, conf *daeConfig.Config) (routerCoreSession, error) {
+	if name == "sing-box" || name == "mihomo" {
+		binary := routerSingBoxBinary
+		if name == "mihomo" {
+			binary = routerMihomoBinary
+		}
+		if _, e := os.Lstat(binary); e == nil {
+			lock, err := routercore.LockBinary(binary, false)
+			if err != nil {
+				return nil, errors.New("core_start_failed")
+			}
+			defer lock.Close()
+		}
+	}
 	if ctx.Value(routerModeKey{}) == nil {
 		m.mu.RLock()
 		mode := m.state.Mode

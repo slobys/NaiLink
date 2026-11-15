@@ -1,0 +1,18 @@
+{
+  "sing-box": {
+    "version": "1.14.4-nailink.1",
+    "upstream": "1.14.4",
+    "source_url": "https://codeload.github.com/SagerNet/sing-box/tar.gz/refs/tags/v1.14.4",
+    "source_sha256": "0958ccd23b1ea9a141d715d15478b1e040fd04bcca19d8ff5529636b1b753e18"
+  },
+  "mihomo": {
+    "version": "1.19.34",
+    "commit": "0455d0d28c4526937380505153e65a843d8612e8",
+    "source_url": "https://codeload.github.com/MetaCubeX/mihomo/tar.gz/refs/tags/v1.19.34",
+    "source_sha256": "e3284a44f1052f1c454c90d418faa244516c2470bf232b455ea18fc4f5fa6028",
+    "binaries": {
+      "x86_64": ["amd64-compatible", "2763f5b414527f7baf6dc57e3f82f3ab561eedf34bfd7c2f2cde1f7e592efe06"],
+      "arm64": ["arm64", "daaf78a6240a282cdfd75bcbf98fe321f6bd52765cc29e79f344191198f0b50f"]
+    }
+  }
+}

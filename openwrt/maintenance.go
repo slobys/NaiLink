@@ -740,6 +740,8 @@ func maintenanceDownloadAllowed(u *url.URL) bool {
 		return false
 	}
 	switch u.Hostname() {
+	case "raw.githubusercontent.com":
+		return u.Path == "/slobys/NaiLink/main/openwrt/core-updates.json" && u.RawQuery == "" && u.Fragment == ""
 	case "github.com", "api.github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com":
 		return true
 	}
@@ -1034,6 +1036,8 @@ func maintenanceCLI(command, configDir, jobID string) {
 		json.NewEncoder(os.Stdout).Encode(manager.checkGeodataLatest(context.Background()))
 	case "status":
 		json.NewEncoder(os.Stdout).Encode(manager.status())
+	case "core_version_singbox", "core_version_mihomo", "core_update_singbox", "core_update_mihomo":
+		json.NewEncoder(os.Stdout).Encode(manager.startTask(command, jobID))
 	case "config_apply", "config_stop", "check", "update", "geodata", "core_check_dae", "core_check_singbox", "core_check_mihomo", "core_install_singbox", "core_install_mihomo", "core_install_extra", "core_switch_dae", "core_switch_singbox", "core_switch_mihomo":
 		json.NewEncoder(os.Stdout).Encode(manager.startTask(command, jobID))
 	case "worker":

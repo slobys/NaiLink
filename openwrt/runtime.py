@@ -77,7 +77,7 @@ def main():
     for name in ("btf-probe", "luci-proxy"):
         sources = [str(HERE / (name + ".go"))]
         if name == "luci-proxy":
-            sources += [str(HERE / "maintenance.go"), str(HERE / "maintenance-geodata.go"), str(HERE / "maintenance-core.go")]
+            sources += [str(HERE / "maintenance.go"), str(HERE / "maintenance-geodata.go"), str(HERE / "maintenance-core.go"), str(HERE / "maintenance-core-updates.go")]
         subprocess.run(["go", "build", "-trimpath", "-ldflags=-s -w", "-o", str(output / name),
                         *sources], cwd=wing, env=env, check=True)
     for name in ("daed", "btf-probe", "luci-proxy"):

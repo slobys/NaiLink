@@ -7,7 +7,7 @@ on:
     inputs:
       version:
         description: 'Package version (X.Y.Z), must match source'
-        default: '0.6.82'
+        default: '0.6.83'
         required: true
       publish:
         description: 'After all checks, upload to a release draft (main only)'
@@ -129,9 +129,30 @@ jobs:
           name: openwrt-core-mihomo-${{ matrix.cpu }}
           path: .build/mihomo-core/
 
+  reviewed-core-updates:
+    if: github.event_name == 'workflow_dispatch'
+    needs: test
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        engine: [sing-box, mihomo]
+        cpu: [x86_64, arm64]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.0'
+          cache: false
+      - name: Rebuild reviewed independent core and verify catalog digest
+        run: python3 openwrt/core-updates-build.py --engine '${{ matrix.engine }}' --cpu '${{ matrix.cpu }}' --work /tmp/nailink-core-update --output .build/reviewed-cores
+      - uses: actions/upload-artifact@v7
+        with:
+          name: reviewed-core-${{ matrix.engine }}-${{ matrix.cpu }}
+          path: .build/reviewed-cores/*.tar.gz
+
   runtime:
     if: github.event_name == 'workflow_dispatch'
-    needs: [web, optional-core, extra-core, mihomo-core]
+    needs: [web, optional-core, extra-core, mihomo-core, reviewed-core-updates]
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -216,6 +237,12 @@ jobs:
         with:
           name: openwrt-core-mihomo-x86_64
           path: .build/mihomo-core/
+      - uses: actions/download-artifact@v8
+        if: matrix.cpu == 'x86_64'
+        with:
+          pattern: reviewed-core-*
+          merge-multiple: true
+          path: .build/reviewed-cores/
       - name: Real dae and sing-box switching, failure and dual-stack datapath
         if: matrix.cpu == 'x86_64'
         run: |
@@ -238,6 +265,8 @@ jobs:
           sudo unshare -n sh -c 'ip link set lo up; DAED_TEST_TPROXY_ROUTING=1 /tmp/nailink-dae-tests -test.run "^TestRouterTProxyRoutingRepairsInIsolatedNamespace$" -test.v'
           sudo unshare -n sh -c 'ip link set lo up; echo "40000 40031" > /proc/sys/net/ipv4/ip_local_port_range; DAED_ISOLATED_PORT_EXHAUSTION=1 /tmp/nailink-dae-tests -test.run "^TestPrivateListenerRealPortExhaustion$" -test.v'
           sudo env "PATH=$PATH" "GOCACHE=$(go env GOCACHE)" "GOMODCACHE=$(go env GOMODCACHE)" python3 tests/openwrt/protocol_interop.py --wing wing --sing-box /tmp/nailink-protocol-servers/sing-box-1.14.3-linux-amd64/sing-box --juicity-server /tmp/nailink-protocol-servers/juicity/juicity-server --client-singbox /tmp/nailink-core-static/usr/bin/sing-box --client-extra /tmp/nailink-extra-native --client-mihomo /tmp/nailink-mihomo-static/usr/bin/mihomo
+          python3 tests/openwrt/prepare_updated_cores.py --archives .build/reviewed-cores --output /tmp/nailink-updated-cores
+          sudo env "PATH=$PATH" "GOCACHE=$(go env GOCACHE)" "GOMODCACHE=$(go env GOMODCACHE)" python3 tests/openwrt/protocol_interop.py --wing wing --sing-box /tmp/nailink-protocol-servers/sing-box-1.14.3-linux-amd64/sing-box --juicity-server /tmp/nailink-protocol-servers/juicity/juicity-server --client-singbox /tmp/nailink-updated-cores/sing-box --client-extra /tmp/nailink-extra-native --client-mihomo /tmp/nailink-updated-cores/mihomo
           sudo env "PATH=$PATH" python3 tests/openwrt/core_netns.py --runtime "$PWD/.build/runtime/daed" --probe "$PWD/.build/runtime/btf-probe" --singbox /tmp/nailink-core-static/usr/bin/sing-box --nft-root / --workspace /tmp/nailink-core-netns --fw4 --ipv6
           sudo env "PATH=$PATH" python3 tests/openwrt/core_netns.py --runtime "$PWD/.build/runtime/daed" --probe "$PWD/.build/runtime/btf-probe" --singbox /tmp/nailink-core-static/usr/bin/sing-box --mihomo /tmp/nailink-mihomo-static/usr/bin/mihomo --target-core mihomo --nft-root / --workspace /tmp/nailink-mihomo-netns --fw4 --ipv6
           sudo env "PATH=$PATH" python3 tests/openwrt/core_netns.py --runtime "$PWD/.build/runtime/daed" --probe "$PWD/.build/runtime/btf-probe" --singbox /tmp/nailink-core-static/usr/bin/sing-box --nft-root / --workspace /tmp/nailink-singbox-tproxy --fw4 --ipv6 --mode tproxy
@@ -245,10 +274,12 @@ jobs:
           # following namespace test verifies actual broute and TPROXY support.
           sudo modprobe -a br_netfilter nft_meta_bridge
           sudo env "PATH=$PATH" python3 tests/openwrt/core_netns.py --runtime "$PWD/.build/runtime/daed" --probe "$PWD/.build/runtime/btf-probe" --singbox /tmp/nailink-core-static/usr/bin/sing-box --mihomo /tmp/nailink-mihomo-static/usr/bin/mihomo --target-core mihomo --nft-root / --workspace /tmp/nailink-mihomo-tproxy --fw4 --ipv6 --mode tproxy --bridge
+          sudo env "PATH=$PATH" python3 tests/openwrt/core_netns.py --runtime "$PWD/.build/runtime/daed" --probe "$PWD/.build/runtime/btf-probe" --singbox /tmp/nailink-updated-cores/sing-box --nft-root / --workspace /tmp/nailink-updated-singbox-tproxy --fw4 --ipv6 --mode tproxy
+          sudo env "PATH=$PATH" python3 tests/openwrt/core_netns.py --runtime "$PWD/.build/runtime/daed" --probe "$PWD/.build/runtime/btf-probe" --singbox /tmp/nailink-updated-cores/sing-box --mihomo /tmp/nailink-updated-cores/mihomo --target-core mihomo --nft-root / --workspace /tmp/nailink-updated-mihomo-tproxy --fw4 --ipv6 --mode tproxy --bridge
       - name: LuCI gateway authentication and upgrade tests
         if: matrix.cpu == 'x86_64'
         run: |
-          (cd wing && DAED_TEST_MIHOMO_ARCHIVE="$GITHUB_WORKSPACE/.build/mihomo-core/nailink-mihomo-1.19.33-x86_64.tar.gz" DAED_TEST_EXTRA_ARCHIVE="$GITHUB_WORKSPACE/.build/extra-core/nailink-sing-box-extra-1.14.3-nailink.2-x86_64.tar.gz" DAED_TEST_SINGBOX_ARCHIVE=/tmp/nailink-core-static/core.ipk go test ../openwrt/luci-proxy.go ../openwrt/luci-proxy_test.go ../openwrt/maintenance.go ../openwrt/maintenance-geodata.go ../openwrt/maintenance-core.go ../openwrt/maintenance_test.go ../openwrt/maintenance-core_test.go)
+          (cd wing && DAED_TEST_CORE_UPDATES="$GITHUB_WORKSPACE/.build/reviewed-cores" DAED_TEST_MIHOMO_ARCHIVE="$GITHUB_WORKSPACE/.build/mihomo-core/nailink-mihomo-1.19.33-x86_64.tar.gz" DAED_TEST_EXTRA_ARCHIVE="$GITHUB_WORKSPACE/.build/extra-core/nailink-sing-box-extra-1.14.3-nailink.2-x86_64.tar.gz" DAED_TEST_SINGBOX_ARCHIVE=/tmp/nailink-core-static/core.ipk go test ../openwrt/luci-proxy.go ../openwrt/luci-proxy_test.go ../openwrt/maintenance.go ../openwrt/maintenance-geodata.go ../openwrt/maintenance-core.go ../openwrt/maintenance-core-updates.go ../openwrt/maintenance_test.go ../openwrt/maintenance-core_test.go ../openwrt/maintenance-core-updates_test.go)
           curl -fL --proto '=https' -o /tmp/luci-rootfs-25.tar.gz https://downloads.openwrt.org/releases/25.12.4/targets/x86/64/openwrt-25.12.4-x86-64-rootfs.tar.gz
           echo '0b80f307a5383a0c2c08712c500a4351f7b7cad0a6c2963e02a74db4e6831bf4  /tmp/luci-rootfs-25.tar.gz' | sha256sum -c -
           mkdir /tmp/luci-rootfs-25

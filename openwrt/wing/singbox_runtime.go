@@ -75,12 +75,18 @@ func routerSingBoxVersion(ctx context.Context) error {
 	if !routerSingBoxInstalled() {
 		return errors.New("singbox_not_installed")
 	}
+	lock, err := routercore.LockBinary(routerSingBoxBinary, false)
+	if err != nil {
+		return errors.New("singbox_version_mismatch")
+	}
+	defer lock.Close()
 	// Output is read through a limit. Never surface a core's arbitrary stderr.
 	c := exec.CommandContext(ctx, routerSingBoxBinary, "version")
 	var output routerCoreBoundedWriter
 	c.Stdout = &output
 	c.Stderr = io.Discard
-	if err := c.Run(); err != nil || !strings.HasPrefix(string(output.data), "sing-box version "+routercore.SingBoxVersion+"\n") {
+	version, versionErr := routercore.ExpectedCoreVersion(routerSingBoxBinary, "sing-box")
+	if err := c.Run(); err != nil || versionErr != nil || !strings.HasPrefix(string(output.data), "sing-box version "+version+"\n") {
 		return errors.New("singbox_version_mismatch")
 	}
 	return nil

@@ -1,3 +1,4 @@
+import type { OptionalCoreStatus } from '~/utils/router-maintenance'
 import { useIsMutating, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowRight, Check, ChevronDown, Cpu, Download, LoaderCircle, RefreshCw, ShieldCheck } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
@@ -6,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useGQLQueryClient } from '~/contexts'
 import { useRouterMaintenance } from '~/hooks/useRouterMaintenance'
 import { cn } from '~/lib/utils'
+import { coreUpdateState } from '~/utils/core-updates'
 import { coreProblemLabel, maintenanceMessages } from '~/utils/router-maintenance'
 
 const cores = ['dae', 'sing-box', 'mihomo'] as const
@@ -73,7 +75,7 @@ export function RouterCore() {
   const plan =
     core?.plan?.target === target && (target === 'dae' || (core.plan.mode || 'tun') === mode) ? core.plan : undefined
   const usingSelection = target === current && (target === 'dae' || mode === (core?.mode || 'tun'))
-  const selectedCore =
+  const selectedCore: OptionalCoreStatus | undefined =
     target === 'dae'
       ? undefined
       : core?.engines?.[target] ||
@@ -84,6 +86,8 @@ export function RouterCore() {
     target === 'mihomo' ? 'mihomo_version_mismatch' : 'singbox_version_mismatch',
   )
   const installed = target === 'dae' || !!selectedCore?.installed
+  const updateState = coreUpdateState(selectedCore)
+  const updateAvailable = updateState === 'available'
   const job = query.data?.job
   const suffix = target === 'sing-box' ? 'singbox' : target
   const selectionSuffix =
@@ -111,19 +115,22 @@ export function RouterCore() {
     memory?.complete && Number.isFinite(memory.total_kib) && memory.total_kib >= 0
       ? (memory.total_kib / 1024).toFixed(0)
       : undefined
-  const coreMessage =
-    coreJob?.state === 'error'
+  const coreMessage = coreJob?.action.startsWith('core_version_')
+    ? undefined
+    : coreJob?.state === 'error'
       ? maintenanceMessages[coreJob.code || ''] || maintenanceMessages.operation_failed
       : coreJob?.state === 'success'
         ? coreJob.action.startsWith('core_switch_')
           ? `切换完成，当前内核：${current || '读取中'}${current && current !== 'dae' ? (core?.mode === 'tproxy' ? ' · 非 TUN' : ' · TUN') : ''}`
           : coreJob.action === 'core_install_extra'
             ? '扩展协议包已安装，现有节点和配置保留。'
-            : coreJob.action.startsWith('core_install_')
-              ? '内核已安装，请检查兼容性后再切换。'
-              : coreJob.action.startsWith('core_prepare_')
-                ? '接管依赖已安装，请重新检查兼容性。'
-                : undefined
+            : coreJob.action.startsWith('core_update_')
+              ? '内核已更新，节点和配置保留。请检查兼容性后再切换。'
+              : coreJob.action.startsWith('core_install_')
+                ? '内核已安装，请检查兼容性后再切换。'
+                : coreJob.action.startsWith('core_prepare_')
+                  ? '接管依赖已安装，请重新检查兼容性。'
+                  : undefined
         : coreJob
           ? '正在处理，请勿断电。关闭窗口后，后台任务仍会继续。'
           : undefined
@@ -157,7 +164,7 @@ export function RouterCore() {
           <DialogHeader className="shrink-0 border-b px-5 py-5 text-left sm:px-6">
             <DialogTitle className="text-xl tracking-tight">代理内核</DialogTitle>
             <DialogDescription className="pr-5 text-sm leading-relaxed">
-              选择适合当前节点的内核，检查通过后再切换。
+              选择或更新内核，检查兼容性后再切换。
             </DialogDescription>
           </DialogHeader>
           <div className="min-h-0 space-y-5 overflow-y-auto px-5 py-5 sm:px-6" data-core-dialog-body>
@@ -166,7 +173,10 @@ export function RouterCore() {
                 <p className="text-sm text-muted-foreground">
                   当前内核：<strong className="ml-1 text-base text-foreground">{current || '读取中'}</strong>
                   {current && current !== 'dae' && (
-                    <span className="ml-2 text-xs">{core?.engines?.[current]?.version || core?.version}</span>
+                    <span className="ml-2 text-xs">
+                      {core?.engines?.[current]?.version ||
+                        (current === 'sing-box' && !core?.engines ? core?.version : '版本未确认')}
+                    </span>
                   )}
                 </p>
                 <span
@@ -262,6 +272,70 @@ export function RouterCore() {
               </p>
             </section>
             {target !== 'dae' && (
+              <section aria-label={`${target} 内核更新`} className="space-y-3 border-t pt-4" data-core-update>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold">内核更新</h3>
+                  <span className="text-xs text-muted-foreground">
+                    {installed ? `已安装 ${selectedCore?.version || '版本未确认'}` : '尚未安装'}
+                  </span>
+                </div>
+                <p
+                  className={cn(
+                    'break-words text-xs leading-relaxed',
+                    updateState === 'error' ? 'text-destructive' : 'text-muted-foreground',
+                  )}
+                  role="status"
+                >
+                  {busy && coreJob?.action.startsWith('core_version_')
+                    ? '正在检查兼容版本…'
+                    : updateState === 'error'
+                      ? maintenanceMessages[selectedCore?.update?.code || ''] || '检查更新失败，请稍后重试。'
+                      : updateState === 'latest'
+                        ? `已是最新兼容版 ${selectedCore?.update?.version}`
+                        : updateState === 'ahead'
+                          ? '本机版本高于更新通道，保留当前版本。'
+                          : updateAvailable
+                            ? `可${installed ? '更新' : '安装'}至 ${selectedCore?.update?.version}`
+                            : '检查经过 NaiLink 验证的兼容版，内核可独立更新。'}
+                </p>
+                <div className={cn('grid gap-2', installed && 'grid-cols-2')}>
+                  <Button
+                    variant="outline"
+                    className="min-h-11"
+                    disabled={blocked}
+                    onClick={() => mutation.mutate(`core_version_${suffix as 'singbox' | 'mihomo'}`)}
+                  >
+                    {busy && coreJob?.action.startsWith('core_version_') ? (
+                      <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+                    ) : (
+                      <RefreshCw className="size-4" aria-hidden="true" />
+                    )}
+                    检查更新
+                  </Button>
+                  {installed && (
+                    <Button
+                      className="min-h-11"
+                      disabled={blocked || current === target || !updateAvailable}
+                      onClick={() => mutation.mutate(`core_update_${suffix as 'singbox' | 'mihomo'}`)}
+                    >
+                      <Download className="size-4" aria-hidden="true" />
+                      更新内核
+                    </Button>
+                  )}
+                </div>
+                {!!selectedCore?.update?.checked && (
+                  <p className="text-xs text-muted-foreground">
+                    检查于 {new Date(selectedCore.update.checked * 1000).toLocaleString()}
+                  </p>
+                )}
+                {installed && current === target && (
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    先切换到其他内核，再更新此内核。节点、订阅和分流配置会保留。
+                  </p>
+                )}
+              </section>
+            )}
+            {target !== 'dae' && (
               <section aria-label="接管方式" className="space-y-2">
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>接管方式</span>
@@ -302,13 +376,25 @@ export function RouterCore() {
             {target !== 'dae' && (!installed || repairCore) && (
               <section className="space-y-2 text-sm" aria-label="安装可选内核">
                 <p className="text-xs leading-relaxed text-muted-foreground">
-                  {target} · {selectedCore?.version || '—'}，安装前请预留 180 MiB 可用存储。下载失败不会停止当前代理。
+                  {target} ·{' '}
+                  {updateAvailable
+                    ? selectedCore?.update?.version
+                    : selectedCore?.bundled_version || selectedCore?.version || '—'}
+                  ，安装前请预留 180 MiB 可用存储。下载失败不会停止当前代理。
                 </p>
                 <Button
                   variant="outline"
                   className="min-h-11 w-full"
                   disabled={blocked || current === target}
-                  onClick={() => mutation.mutate(target === 'mihomo' ? 'core_install_mihomo' : 'core_install_singbox')}
+                  onClick={() =>
+                    mutation.mutate(
+                      updateAvailable
+                        ? `core_update_${suffix as 'singbox' | 'mihomo'}`
+                        : target === 'mihomo'
+                          ? 'core_install_mihomo'
+                          : 'core_install_singbox',
+                    )
+                  }
                 >
                   <Download className="size-4" aria-hidden="true" />
                   {repairCore ? `重新安装 ${target}` : `下载并安装 ${target}`}

@@ -24,6 +24,11 @@ import (
 var coreMaintenanceCodes = []string{"mihomo_not_installed", "mihomo_version_mismatch", "mihomo_configuration_invalid", "extra_not_installed", "extra_dependency_failed", "extra_rollback_failed", "core_incompatible", "core_configuration_changed", "singbox_not_installed", "singbox_version_mismatch", "singbox_configuration_invalid", "core_environment_unsupported", "core_network_conflict", "core_rolled_back", "core_rollback_failed", "core_cleanup_failed", "core_stop_failed", "core_state_failed", "core_snapshot_failed", "core_start_failed", "core_not_ready", "core_connectivity_failed", "core_dependency_failed", "core_exited", "core_not_running", "nftables_unavailable"}
 
 func coreMaintenanceCode(message string) string {
+	for _, code := range []string{"core_update_plugin_required", "core_update_active", "core_update_version_invalid"} {
+		if message == code {
+			return message
+		}
+	}
 	for _, code := range []string{"invalid_core_mode", "tproxy_tor_unsupported", "tproxy_environment_unsupported", "core_tun_unavailable", "tproxy_fw4_required", "tproxy_bridge_unsupported", "tproxy_bridge_rpf", "tproxy_bridge_vlan_unsupported"} {
 		if strings.Contains(message, code) {
 			return code
@@ -52,6 +57,9 @@ func uncertainCoreJob(job maintenanceJob) bool {
 	return job.Code == "backend_unavailable" || job.Code == "core_request_failed" || job.Code == "interrupted"
 }
 func coreMaintenanceAction(action string) bool {
+	if action == "core_version_singbox" || action == "core_version_mihomo" || action == "core_update_singbox" || action == "core_update_mihomo" {
+		return true
+	}
 	if action == "core_prepare_tproxy" || action == "core_prepare_tun" {
 		return true
 	}
@@ -85,9 +93,11 @@ func (m *maintenanceManager) reconcileCoreJob(job *maintenanceJob) {
 }
 
 type optionalCoreStatus struct {
-	Installed bool   `json:"installed"`
-	Supported bool   `json:"supported"`
-	Version   string `json:"version"`
+	Installed      bool               `json:"installed"`
+	Supported      bool               `json:"supported"`
+	Version        string             `json:"version"`
+	BundledVersion string             `json:"bundled_version"`
+	Update         *checkedCoreUpdate `json:"update,omitempty"`
 }
 type coreMaintenanceStatus struct {
 	Mode         string                        `json:"mode"`
@@ -130,7 +140,10 @@ func (m *maintenanceManager) coreStatus() *coreMaintenanceStatus {
 	if st, e := os.Lstat(m.mihomoPath()); e == nil && st.Mode().IsRegular() && st.Mode().Perm()&0022 == 0 && st.Mode().Perm()&0111 != 0 {
 		mhInstalled = true
 	}
-	status.Engines = map[string]optionalCoreStatus{"sing-box": {status.Installed, supported, routercore.SingBoxVersion}, "mihomo": {mhInstalled, mhSupported, routercore.MihomoVersion}}
+	status.Engines = map[string]optionalCoreStatus{
+		"sing-box": {Installed: status.Installed, Supported: supported, Version: m.installedCoreVersion("sing-box"), BundledVersion: routercore.SingBoxVersion, Update: m.checkedUpdate("sing-box")},
+		"mihomo":   {Installed: mhInstalled, Supported: mhSupported, Version: m.installedCoreVersion("mihomo"), BundledVersion: routercore.MihomoVersion, Update: m.checkedUpdate("mihomo")},
+	}
 	var saved storedCorePlan
 	if readMaintenanceJSON(filepath.Join(m.stateDir, "core-plan.json"), &saved) == nil && m.now().Unix()-saved.Checked <= 600 && saved.Checked <= m.now().Unix()+60 {
 		status.Plan = &saved.Plan
@@ -143,6 +156,12 @@ func (m *maintenanceManager) maintainCore(ctx context.Context, job *maintenanceJ
 		return errors.New("busy")
 	}
 	defer lock.Close()
+	if strings.HasPrefix(job.Action, "core_version_") {
+		return m.checkCoreUpdate(ctx, job, updateEngine(job.Action))
+	}
+	if strings.HasPrefix(job.Action, "core_update_") {
+		return m.updateOptionalCore(ctx, job, updateEngine(job.Action))
+	}
 	if job.Action == "core_prepare_tproxy" || job.Action == "core_prepare_tun" {
 		return m.prepareCoreDependency(ctx, job, strings.TrimPrefix(job.Action, "core_prepare_"))
 	}
@@ -367,59 +386,20 @@ func (m *maintenanceManager) installOptionalCore(ctx context.Context, job *maint
 	if err = os.Chmod(path, 0755); err != nil {
 		return errors.New("state_failed")
 	}
-	backup := ""
-	if engine == "mihomo" {
-		if info, e := os.Lstat(binary); e == nil {
-			if !info.Mode().IsRegular() {
-				return errors.New("unsafe_state")
-			}
-			backup = binary + ".previous-" + job.ID
-			if _, e = os.Lstat(backup); !os.IsNotExist(e) {
-				return errors.New("unsafe_state")
-			}
-			if e = os.Rename(binary, backup); e != nil {
-				return errors.New("state_failed")
-			}
-		} else if !os.IsNotExist(e) {
-			return errors.New("unsafe_state")
-		}
-	}
-	restore := func() error {
-		if engine != "mihomo" {
-			return nil
-		}
-		if backup != "" {
-			return os.Rename(backup, binary)
-		}
-		if e := os.Remove(binary); e != nil && !os.IsNotExist(e) {
-			return e
-		}
-		return nil
-	}
-	if err = os.Rename(path, binary); err != nil {
-		if restore() != nil {
-			return errors.New("core_rollback_failed")
-		}
-		return errors.New("state_failed")
-	}
-	parent, err := os.Open(filepath.Dir(binary))
+	binaryDigest, err := routercore.BinarySHA256(path)
 	if err != nil {
-		if restore() != nil {
-			return errors.New("core_rollback_failed")
-		}
-		return errors.New("state_failed")
+		return errors.New("invalid_release")
 	}
-	defer parent.Close()
-	if err = parent.Sync(); err != nil {
-		if restore() != nil {
-			return errors.New("core_rollback_failed")
-		}
-		return errors.New("state_failed")
+	lock, err := routercore.LockBinary(binary, true)
+	if err != nil {
+		return errors.New("busy")
 	}
-	if backup != "" {
-		_ = os.Remove(backup)
+	defer lock.Close()
+	state, err = routercore.ReadState(m.configDir)
+	if err != nil || state.Current == engine || state.Phase == "switching" {
+		return errors.New("busy")
 	}
-	return nil
+	return publishCoreUpdate(binary, path, routercore.CoreReceipt{Engine: engine, Version: version, SHA256: binaryDigest}, job.ID)
 }
 
 // Use only the static binary from the checksum-pinned compatibility archive.

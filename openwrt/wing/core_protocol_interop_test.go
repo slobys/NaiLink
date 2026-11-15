@@ -395,6 +395,15 @@ func TestRouterCoreBulkProbe(t *testing.T) {
 	if err = os.WriteFile(wrapper, []byte(routerInteropStartTrace(binary, trace)), 0700); err != nil {
 		t.Fatal(err)
 	}
+	// The tracer is a different executable. Carry the verified core version
+	// across instrumentation while binding its receipt to the wrapper bytes.
+	version, err := routercore.ExpectedCoreVersion(binary, "sing-box")
+	if err != nil { t.Fatal(err) }
+	digest, err := routercore.BinarySHA256(wrapper)
+	if err != nil { t.Fatal(err) }
+	if err = os.Chmod(work,0700); err != nil { t.Fatal(err) }
+	receipt, _ := json.Marshal(routercore.CoreReceipt{Engine:"sing-box", Version:version, SHA256:digest, MinAdapter:routercore.AdapterRevision, MaxAdapter:routercore.AdapterRevision})
+	if err = routercore.Write(routercore.ReceiptPath(wrapper),receipt); err != nil { t.Fatal(err) }
 	routerSingBoxBinary, routerCoreRuntimeDir = wrapper, filepath.Join(work, "private-core")
 	routerCoreGlobal.Lock()
 	routerCoreGlobal.manager = &routerCoreManager{conf: conf, state: routercore.State{Current: "sing-box"}}

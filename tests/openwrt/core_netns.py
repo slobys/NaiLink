@@ -128,6 +128,10 @@ def inside(args):
     shutil.copy2(args.singbox,private/"cores/sing-box");os.chmod(private/"cores/sing-box",0o755)
     if args.mihomo:
         shutil.copy2(args.mihomo,private/"cores/mihomo");os.chmod(private/"cores/mihomo",0o755)
+    for engine,source in (("sing-box",args.singbox),("mihomo",args.mihomo)):
+        if source and Path(str(source)+".version.json").is_file():
+            shutil.copy2(Path(str(source)+".version.json"),private/("cores/"+engine+".version.json"))
+            os.chmod(private/("cores/"+engine+".version.json"),0o600)
     shutil.copy2(args.probe,private/"btf-probe")
     # Keep real production TPROXY capability syntax in the discovery shim;
     # only the firmware/UCI discovery is replaced in this Linux namespace.

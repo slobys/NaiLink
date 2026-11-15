@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "release": "nailink-cores-20261115",
+  "engines": {
+    "sing-box": {
+      "version": "1.14.4-nailink.1",
+      "min_adapter": 9,
+      "max_adapter": 9,
+      "assets": {
+        "amd64": {
+          "archive": "nailink-sing-box-1.14.4-nailink.1-x86_64.tar.gz",
+          "sha256": "ea3508d9fedc72889e8175d24eacbd4c5c9dd506af922bac421235a99b008139"
+        },
+        "arm64": {
+          "archive": "nailink-sing-box-1.14.4-nailink.1-arm64.tar.gz",
+          "sha256": "d40eb98f03846ff8dce5291509c894b59557376f54bb142bc4eeb0a4786dd91e"
+        }
+      }
+    },
+    "mihomo": {
+      "version": "1.19.34",
+      "min_adapter": 9,
+      "max_adapter": 9,
+      "assets": {
+        "amd64": {
+          "archive": "nailink-mihomo-1.19.34-x86_64.tar.gz",
+          "sha256": "1b3b3998fba84f0e264d404bbdfb29d2892ec881fa3013a405ddb33552be91b4"
+        },
+        "arm64": {
+          "archive": "nailink-mihomo-1.19.34-arm64.tar.gz",
+          "sha256": "b22be8d13fb30ad922759beb2988e327be8e4e54d7c0441e1f2374e1672a843c"
+        }
+      }
+    }
+  }
+}
