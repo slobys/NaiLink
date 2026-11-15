@@ -1,0 +1,66 @@
+name: Publish verified OpenWrt artifact
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful OpenWrt workflow run already merged into main
+        required: true
+        type: string
+      version:
+        description: Exact tested package version
+        required: true
+        type: string
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPOSITORY: ${{ github.repository }}
+      RUN_ID: ${{ inputs.run_id }}
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Verify completed build provenance and unchanged package source
+        id: verified
+        run: |
+          python3 scripts/publish-openwrt.py check-version "$VERSION"
+          python3 - <<'PY'
+          import json, os, re, subprocess
+          run_id, repo = os.environ['RUN_ID'], os.environ['REPOSITORY']
+          assert re.fullmatch(r'[0-9]+', run_id)
+          def api(path):
+              return json.loads(subprocess.check_output(['gh', 'api', 'repos/'+repo+path]))
+          run = api('/actions/runs/'+run_id)
+          assert run['status']=='completed' and run['conclusion']=='success'
+          assert run['event']=='workflow_dispatch' and run['path']=='.github/workflows/openwrt.yml'
+          assert run['head_repository']['full_name']==repo
+          sha = run['head_sha']; assert re.fullmatch(r'[a-f0-9]{40}', sha)
+          jobs = api('/actions/runs/'+run_id+'/jobs?per_page=100')['jobs']
+          assert len(jobs)==33 and sum(j['conclusion']=='success' for j in jobs)==32
+          assert all(j['conclusion']=='success' or (j['name']=='publish' and j['conclusion']=='skipped') for j in jobs)
+          assert {'test','web','assemble'} <= {j['name'] for j in jobs}
+          subprocess.run(['git','merge-base','--is-ancestor',sha,'HEAD'],check=True)
+          # The publication helper may be added after the build. No other
+          # source or workflow differences may be shipped under its commit.
+          subprocess.run(['git','diff','--exit-code',sha,'HEAD','--','.',':!.github/workflows/publish-openwrt-artifact.yml'],check=True)
+          with open(os.environ['GITHUB_OUTPUT'],'a') as output:
+              output.write('sha='+sha+'\n')
+          PY
+      - uses: actions/download-artifact@v8
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.run_id }}
+          name: daed-openwrt-${{ inputs.version }}
+          path: .build/release/
+      - name: Validate all checksums and publish matching draft
+        env:
+          SOURCE_SHA: ${{ steps.verified.outputs.sha }}
+        run: python3 scripts/publish-openwrt.py publish .build/release --version "$VERSION" --sha "$SOURCE_SHA" --repository "$REPOSITORY"
