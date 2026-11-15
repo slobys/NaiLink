@@ -575,6 +575,20 @@ HTTPS 成功只能说明当前路径可用，使用 PassWall 时的成功不代�
 配置的 `[direct]` 不代表重载后的最终路由。Netkit 回退 veth 后继续成功启动时，
 应先核对真实绑定和实际连接结果，避免仅根据该回退提示更换 iproute2。
 
+### dae 启动在就绪前退出
+
+`Core startup readiness failed` 和 `core_start_failed` 表示核心在达到就绪条件前
+退出，并不直接说明是哪一步失败。修复后的日志补充固定分类的 `stage` 与 `reason`，
+例如 `stage=namespace_setup reason=permission_denied`；仅有底层错误文字而没有
+可识别系统错误类别时，`reason=startup_failed` 仍可能出现。未知阶段保留为
+`daemon`，不会把节点、订阅、路径或完整错误内容写入这些字段。
+
+`namespace_setup` 指向网络命名空间准备，`ebpf_load` / `ebpf_maps` 指向程序或
+映射加载，`listen` 指向监听启动；这些是失败阶段，不是自动修复建议。
+`Successfully created Netkit device pair` 只证明设备创建完成，后续命名空间、
+系统参数、路由和 eBPF 步骤仍可能失败。不要仅凭该行关闭 Netkit、跳过兼容检查
+或更换内核。排查时需一并保留 NaiLink/固件/内核版本及同一次启动的脱敏日志。
+
 ## 配置应用与服务启动的 RPC 区别
 
 `ubus call daed-router action '{"action":"apply"}'` 不是配置应用入口。`action` 仅支持 `start`、`restart`、`stop`、`boot_enable`、`boot_disable`；不支持的操作在调用配置后端前就被拒绝，因此返回 `false` 后仍看到旧的 `direct` 日志，并不能证明发生了编译或配置回退。

@@ -237,6 +237,29 @@ def router_lifecycle(text):
         text = text.replace('if e := routerCloseControlPlane(c); e != nil {', 'e := routerCloseControlPlane(c)\n\trouterFinishSession()\n\trouterServeWG.Wait()\n\tif listener != nil { _ = listener.Close() }\n\tif e != nil {', 1)
     text = text.replace('\t\t\t\t<-readyChan\n\t\t\trouterMarkServing(c)', '\t\t\t\tif !<-readyChan { break loop }\n\t\t\trouterMarkServing(c)')
     text = text.replace('\t\t\t<-readyChan\n\t\t\trouterMarkServing(c)', '\t\t\tif !<-readyChan { return }\n\t\t\trouterMarkServing(c)')
+    if 'routerDaeServe(' not in text:
+        start = text.index('\t\tvar err error\n\t\treadyChan :=')
+        end = text.index('\t\t// Exit', start)
+        text = text[:start] + '''\t\trouterServeErrors <- routerDaeServe(control.GetDaeNetns().With, func(readyChan chan<- bool) error {
+            var serveErr error
+            listener, serveErr = c.ListenAndServe(readyChan, port)
+            return serveErr
+        }, func() {
+            routerMarkServing(c)
+            log.Infoln("Ready")
+        })
+''' + text[end:]
+        text = text.replace('var routerServeWG sync.WaitGroup', 'var routerServeWG sync.WaitGroup\n\tvar routerServeErrors = make(chan error, 1)', 1)
+        text = text.replace('\t\tcase nil:\n\t\t\t/* dae-wing start */', '''\t\tcase nil:
+            // Only an unexpected serve exit is a startup/runtime failure.
+            // Stop and hot reload keep their existing cleanup semantics.
+            select {
+            case serveErr := <-routerServeErrors:
+                if !reloading { err = serveErr }
+            default:
+            }
+\t\t\t/* dae-wing start */''', 1)
+        text = text.replace('\treturn nil\n}\n\nfunc newControlPlane(', '\treturn err\n}\n\nfunc newControlPlane(', 1)
     return text
 
 
@@ -714,6 +737,8 @@ func routerSingleHopDialer(ctx context.Context, gOption *GlobalOption, iOption I
         ("dae/router_geodata_update.go", "geodata_update.go"),
         ("dae/router_geodata_update_test.go", "geodata_update_test.go"),
         ("dae/router_core_manager.go", "core_manager.go"),
+        ("dae/router_dae_serve.go", "dae_serve.go"),
+        ("dae/router_dae_serve_test.go", "dae_serve_test.go"),
         ("dae/router_core_memory.go", "core_memory.go"),
         ("dae/router_core_memory_test.go", "core_memory_test.go"),
         ("dae/router_core_udp_probe_test.go", "core_udp_probe_test.go"),

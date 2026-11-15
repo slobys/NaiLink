@@ -2,18 +2,23 @@
 package dae
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/daeuniverse/dae-wing/routercore"
 	daeConfig "github.com/daeuniverse/dae/config"
+	"github.com/daeuniverse/dae/control"
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
 )
@@ -329,5 +334,139 @@ func TestRouterCoreInterruptedSwitchRestoresPreviousSelection(t *testing.T) {
 	}
 	if _, err = routerCoreManagerLock(root); err == nil {
 		t.Fatal("allowed two managers for one configuration")
+	}
+}
+
+// This exercises the real daemon entry path, stopping before any kernel or
+// namespace work: embedded subscriptions are rejected by newControlPlane.
+func TestRouterDaeStartupRetainsCauseWithoutConsumingDone(t *testing.T) {
+	conf := *EmptyConfig
+	conf.Subscription = []daeConfig.KeyableString{"https://fixture.invalid/private-token"}
+	conf.Global.DisableWaitingNetwork = true
+	log := logrus.New()
+	log.SetOutput(io.Discard)
+	session := newRouterDaeSession(log, &conf, []string{t.TempDir()}, true, false)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	err := session.Ready(ctx)
+	if err == nil || err.Error() != "core_start_failed" || errors.Unwrap(err) == nil {
+		t.Fatalf("startup cause was discarded or exposed: %v", err)
+	}
+	select {
+	case original := <-session.Done():
+		if original == nil || !errors.Is(err, original) {
+			t.Fatal("readiness consumed or changed the daemon completion error")
+		}
+	default:
+		t.Fatal("readiness consumed the daemon completion event")
+	}
+	if err := session.Stop(ctx); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRouterDaeDryReadinessExitsBeforeCallback(t *testing.T) {
+	session := &routerDaeSession{reload: make(chan *ReloadMessage), exit: make(chan struct{}), dry: true, conf: EmptyConfig}
+	go func() {
+		<-session.reload
+		close(session.exit)
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	started := time.Now()
+	err := session.Ready(ctx)
+	if err == nil || err.Error() != "core_start_failed" || time.Since(started) > time.Second {
+		t.Fatalf("exit after accepting reload was not reported promptly: %v", err)
+	}
+}
+
+func TestRouterDaeStartupDiagnosticsAreSafe(t *testing.T) {
+	secret := "socks5://private-user:private-password@private.example/secret-token"
+	for _, test := range []struct {
+		name          string
+		cause         error
+		stage, reason string
+	}{
+		{"namespace", fmt.Errorf("failed to setup dae netns: %s: %w", secret, syscall.EPERM), "namespace_setup", "permission_denied"},
+		{"bpf", fmt.Errorf("load eBPF objects: %s: %w", secret, syscall.ENOMEM), "ebpf_load", "out_of_memory"},
+		{"listener", &routerDaeRunError{stage: "listen", err: fmt.Errorf("%s: %w", secret, syscall.EADDRINUSE)}, "listen", "address_in_use"},
+		{"node DNS", &routerDaeRunError{stage: "node_dns", err: errors.New(secret)}, "node_dns", "startup_failed"},
+		{"unknown", errors.New(secret), "daemon", "startup_failed"},
+		{"filesystem", &os.PathError{Op: "mkdir", Path: "/private/secret-path", Err: syscall.EROFS}, "filesystem", "read_only_filesystem"},
+		{"untrusted stage", &routerDaeRunError{stage: secret, err: errors.New(secret)}, "daemon", "startup_failed"},
+		{"clean early exit", nil, "daemon", "unexpected_exit"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var output bytes.Buffer
+			log := logrus.New()
+			log.SetOutput(&output)
+			log.SetFormatter(&logrus.JSONFormatter{})
+			live := 1
+			failure := &routerDaeRunError{stage: "daemon", err: test.cause}
+			session := &coreFakeSession{live: &live, done: make(chan error), readyErr: failure}
+			manager := &routerCoreManager{log: log, factory: func(context.Context, string, *daeConfig.Config) (routerCoreSession, error) {
+				return session, nil
+			}}
+			_, err := manager.start(context.Background(), "dae", EmptyConfig)
+			if err != failure || err.Error() != "core_start_failed" || live != 0 || !session.stopped {
+				t.Fatal("startup failure changed return or cleanup semantics", err)
+			}
+			if test.cause != nil && !errors.Is(err, test.cause) {
+				t.Fatal("internal startup cause lost")
+			}
+			var fields map[string]any
+			if err := json.Unmarshal(output.Bytes(), &fields); err != nil {
+				t.Fatal(err)
+			}
+			if fields["stage"] != test.stage || fields["reason"] != test.reason || strings.Contains(output.String(), "private") || strings.Contains(output.String(), "secret") {
+				t.Fatalf("incorrect or unsafe diagnostic: %s", output.String())
+			}
+		})
+	}
+}
+
+func TestRouterDaeExitedSessionNeverReportsReady(t *testing.T) {
+	routerLifecycleMu.Lock()
+	old, serving, configured := currentControlPlane.Load(), routerServingPlane, routerConfigured
+	routerLifecycleMu.Unlock()
+	t.Cleanup(func() {
+		routerLifecycleMu.Lock()
+		defer routerLifecycleMu.Unlock()
+		currentControlPlane.Store(old)
+		routerServingPlane, routerConfigured = serving, configured
+	})
+	routerPublishControlPlane(new(control.ControlPlane), EmptyConfig)
+	if !readRouterDaeReadiness(false).Ready {
+		t.Fatal("fixture must offer stale global readiness")
+	}
+	for _, dry := range []bool{false, true} {
+		session := &routerDaeSession{reload: make(chan *ReloadMessage), exit: make(chan struct{}), dry: dry, conf: EmptyConfig}
+		close(session.exit)
+		err := session.Ready(context.Background())
+		if err == nil || err.Error() != "core_start_failed" {
+			t.Fatal("exited session reported ready", err)
+		}
+	}
+}
+
+func TestRouterDaeRuntimeExitLogsOnlySafeDiagnostics(t *testing.T) {
+	var output bytes.Buffer
+	log := logrus.New()
+	log.SetOutput(&output)
+	log.SetFormatter(&logrus.JSONFormatter{})
+	manager := &routerCoreManager{log: log}
+	secret := "socks5://private-user:private-password@private.example/secret-token"
+	manager.logDaeExit(nil)
+	manager.logDaeExit(errors.New(secret))
+	if output.Len() != 0 {
+		t.Fatal("untyped runtime completion logged arbitrary error text")
+	}
+	manager.logDaeExit(&routerDaeRunError{stage: "listen", err: fmt.Errorf("%s: %w", secret, syscall.EADDRINUSE)})
+	var fields map[string]any
+	if err := json.Unmarshal(output.Bytes(), &fields); err != nil {
+		t.Fatal(err)
+	}
+	if fields["msg"] != "Active core exited" || fields["stage"] != "listen" || fields["reason"] != "address_in_use" || strings.Contains(output.String(), "private") || strings.Contains(output.String(), "secret") {
+		t.Fatalf("incorrect or unsafe runtime diagnostic: %s", output.String())
 	}
 }
