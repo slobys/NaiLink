@@ -370,6 +370,14 @@ subprocess.run(['nft','-f','-'],input=body.encode(),check=True)
             assert 'nailink_broute' not in run('nft','list','tables')
         managed=private/("cores/"+args.target_core);managed.rename(private/("cores/"+args.target_core+".real"))
         managed.write_text('#!/bin/sh\ncase "$1" in '+('version|check' if args.target_core=='sing-box' else '-v|-t')+') exec /usr/libexec/daed/cores/'+args.target_core+'.real "$@" ;; *) exit 77 ;; esac\n');managed.chmod(0o755)
+        # This test-only wrapper preserves version/check output but deliberately
+        # fails startup. Keep the managed receipt bound to the wrapper bytes so
+        # the test reaches late-start rollback rather than hash validation.
+        receipt_path=Path(str(managed)+'.version.json')
+        if receipt_path.is_file():
+            receipt=json.loads(receipt_path.read_text())
+            receipt['sha256']=hashlib.sha256(managed.read_bytes()).hexdigest()
+            receipt_path.write_text(json.dumps(receipt));receipt_path.chmod(0o600)
         plan=json.loads(gql('{corePlan(target:"'+args.target_core+'")}')["corePlan"]);assert plan["compatible"],plan
         try:gql('mutation{switchCore(target:"'+args.target_core+'",revision:'+json.dumps(plan["revision"])+')}');raise AssertionError("late startup failure was accepted")
         except RuntimeError as error:assert "core_rolled_back" in str(error),error
