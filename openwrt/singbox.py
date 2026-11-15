@@ -18,7 +18,6 @@ import tarfile
 import urllib.request
 
 VERSION = '1.14.3-nailink.1'
-UPSTREAM_VERSION = '1.14.3'
 TAG = 'openwrt-v0.6.35'
 SOURCE_URL = 'https://codeload.github.com/SagerNet/sing-box/tar.gz/refs/tags/v1.14.3'
 SOURCE_SHA256 = '9a8e3712a5f611ad95f1d16874bbdcdffbd3b8eed16dae2d71ce7042a33c3386'
@@ -120,7 +119,7 @@ def source(work):
     tree.mkdir()
     with tarfile.open(compressed) as tf:
         tf.extractall(tree, filter='data')
-    root = tree / ('sing-box-' + UPSTREAM_VERSION)
+    root = tree / 'sing-box-1.14.3'
     path = root / 'common/tls/reality_client.go'
     path.write_text(patch_reality(path.read_text()), encoding='utf-8', newline='\n')
     patch_domain_route(root)
@@ -158,7 +157,7 @@ def main():
         pins = (Path(__file__).parent / 'corelib/state.go').read_text()
         if not re.search('"' + re.escape(name) + r'",\s*"' + digest + '"', pins):
             raise ValueError('Rebuilt archive differs from the reviewed installer checksum')
-    metadata = {'upstream': 'SagerNet/sing-box v' + UPSTREAM_VERSION, 'source_url': SOURCE_URL, 'source_sha256': SOURCE_SHA256,
+    metadata = {'upstream': 'SagerNet/sing-box v1.14.3', 'source_url': SOURCE_URL, 'source_sha256': SOURCE_SHA256,
                 'version': VERSION, 'go': '1.26.0', 'patch': 'preserve REALITY key-share pairing and opt-in post-rule proxy domain dialing'}
     entries = [(str(p.relative_to(root)), p.read_bytes(), 0o644) for p in sorted(root.rglob('*')) if p.is_file()]
     entries += [('NAILINK_SOURCE.json', (json.dumps(metadata, indent=2) + '\n').encode(), 0o644),

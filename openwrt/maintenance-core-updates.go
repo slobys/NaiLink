@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"os"
@@ -155,8 +156,29 @@ func validateCoreCatalog(c coreUpdateCatalog, engine, arch string) (checkedCoreU
 	return checkedCoreUpdate{Version: r.Version, Release: c.Release, Asset: a, Adapter: routercore.AdapterRevision, MinAdapter: r.MinAdapter, MaxAdapter: r.MaxAdapter}, nil
 }
 func (m *maintenanceManager) checkCoreUpdate(ctx context.Context, job *maintenanceJob, engine string) error {
+	ctx, cancel := context.WithTimeout(ctx, 12*time.Second)
+	defer cancel()
 	c := checkedCoreUpdate{Checked: m.now().Unix()}
-	data, err := m.releaseData(ctx, coreCatalogURL, 32768)
+	rawCtx, rawCancel := context.WithTimeout(ctx, 6*time.Second)
+	data, err := m.releaseData(rawCtx, coreCatalogURL, 32768)
+	rawCancel()
+	if err != nil && ctx.Err() == nil {
+		var file struct {
+			Content  string `json:"content"`
+			Encoding string `json:"encoding"`
+		}
+		err = m.getJSON(ctx, "https://api.github.com/repos/slobys/NaiLink/contents/openwrt/core-updates.json?ref=main", &file)
+		if err == nil {
+			if file.Encoding != "base64" || len(file.Content) > 48<<10 {
+				err = errors.New("invalid_release")
+			} else {
+				data, err = base64.StdEncoding.DecodeString(file.Content)
+				if err != nil || len(data) > 32768 {
+					err = errors.New("invalid_release")
+				}
+			}
+		}
+	}
 	if err == nil {
 		var catalog coreUpdateCatalog
 		if json.Unmarshal(data, &catalog) != nil {

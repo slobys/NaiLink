@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -115,6 +116,28 @@ func TestCoreUpdateActiveAndExpiredGuards(t *testing.T) {
 	writeMaintenanceJSON(m.updatePath("mihomo"), c)
 	if err = m.updateOptionalCore(context.Background(), &maintenanceJob{ID: "expired"}, "mihomo"); err == nil || err.Error() != "check_required" {
 		t.Fatal(err)
+	}
+}
+func TestCoreUpdateCatalogOfficialAPIFallback(t *testing.T) {
+	m := maintenanceFixture(t)
+	raw, _ := json.Marshal(updateCatalogFixture(t))
+	calls := 0
+	m.fetch = func(_ context.Context, address, destination string, _ int64) error {
+		calls++
+		if address == coreCatalogURL {
+			return errors.New("download_dns")
+		}
+		if address != "https://api.github.com/repos/slobys/NaiLink/contents/openwrt/core-updates.json?ref=main" {
+			t.Fatal(address)
+		}
+		data, _ := json.Marshal(map[string]string{"encoding": "base64", "content": base64.StdEncoding.EncodeToString(raw)})
+		return os.WriteFile(destination, data, 0600)
+	}
+	if err := m.checkCoreUpdate(context.Background(), &maintenanceJob{ID: "official-fallback"}, "sing-box"); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 2 || m.checkedUpdate("sing-box").Code != "" {
+		t.Fatal("official fallback did not complete")
 	}
 }
 func TestCoreUpdateRealArchivesPreserveConfiguration(t *testing.T) {
