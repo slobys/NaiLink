@@ -3,9 +3,12 @@
 package main
 
 import (
+	"compress/gzip"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -21,6 +24,24 @@ func main() {
 		if err := unix.Mount(kind, path, kind, 0, ""); err != nil {
 			panic(err)
 		}
+	}
+	if release, err := os.ReadFile("/proc/sys/kernel/osrelease"); err == nil {
+		fmt.Printf("KernelRelease=%s\n", strings.TrimSpace(string(release)))
+	}
+	if file, err := os.Open("/proc/config.gz"); err == nil {
+		if reader, err := gzip.NewReader(file); err == nil {
+			if data, err := io.ReadAll(reader); err == nil {
+				for _, line := range strings.Split(string(data), "\n") {
+					if strings.HasPrefix(line, "CONFIG_BPF_STREAM_PARSER=") || line == "# CONFIG_BPF_STREAM_PARSER is not set" || strings.HasPrefix(line, "CONFIG_NET_SOCK_MSG=") {
+						fmt.Printf("KernelConfig=%s\n", line)
+					}
+				}
+			}
+			reader.Close()
+		}
+		file.Close()
+	} else {
+		fmt.Println("KernelConfig=unavailable")
 	}
 	// This sysctl change is confined to the disposable VM. The product probe
 	// never changes JIT configuration or attaches programs to a network device.

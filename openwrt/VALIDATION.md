@@ -1,5 +1,13 @@
 # NaiLink 发布验证记录
 
+## 0.6.82 内核 STREAM_PARSER 误判修复
+
+- 反馈环境：iStoreOS 25.12.6 / ARM64 / Linux 6.12.112 / 0.6.81。截图中的 BTF、TC 回调及数据包访问探针已经通过，但旧配置清单因 `CONFIG_BPF_STREAM_PARSER` 未启用而拒绝安装。固定 dae 提交 `85a1fc3c06e3765d143c868ba97ecd0be2aab4ea` 的旧 TCP relay offload 已停用，不使用 SK_SKB stream-parser 钩子；保留的 SOCK_OPS / SK_MSG 空实现仍随对象加载，不能简单略过全部 socket 能力检查。
+- 新检查将 STREAM_PARSER 单项缺失改为警告，并增加实际 SOCK_OPS、SK_MSG、cgroup socket 程序加载和 1 条目 SOCKHASH 映射创建/关闭。BTF、TC 回调、数据包访问和其他必需配置项保持原有保护；任何真实探针失败仍拒绝，不刷内核、不混装模块、不挂接测试网络钩子。
+- Go 单元测试核对程序类型、返回值、映射尺寸和失败即停止；真实 OpenWrt ash/UCI/jsonfilter 的安装回归覆盖 IPK/APK、明确禁用/省略 STREAM_PARSER 与真实内核拒绝不得被警告掩盖。ARM64 实机 Linux 6.12.112 的独立新探针通过，原数据库 11 张表内容摘要不变；该设备未提供可读取的完整内核配置，不把这次探针结果写成“已在反馈用户的无 STREAM_PARSER 内核上实装”。
+- 包含此前已合入 main 的 18px 代码字号、28px 行高调整。后续 CI、固件 VM 与安装包实机结果完成后另行补录。
+- 本地 Go 探针测试、41 项安装回归、30 项仓库检查和 9 项文档检查通过。完整 OpenWrt 152 项完成，其中 16 项因可选工具/运行时夹具未提供而跳过；不将跳过项记作通过。
+
 ## 0.6.81 安装依赖与路由编辑
 
 - 修复仅缺 BTF 时安装前置检查阻止依赖安装的问题。仅在安装模式、dae、且唯一错误为 `btf_missing` 时查询固件自身软件源，核对当前内核版本后用原生包管理器安装 `vmlinux-btf`，再运行解析及内核探针。版本不符、包不可用或探针失败均停止，不替换 NaiLink 或用户配置；只读检查不安装依赖。不承诺缺少匹配 BTF 的固件可用。

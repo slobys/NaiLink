@@ -604,6 +604,7 @@ ARMv5/v6、32 位 x86、MIPS64、RISC-V 及矩阵之外的固件 ABI 暂不提�
 - 固件提供现代 JavaScript LuCI、uhttpd CGI、rpcd、UCI、jshn 和 jsonfilter。
 - Linux 5.17+，具备 dae 所需 BPF 功能。支持原生 BTF 或加载器固定搜索路径中
   对应当前内核的外部 BTF/vmlinux，随包解析器核验格式、ELF 架构和网络类型。
+- 当前固定核心不使用旧的 SK_SKB TCP 流解析钩子，缺少 `CONFIG_BPF_STREAM_PARSER` 不再单独拒绝安装。预检会实际加载并关闭 TC 回调、数据包访问、SOCK_OPS、SK_MSG、cgroup socket 程序和 SOCKHASH 映射；不挂接网络钩子，真实能力不足仍会拒绝。通过这些最小探针仍不等于完成整套透明代理验证。
 - 固件自身软件源能够提供匹配本机内核 ABI 的 `kmod-sched-core`、
   `kmod-sched-bpf`、`kmod-veth` 及 `ca-bundle`、`v2ray-geoip`、`v2ray-geosite`。
 - 足够的临时下载空间和 overlay 存储。APK 格式要求 apk-tools 3.x。

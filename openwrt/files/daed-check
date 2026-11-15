@@ -122,7 +122,7 @@ elif [ -x "$probe" ]; then
 	if probe_result=$("$probe" --file "$btf_path" 2>&1); then
 		add_check btf ok "BTF parsed: $btf_path. Required network types exist."
 		if kernel_result=$("$probe" --kernel 2>&1); then
-			add_check kernel_datapath ok 'Unattached kernel callback and packet-access probes passed; complete datapath validation is still required.'
+			add_check kernel_datapath ok 'Unattached TC callback, packet-access, socket-program and SOCKHASH probes passed; complete datapath validation is still required.'
 		else
 			add_check kernel_datapath error "Kernel cannot load required transparent-proxy features: $kernel_result"
 		fi
@@ -143,7 +143,7 @@ elif [ -r "/boot/config-$kernel" ]; then
 fi
 if [ -n "$kernel_config" ]; then
 	missing=''
-	for option in BPF BPF_SYSCALL BPF_JIT CGROUPS KPROBES NET_INGRESS NET_EGRESS NET_SCH_INGRESS NET_CLS_BPF NET_CLS_ACT BPF_STREAM_PARSER KPROBE_EVENTS BPF_EVENTS; do
+	for option in BPF BPF_SYSCALL BPF_JIT CGROUPS KPROBES NET_INGRESS NET_EGRESS NET_SCH_INGRESS NET_CLS_BPF NET_CLS_ACT KPROBE_EVENTS BPF_EVENTS; do
 		if ! printf '%s\n' "$kernel_config" | grep -q "^CONFIG_$option=[ym]$"; then
 			missing="$missing CONFIG_$option"
 		fi
@@ -152,6 +152,11 @@ if [ -n "$kernel_config" ]; then
 		add_check kernel_options error "Required kernel options are missing:$missing"
 	else
 		add_check kernel_options ok 'Required BPF kernel options are configured.'
+	fi
+	# This core uses TC/userspace relay, not the optional SK_SKB stream parser.
+	# Its remaining socket programs/maps are checked by the real kernel probe.
+	if ! printf '%s\n' "$kernel_config" | grep -q '^CONFIG_BPF_STREAM_PARSER=[ym]$'; then
+		add_check kernel_stream_parser warning 'CONFIG_BPF_STREAM_PARSER is disabled or absent. This NaiLink core does not use that stream-parser hook; actual socket-program and SOCKHASH probes must still pass.'
 	fi
 else
 	add_check kernel_options warning 'Kernel config is unavailable; BTF/version checks alone cannot prove eBPF will load.'

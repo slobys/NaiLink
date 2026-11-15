@@ -311,6 +311,39 @@ fi
         self.write("/proc/config.gz", gzip.compress(b"CONFIG_BPF=y\n"))
         self.assertNotEqual(self.check("--check").returncode, 0)
 
+    def test_stream_parser_disabled_is_not_a_required_core_feature(self):
+        config = gzip.decompress((self.root / "proc/config.gz").read_bytes())
+        for fmt in ("ipk", "apk"):
+            if fmt == "apk": self.use_apk()
+            for replacement in (b"# CONFIG_BPF_STREAM_PARSER is not set\n", b""):
+                with self.subTest(format=fmt, replacement=replacement):
+                    self.write("/proc/config.gz", gzip.compress(config.replace(b"CONFIG_BPF_STREAM_PARSER=y\n", replacement)))
+                    result = self.check("--check")
+                    data = json.loads(result.stdout)
+                    self.assertEqual(result.returncode, 0, result.stdout)
+                    self.assertTrue(data["compatible"])
+                    statuses = {check["name"]: check["status"] for check in data["checks"]}
+                    self.assertEqual(statuses["kernel_options"], "ok")
+                    self.assertEqual(statuses["kernel_stream_parser"], "warning")
+                    self.assertEqual(statuses["kernel_datapath"], "ok")
+                    # Both native package-manager branches must reach their
+                    # ordinary read-only preflight without installing anything.
+                    self.assertEqual(self.install("--dry-run").returncode, 0)
+                    self.assertFalse((self.root / "tmp/installed-daed-router").exists())
+
+    def test_missing_stream_parser_never_masks_real_kernel_rejection(self):
+        config = gzip.decompress((self.root / "proc/config.gz").read_bytes())
+        self.write("/proc/config.gz", gzip.compress(config.replace(b"CONFIG_BPF_STREAM_PARSER=y\n", b"")))
+        self.write("/tmp/kernel-bad", "1")
+        data = json.loads(self.check("--check").stdout)
+        self.assertFalse(data["compatible"])
+        statuses = {check["name"]: check["status"] for check in data["checks"]}
+        self.assertEqual(statuses["kernel_datapath"], "error")
+        self.assertEqual(statuses["kernel_stream_parser"], "warning")
+        self.assertNotEqual(self.install().returncode, 0)
+        self.assertFalse((self.root / "tmp/installed-daed-router").exists())
+        self.assertNotIn("update", (self.root / "tmp/pm-calls").read_text())
+
     def test_unmanaged_installation_is_preserved(self):
         path = self.write("/usr/bin/daed", "existing binary")
         result = self.install()

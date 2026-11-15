@@ -16,17 +16,27 @@ import (
 
 func TestKernelProbesLoadRealCallbackAndPacketAccess(t *testing.T) {
 	var names []string
+	maps := 0
 	if err := validateKernel(func(spec *ebpf.ProgramSpec) error {
-		if spec.Type != ebpf.SchedCLS || spec.License != "GPL" || len(spec.Instructions) < 8 {
+		if spec.License != "GPL" || len(spec.Instructions) < 2 {
 			t.Fatal("incomplete kernel probe")
 		}
+		if spec.Type == ebpf.SchedCLS && len(spec.Instructions) < 8 {
+			t.Fatal("missing TC callback/packet-access instructions")
+		}
 		names = append(names, spec.Name)
+		return nil
+	}, func(spec *ebpf.MapSpec) error {
+		maps++
+		if spec.Type != ebpf.SockHash || spec.KeySize != 40 || spec.ValueSize != 8 || spec.MaxEntries != 1 {
+			t.Fatal("incorrect or oversized socket-map probe", spec)
+		}
 		return nil
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if len(names) != 2 || names[0] != "nl_loop" || names[1] != "nl_packet" {
-		t.Fatal(names)
+	if len(names) != 5 || names[0] != "nl_loop" || names[1] != "nl_packet" || names[2] != "nl_sockops" || names[3] != "nl_skmsg" || names[4] != "nl_sockaddr" || maps != 1 {
+		t.Fatal(names, maps)
 	}
 	var callback, loop bool
 	functions := 0
@@ -45,9 +55,54 @@ func TestKernelProbesLoadRealCallbackAndPacketAccess(t *testing.T) {
 func TestKernelProbeFailureIsReturnedWithoutTryingLaterPrograms(t *testing.T) {
 	want := errors.New("callback rejected")
 	calls := 0
-	err := validateKernel(func(*ebpf.ProgramSpec) error { calls++; return want })
+	err := validateKernel(func(*ebpf.ProgramSpec) error { calls++; return want }, func(*ebpf.MapSpec) error {
+		t.Fatal("map probe must not run after a program failure")
+		return nil
+	})
 	if !errors.Is(err, want) || calls != 1 {
 		t.Fatal(err, calls)
+	}
+}
+
+func TestSocketProbeFailuresStayFatal(t *testing.T) {
+	for _, name := range []string{"nl_sockops", "nl_skmsg", "nl_sockaddr"} {
+		t.Run(name, func(t *testing.T) {
+			want := errors.New("socket program unavailable")
+			err := validateKernel(func(spec *ebpf.ProgramSpec) error {
+				if spec.Name == name {
+					return want
+				}
+				return nil
+			}, func(*ebpf.MapSpec) error {
+				t.Fatal("must stop before allocating maps")
+				return nil
+			})
+			if !errors.Is(err, want) {
+				t.Fatal(err)
+			}
+		})
+	}
+	want := errors.New("SOCKHASH unavailable")
+	err := validateKernel(func(*ebpf.ProgramSpec) error { return nil }, func(*ebpf.MapSpec) error { return want })
+	if !errors.Is(err, want) {
+		t.Fatal(err)
+	}
+}
+
+func TestSocketProbeTypesAndVerdicts(t *testing.T) {
+	for i, want := range []struct {
+		kind    ebpf.ProgramType
+		attach  ebpf.AttachType
+		verdict int64
+	}{
+		{ebpf.SockOps, ebpf.AttachCGroupSockOps, 0},
+		{ebpf.SkMsg, ebpf.AttachSkMsgVerdict, 1},
+		{ebpf.CGroupSockAddr, ebpf.AttachCGroupInet4Connect, 1},
+	} {
+		spec := kernelProbeSpecs()[i+2]
+		if spec.Type != want.kind || spec.AttachType != want.attach || len(spec.Instructions) != 2 || spec.Instructions[0].Constant != want.verdict || spec.Instructions[1].OpCode != asm.Return().OpCode {
+			t.Fatalf("wrong socket compatibility probe: %+v", spec)
+		}
 	}
 }
 

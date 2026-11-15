@@ -16,6 +16,12 @@
     <strong>BTF 无效或不匹配：</strong>仍会停止安装，不能下载任意 vmlinux 覆盖。CPU 和内核版本符合要求也不能替代 BTF 与
     eBPF 实测。
   </li>
+  <li>
+    <strong>仅缺 CONFIG_BPF_STREAM_PARSER：</strong>旧安装器将 TCP 流解析选项当成硬性要求。0.6.82 起根据当前固定 dae
+    核心的实际需要，加载并关闭临时 TC、socket 程序和 SOCKHASH
+    映射进行检查；这一配置项缺失只作提示，真实能力检测失败仍会停止安装。重新运行最新安装菜单，无需为消除这条旧报错混装内核模块。其他必需内核选项和
+    BTF 检查仍保留。
+  </li>
   <li><strong>缺少内核模块：</strong>从当前固件软件源安装匹配 ABI 的依赖，不使用其他固件模块强装。</li>
   <li><strong>空间不足：</strong>同时检查临时目录和 overlay，包含解压与备份所需空间，不只看压缩包大小。</li>
 </ul>

@@ -102,14 +102,31 @@ func kernelProbeSpecs() []*ebpf.ProgramSpec {
 			asm.LoadMem(asm.R0, asm.R2, 12, asm.Word),
 			asm.Mov.Imm(asm.R0, 0).WithSymbol("done"), asm.Return(),
 		}},
+		// The pinned dae core still loads these programs even though its old
+		// TCP relay offload is disabled. Probe their actual kernel support;
+		// CONFIG_BPF_STREAM_PARSER controls a different (SK_SKB parser) hook.
+		{Name: "nl_sockops", Type: ebpf.SockOps, AttachType: ebpf.AttachCGroupSockOps, License: "GPL",
+			Instructions: asm.Instructions{asm.Mov.Imm(asm.R0, 0), asm.Return()}},
+		{Name: "nl_skmsg", Type: ebpf.SkMsg, AttachType: ebpf.AttachSkMsgVerdict, License: "GPL",
+			Instructions: asm.Instructions{asm.Mov.Imm(asm.R0, 1), asm.Return()}},
+		{Name: "nl_sockaddr", Type: ebpf.CGroupSockAddr, AttachType: ebpf.AttachCGroupInet4Connect, License: "GPL",
+			Instructions: asm.Instructions{asm.Mov.Imm(asm.R0, 1), asm.Return()}},
 	}
 }
 
-func validateKernel(load func(*ebpf.ProgramSpec) error) error {
+func kernelProbeMapSpec() *ebpf.MapSpec {
+	return &ebpf.MapSpec{Name: "nl_sockhash", Type: ebpf.SockHash, KeySize: 40, ValueSize: 8, MaxEntries: 1}
+}
+
+func validateKernel(load func(*ebpf.ProgramSpec) error, createMap func(*ebpf.MapSpec) error) error {
 	for _, spec := range kernelProbeSpecs() {
 		if err := load(spec); err != nil {
 			return fmt.Errorf("kernel cannot load transparent-proxy requirement %s: %w; CPU, kernel version and BTF alone do not prove compatibility; a compatible kernel/JIT is required", spec.Name, err)
 		}
+	}
+	spec := kernelProbeMapSpec()
+	if err := createMap(spec); err != nil {
+		return fmt.Errorf("kernel cannot load transparent-proxy requirement %s: %w; a compatible kernel with SOCKHASH support is required", spec.Name, err)
 	}
 	return nil
 }
@@ -122,9 +139,17 @@ func loadKernelProbe(spec *ebpf.ProgramSpec) error {
 	return program.Close()
 }
 
+func loadKernelMap(spec *ebpf.MapSpec) error {
+	mapping, err := ebpf.NewMap(spec)
+	if err != nil {
+		return err
+	}
+	return mapping.Close()
+}
+
 func main() {
 	path := flag.String("file", "", "BTF/vmlinux file selected from the runtime's kernel search paths")
-	kernel := flag.Bool("kernel", false, "load and close unattached TC callback and packet-access probes")
+	kernel := flag.Bool("kernel", false, "load and close unattached TC, socket-program and SOCKHASH probes")
 	flag.Parse()
 	if (*path == "" && !*kernel) || flag.NArg() != 0 {
 		fmt.Fprintln(os.Stderr, "usage: btf-probe --file /path/to/vmlinux [--kernel], or btf-probe --kernel")
@@ -142,10 +167,10 @@ func main() {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-		if err := validateKernel(loadKernelProbe); err != nil {
+		if err := validateKernel(loadKernelProbe, loadKernelMap); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-		fmt.Println("Kernel TC callback and packet-access probes loaded and closed; complete datapath validation is still required.")
+		fmt.Println("Kernel TC callback, packet-access, socket-program and SOCKHASH probes loaded and closed; complete datapath validation is still required.")
 	}
 }
