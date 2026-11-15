@@ -75,6 +75,13 @@ export function RouterCore() {
   const plan =
     core?.plan?.target === target && (target === 'dae' || (core.plan.mode || 'tun') === mode) ? core.plan : undefined
   const usingSelection = target === current && (target === 'dae' || mode === (core?.mode || 'tun'))
+  const switchLabel = usingSelection
+    ? '正在使用'
+    : target === current
+      ? mode === 'tproxy'
+        ? '启用非 TUN'
+        : '启用 TUN'
+      : `切换到 ${target}`
   const selectedCore: OptionalCoreStatus | undefined =
     target === 'dae'
       ? undefined
@@ -579,20 +586,12 @@ export function RouterCore() {
               </Button>
               <Button
                 className="h-auto min-h-11 min-w-0 whitespace-normal px-2 py-2 text-xs sm:text-sm"
-                aria-label={usingSelection ? '正在使用' : `切换到 ${target}`}
+                aria-label={switchLabel}
                 disabled={blocked || !ready || usingSelection}
                 onClick={() => mutation.mutate(`core_switch_${selectionSuffix}`)}
               >
                 <span className="sm:hidden">{usingSelection ? '使用中' : '切换'}</span>
-                <span className="hidden sm:inline">
-                  {usingSelection
-                    ? '正在使用'
-                    : target === current
-                      ? mode === 'tproxy'
-                        ? '启用非 TUN'
-                        : '启用 TUN'
-                      : `切换到 ${target}`}
-                </span>
+                <span className="hidden sm:inline">{switchLabel}</span>
               </Button>
             </div>
           </div>
