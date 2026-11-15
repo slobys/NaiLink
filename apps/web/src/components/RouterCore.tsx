@@ -158,62 +158,34 @@ export function RouterCore() {
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
-          className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-[600px]"
+          className="flex max-h-[calc(100dvh-1rem)] max-w-[calc(100%-1rem)] flex-col gap-0 overflow-hidden rounded-2xl p-0 sm:max-h-[90dvh] sm:max-w-[600px]"
           data-core-dialog
         >
-          <DialogHeader className="shrink-0 border-b px-5 py-5 text-left sm:px-6">
+          <DialogHeader className="shrink-0 border-b px-4 py-3 text-left sm:px-6 sm:py-4">
             <DialogTitle className="text-xl tracking-tight">代理内核</DialogTitle>
-            <DialogDescription className="pr-5 text-sm leading-relaxed">
-              选择或更新内核，检查兼容性后再切换。
+            <DialogDescription className="pr-5 text-xs leading-relaxed">
+              当前：<span className="whitespace-nowrap">{current || '读取中'}</span>
+              {current && current !== 'dae' && ` · ${core?.mode === 'tproxy' ? 'TPROXY' : 'TUN'}`}
+              {' · '}
+              {live.isPending
+                ? '正在读取'
+                : live.isError
+                  ? '状态未确认'
+                  : live.data?.runtime === 'ready'
+                    ? live.data?.running === false
+                      ? '代理未启用'
+                      : '运行就绪'
+                    : '等待恢复'}
             </DialogDescription>
           </DialogHeader>
-          <div className="min-h-0 space-y-5 overflow-y-auto px-5 py-5 sm:px-6" data-core-dialog-body>
-            <section className="rounded-xl bg-muted/45 p-4" aria-label="当前内核运行状态">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm text-muted-foreground">
-                  当前内核：<strong className="ml-1 text-base text-foreground">{current || '读取中'}</strong>
-                  {current && current !== 'dae' && (
-                    <span className="ml-2 text-xs">
-                      {core?.engines?.[current]?.version ||
-                        (current === 'sing-box' && !core?.engines ? core?.version : '版本未确认')}
-                    </span>
-                  )}
-                </p>
-                <span
-                  className={cn(
-                    'inline-flex items-center gap-1.5 text-xs font-medium',
-                    live.data?.runtime === 'ready' ? 'text-emerald-700 dark:text-emerald-300' : 'text-muted-foreground',
-                  )}
-                >
-                  <span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
-                  {busy && coreJob?.action.startsWith('core_switch_')
-                    ? '内核切换中'
-                    : live.isPending
-                      ? '正在读取'
-                      : live.isError
-                        ? '状态未确认'
-                        : live.data?.runtime === 'ready'
-                          ? live.data?.running === false
-                            ? '代理未启用'
-                            : '运行就绪'
-                          : '等待恢复'}
-                </span>
-              </div>
-              <p className="mt-2 text-xs leading-relaxed text-muted-foreground" data-core-memory>
-                {resident
-                  ? `常驻内存约 ${resident} MiB · ${current === 'dae' ? '包含内置内核和管理服务' : '管理服务与当前内核合计'}`
-                  : '安装的其他内核不使用时不会运行。'}
-              </p>
-            </section>
-            {current !== 'dae' && (
-              <p className="text-xs text-muted-foreground" data-core-current-mode>
-                当前接管：{core?.mode === 'tproxy' ? '非 TUN · TPROXY' : 'TUN'}
-              </p>
-            )}
+          <div
+            className="min-h-0 space-y-3 overflow-y-auto px-4 py-2 sm:space-y-4 sm:px-6 sm:py-4"
+            data-core-dialog-body
+          >
             <section aria-label="选择目标内核">
               <div className="mb-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
                 <span>选择内核</span>
-                <span>每次仅运行一个代理内核</span>
+                <span className="hidden sm:inline">每次仅运行一个代理内核</span>
               </div>
               <div
                 className="grid grid-cols-3 gap-1 rounded-xl border bg-muted/40 p-1"
@@ -248,7 +220,7 @@ export function RouterCore() {
                       onClick={() => setTarget(name)}
                       data-core-option={name}
                     >
-                      {selected && <Check className="size-2.5 shrink-0 sm:size-3.5" aria-hidden="true" />}
+                      {selected && <Check className="hidden shrink-0 sm:block sm:size-3.5" aria-hidden="true" />}
                       <span className="whitespace-nowrap">{name}</span>
                       {unsupported && <span className="sr-only">，当前架构不支持</span>}
                     </button>
@@ -257,7 +229,7 @@ export function RouterCore() {
               </div>
               <p
                 id="core-selection-detail"
-                className="mt-2 text-xs leading-relaxed text-muted-foreground"
+                className="mt-2 hidden text-xs leading-relaxed text-muted-foreground sm:block"
                 aria-live="polite"
                 data-core-selection
               >
@@ -272,7 +244,11 @@ export function RouterCore() {
               </p>
             </section>
             {target !== 'dae' && (
-              <section aria-label={`${target} 内核更新`} className="space-y-3 border-t pt-4" data-core-update>
+              <section
+                aria-label={`${target} 内核更新`}
+                className="space-y-2 border-t pt-3 sm:space-y-3 sm:pt-4"
+                data-core-update
+              >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h3 className="text-sm font-semibold">内核更新</h3>
                   <span className="text-xs text-muted-foreground">
@@ -301,24 +277,24 @@ export function RouterCore() {
                 <div className={cn('grid gap-2', installed && 'grid-cols-2')}>
                   <Button
                     variant="outline"
-                    className="min-h-11"
+                    className="min-h-11 px-2 text-xs sm:px-4 sm:text-sm"
                     disabled={blocked}
                     onClick={() => mutation.mutate(`core_version_${suffix as 'singbox' | 'mihomo'}`)}
                   >
                     {busy && coreJob?.action.startsWith('core_version_') ? (
                       <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
                     ) : (
-                      <RefreshCw className="size-4" aria-hidden="true" />
+                      <RefreshCw className="hidden size-4 sm:block" aria-hidden="true" />
                     )}
                     检查更新
                   </Button>
                   {installed && (
                     <Button
-                      className="min-h-11"
+                      className="min-h-11 px-2 text-xs sm:px-4 sm:text-sm"
                       disabled={blocked || current === target || !updateAvailable}
                       onClick={() => mutation.mutate(`core_update_${suffix as 'singbox' | 'mihomo'}`)}
                     >
-                      <Download className="size-4" aria-hidden="true" />
+                      <Download className="hidden size-4 sm:block" aria-hidden="true" />
                       更新内核
                     </Button>
                   )}
@@ -454,6 +430,51 @@ export function RouterCore() {
                 <ChevronDown className="size-3.5" aria-hidden="true" />
               </summary>
               <div className="mt-2 space-y-3 leading-relaxed text-muted-foreground">
+                <section className="rounded-xl bg-muted/45 p-4" aria-label="当前内核运行状态">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm text-muted-foreground">
+                      当前内核：<strong className="ml-1 text-base text-foreground">{current || '读取中'}</strong>
+                      {current && current !== 'dae' && (
+                        <span className="ml-2 text-xs">
+                          {core?.engines?.[current]?.version ||
+                            (current === 'sing-box' && !core?.engines ? core?.version : '版本未确认')}
+                        </span>
+                      )}
+                    </p>
+                    <span
+                      className={cn(
+                        'inline-flex items-center gap-1.5 text-xs font-medium',
+                        live.data?.runtime === 'ready'
+                          ? 'text-emerald-700 dark:text-emerald-300'
+                          : 'text-muted-foreground',
+                      )}
+                    >
+                      <span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
+                      {busy && coreJob?.action.startsWith('core_switch_')
+                        ? '内核切换中'
+                        : live.isPending
+                          ? '正在读取'
+                          : live.isError
+                            ? '状态未确认'
+                            : live.data?.runtime === 'ready'
+                              ? live.data?.running === false
+                                ? '代理未启用'
+                                : '运行就绪'
+                              : '等待恢复'}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground" data-core-memory>
+                    {resident
+                      ? `常驻内存约 ${resident} MiB · ${current === 'dae' ? '包含内置内核和管理服务' : '管理服务与当前内核合计'}`
+                      : '安装的其他内核不使用时不会运行。'}
+                  </p>
+                </section>
+                {current !== 'dae' && (
+                  <p className="text-xs text-muted-foreground" data-core-current-mode>
+                    当前接管：{core?.mode === 'tproxy' ? '非 TUN · TPROXY' : 'TUN'}
+                  </p>
+                )}
+
                 <p>
                   保留节点、订阅、群组和未应用的修改，仅切换当前运行配置。切换会短暂断连，失败自动尝试恢复原内核，请勿断电。
                 </p>
@@ -521,11 +542,8 @@ export function RouterCore() {
               </p>
             )}
           </div>
-          <div className="shrink-0 space-y-3 border-t bg-background px-5 py-4 sm:px-6">
-            <p
-              className="flex items-center justify-between gap-1 text-[11px] text-muted-foreground sm:justify-start sm:gap-2 sm:text-xs"
-              aria-label="切换步骤"
-            >
+          <div className="shrink-0 space-y-0 border-t bg-background px-4 py-3 sm:space-y-3 sm:px-6 sm:py-4">
+            <p className="hidden items-center gap-2 text-xs text-muted-foreground sm:flex" aria-label="切换步骤">
               <span>选择内核</span>
               <ArrowRight className="size-3" aria-hidden="true" />
               <span className={ready ? 'text-foreground' : undefined}>检查兼容性</span>
@@ -552,23 +570,29 @@ export function RouterCore() {
               <Button
                 variant="outline"
                 className="h-auto min-h-11 min-w-0 whitespace-normal px-2 py-2 text-xs sm:text-sm"
+                aria-label="检查兼容性"
                 disabled={blocked || !installed}
                 onClick={() => mutation.mutate(`core_check_${selectionSuffix}`)}
               >
-                检查兼容性
+                <span className="sm:hidden">检查</span>
+                <span className="hidden sm:inline">检查兼容性</span>
               </Button>
               <Button
                 className="h-auto min-h-11 min-w-0 whitespace-normal px-2 py-2 text-xs sm:text-sm"
+                aria-label={usingSelection ? '正在使用' : `切换到 ${target}`}
                 disabled={blocked || !ready || usingSelection}
                 onClick={() => mutation.mutate(`core_switch_${selectionSuffix}`)}
               >
-                {usingSelection
-                  ? '正在使用'
-                  : target === current
-                    ? mode === 'tproxy'
-                      ? '启用非 TUN'
-                      : '启用 TUN'
-                    : `切换到 ${target}`}
+                <span className="sm:hidden">{usingSelection ? '使用中' : '切换'}</span>
+                <span className="hidden sm:inline">
+                  {usingSelection
+                    ? '正在使用'
+                    : target === current
+                      ? mode === 'tproxy'
+                        ? '启用非 TUN'
+                        : '启用 TUN'
+                      : `切换到 ${target}`}
+                </span>
               </Button>
             </div>
           </div>
