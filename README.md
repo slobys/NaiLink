@@ -16,7 +16,9 @@
 
 管理节点、订阅和群组，测试节点延迟，查看实时流量，配置 DNS 与路由。支持电脑、手机和多种主题，沿用路由器 LuCI 登录，无需另设账户。
 
-基于 [daed](https://github.com/daeuniverse/daed) 二次开发，独立维护。当前版本为 **[0.6.81 正式版](https://github.com/slobys/NaiLink/releases/tag/openwrt-v0.6.81)**，提供 IPK / APK v3 安装包。
+基于 [daed](https://github.com/daeuniverse/daed) 二次开发，独立维护。当前版本为 **[0.6.82 正式版](https://github.com/slobys/NaiLink/releases/tag/openwrt-v0.6.82)**，提供 IPK / APK v3 安装包。
+
+**0.6.82 修复内核安装误判**。部分固件未启用 `CONFIG_BPF_STREAM_PARSER` 时，安装器改用实际 socket 程序和 SOCKHASH 能力探针验证当前内核；真实不兼容仍会拒绝安装。包含路由编辑器 18px 字号与 28px 行高调整，在线更新保留现有节点和配置。 [安装排查](https://slobys.github.io/NaiLink/troubleshooting.html#install-failed)
 
 **0.6.81 修复安装与路由编辑**。安装器可从固件自身软件源补齐匹配内核的 BTF；新安装默认采用逐行 AI / Netflix 分流，升级保留已有规则。修复编辑器全选错位、自动折行和底部文字显示不完整，并包含群组生效出口标记修复。 [安装排查](https://slobys.github.io/NaiLink/troubleshooting.html#install-failed)
 
@@ -112,7 +114,7 @@ nl=$(uclient-fetch -O- https://slobys.github.io/NaiLink/install.sh) && sh -c "${
 
 ## 源码与交流
 
-[完整源码包](https://github.com/slobys/NaiLink/releases/download/openwrt-v0.6.81/daed-openwrt-source.tar.gz) · [构建说明](openwrt/README.md#开发) · [验证记录](openwrt/VALIDATION.md) · [Logo](docs/site/assets/nailink-logo.png)
+[完整源码包](https://github.com/slobys/NaiLink/releases/download/openwrt-v0.6.82/daed-openwrt-source.tar.gz) · [构建说明](openwrt/README.md#开发) · [验证记录](openwrt/VALIDATION.md) · [Logo](docs/site/assets/nailink-logo.png)
 
 编译请使用完整源码包，或 `git clone --recurse-submodules https://github.com/slobys/NaiLink.git`。GitHub 的 Download ZIP 不包含后端子模块。
 
