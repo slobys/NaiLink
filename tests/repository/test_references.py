@@ -15,6 +15,17 @@ class RepositoryReferencesTest(unittest.TestCase):
         # GitHub requires ** to cover nested component, page and test paths.
         self.assertIn("apps/web/**", patterns)
 
+    def test_backend_lifecycle_regressions_run_on_pr_and_gate_runtime(self):
+        workflow = (ROOT / ".github/workflows/openwrt.yml").read_text()
+        backend = workflow.split("  backend:\n", 1)[1].split("\n  web:", 1)[0]
+        self.assertNotIn("if:", backend)
+        self.assertIn("submodules: recursive", backend)
+        self.assertIn("python3 openwrt/prepare-wing.py wing", backend)
+        self.assertIn("go test -race -count=1 -tags dae_stub_ebpf ./dae -run '^TestRouter(Dae|Core|RetiredDae|ReloadReleases|Readiness)'", backend)
+        runtime = workflow.split("  runtime:\n", 1)[1].split("\n  packages:", 1)[0]
+        dependencies = re.search(r"needs: \[(.*?)\]", runtime).group(1)
+        self.assertIn("backend", [value.strip() for value in dependencies.split(",")])
+
     def test_maintained_markdown_links_resolve(self):
         documents = [ROOT / name for name in ("README.md", "CONTRIBUTING.md", "docs/build.md", "docs/getting-started.md")]
         for path in documents:

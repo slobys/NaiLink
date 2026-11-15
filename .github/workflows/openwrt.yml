@@ -56,6 +56,23 @@ jobs:
           sudo tar -xzf /tmp/daed-rootfs.tar.gz -C /tmp/daed-rootfs
           sudo env DAED_TEST_ROOTFS=/tmp/daed-rootfs python3 -m unittest discover -s tests/openwrt -v
 
+  backend:
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.0'
+          cache-dependency-path: wing/go.sum
+      - name: Isolated daemon lifecycle and core regressions (no kernel changes)
+        run: |
+          python3 openwrt/prepare-wing.py wing
+          cd wing
+          go test -race -count=1 -tags dae_stub_ebpf ./dae -run '^TestRouter(Dae|Core|RetiredDae|ReloadReleases|Readiness)'
+
   web:
     needs: test
     runs-on: ubuntu-24.04
@@ -152,7 +169,7 @@ jobs:
 
   runtime:
     if: github.event_name == 'workflow_dispatch'
-    needs: [web, optional-core, extra-core, mihomo-core, reviewed-core-updates]
+    needs: [web, backend, optional-core, extra-core, mihomo-core, reviewed-core-updates]
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false

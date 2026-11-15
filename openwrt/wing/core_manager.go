@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/daeuniverse/dae-wing/routercore"
@@ -320,7 +321,12 @@ func (m *routerCoreManager) start(ctx context.Context, name string, conf *daeCon
 	prepared := time.Now()
 	if err = routerSessionReady(ctx, session); err != nil {
 		if m.log != nil {
-			m.log.WithFields(logrus.Fields{"core": name, "prepare_ms": prepared.Sub(started).Milliseconds(), "verify_ms": time.Since(prepared).Milliseconds()}).Warn("Core startup readiness failed")
+			fields := logrus.Fields{"core": name, "prepare_ms": prepared.Sub(started).Milliseconds(), "verify_ms": time.Since(prepared).Milliseconds()}
+			var failure *routerDaeRunError
+			if errors.As(err, &failure) {
+				fields["stage"], fields["reason"] = routerDaeStartupDiagnostic(failure)
+			}
+			m.log.WithFields(fields).Warn("Core startup readiness failed")
 		}
 		if stopErr := routerStopSession(session); stopErr != nil {
 			return nil, errors.New("core_cleanup_failed")
@@ -609,7 +615,8 @@ func Run(log *logrus.Logger, conf *daeConfig.Config, dirs []string, disableTimes
 			err = active.Reload(message)
 			m.finishReload(active, message, err)
 			message.Callback <- err
-		case <-done:
+		case cause := <-done:
+			m.logDaeExit(cause)
 			// A dead core must not leave its network resources in place or silently
 			// fall through to a different exit. Keep the API for diagnosis and recovery.
 			cleanup, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -698,12 +705,97 @@ func (m *routerCoreManager) recoverExited() error {
 	return nil
 }
 
+func (m *routerCoreManager) logDaeExit(cause error) {
+	var failure *routerDaeRunError
+	if m.log == nil || !errors.As(cause, &failure) {
+		return
+	}
+	stage, reason := routerDaeStartupDiagnostic(failure)
+	m.log.WithFields(logrus.Fields{"core": "dae", "stage": stage, "reason": reason}).Warn("Active core exited")
+}
+
+// Keep the original error available to internal callers without exposing node,
+// subscription, path or verifier text in API errors or normal startup logs.
+type routerDaeRunError struct {
+	stage string
+	err   error
+}
+
+func (e *routerDaeRunError) Error() string { return "core_start_failed" }
+func (e *routerDaeRunError) Unwrap() error { return e.err }
+
+func (s *routerDaeSession) startupFailure() error {
+	return &routerDaeRunError{stage: "daemon", err: s.exitErr}
+}
+
+func routerDaeStartupDiagnostic(failure *routerDaeRunError) (stage, reason string) {
+	stage, reason = "daemon", "startup_failed"
+	if failure.err == nil {
+		return stage, "unexpected_exit"
+	}
+	// All emitted fields are literals. The original message can contain private
+	// configuration, so never log it or use it directly as a diagnostic field.
+	for err := error(failure); err != nil; err = errors.Unwrap(err) {
+		if tagged, ok := err.(*routerDaeRunError); ok {
+			switch tagged.stage {
+			case "namespace", "listen", "node_dns":
+				stage = tagged.stage
+			}
+		}
+		for _, known := range []struct{ prefix, stage string }{
+			{"failed to setup dae netns:", "namespace_setup"},
+			{"load eBPF objects:", "ebpf_load"},
+			{"validate bpf maps:", "ebpf_maps"},
+			{"failed to get kernel version:", "kernel_version"},
+			{"rlimit.RemoveMemlock:", "memory_lock"},
+			{"failed to create group ", "group"},
+			{"ApplyRulesOptimizers error:", "routing"},
+			{"NewRoutingMatcherBuilder:", "routing"},
+			{"routing kernspace snapshot:", "routing"},
+			{"RoutingMatcherBuilder.BuildUserspace:", "routing"},
+			{"daeConfig.subscription is not supported", "configuration"},
+		} {
+			if strings.HasPrefix(err.Error(), known.prefix) {
+				stage = known.stage
+				break
+			}
+		}
+	}
+	if stage == "daemon" {
+		var pathError *os.PathError
+		if errors.As(failure, &pathError) {
+			stage = "filesystem"
+		}
+	}
+	for _, known := range []struct {
+		err    error
+		reason string
+	}{
+		{context.Canceled, "canceled"}, {context.DeadlineExceeded, "timeout"},
+		{syscall.EPERM, "permission_denied"}, {syscall.EACCES, "permission_denied"},
+		{syscall.ENOENT, "not_found"}, {syscall.ENODEV, "device_unavailable"},
+		{syscall.EAFNOSUPPORT, "protocol_unsupported"}, {syscall.EPROTONOSUPPORT, "protocol_unsupported"},
+		{syscall.EOPNOTSUPP, "operation_unsupported"}, {syscall.ENOSYS, "operation_unsupported"},
+		{syscall.EADDRINUSE, "address_in_use"}, {syscall.ENOMEM, "out_of_memory"},
+		{syscall.ENOSPC, "resource_exhausted"}, {syscall.EINVAL, "invalid_argument"},
+		{syscall.EROFS, "read_only_filesystem"}, {syscall.EBUSY, "resource_busy"},
+		{syscall.EEXIST, "already_exists"}, {syscall.ETIMEDOUT, "timeout"},
+	} {
+		if errors.Is(failure, known.err) {
+			reason = known.reason
+			break
+		}
+	}
+	return stage, reason
+}
+
 type routerDaeSession struct {
 	nodeDNS *mhDNSBridge
 	dnsMu   sync.Mutex
 	reload  chan *ReloadMessage
 	done    chan error
 	exit    chan struct{}
+	exitErr error // Written before exit closes; read only after observing that close.
 	dry     bool
 	conf    *daeConfig.Config
 }
@@ -718,6 +810,9 @@ func newRouterDaeSession(log *logrus.Logger, conf *daeConfig.Config, dirs []stri
 	s.nodeDNS = bridge
 	go func() {
 		err := dnsErr
+		if err != nil {
+			err = &routerDaeRunError{stage: "node_dns", err: err}
+		}
 		if err == nil {
 			err = routerRunDAE(log, effective, dirs, noTimestamp, dry, s.reload)
 		}
@@ -726,6 +821,7 @@ func newRouterDaeSession(log *logrus.Logger, conf *daeConfig.Config, dirs []stri
 			s.nodeDNS.Close()
 		}
 		s.dnsMu.Unlock()
+		s.exitErr = err
 		s.done <- err
 		close(s.exit)
 	}()
@@ -738,13 +834,15 @@ func (s *routerDaeSession) Ready(ctx context.Context) error {
 		select {
 		case s.reload <- &ReloadMessage{Config: s.conf, Callback: cb}:
 		case <-s.exit:
-			return errors.New("core_start_failed")
+			return s.startupFailure()
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 		select {
 		case err := <-cb:
 			return err
+		case <-s.exit:
+			return s.startupFailure()
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -752,12 +850,17 @@ func (s *routerDaeSession) Ready(ctx context.Context) error {
 	timer := time.NewTicker(50 * time.Millisecond)
 	defer timer.Stop()
 	for {
+		select {
+		case <-s.exit:
+			return s.startupFailure()
+		default:
+		}
 		if status := readRouterDaeReadiness(false); status.Ready && (s.conf == EmptyConfig || status.Configured) {
 			return nil
 		}
 		select {
 		case <-s.exit:
-			return errors.New("core_start_failed")
+			return s.startupFailure()
 		case <-timer.C:
 		case <-ctx.Done():
 			return errors.New("core_not_ready")

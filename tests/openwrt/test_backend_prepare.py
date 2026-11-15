@@ -62,6 +62,17 @@ class BackendPrepareTests(unittest.TestCase):
         (self.root / "dae-core/control").mkdir(parents=True, exist_ok=True)
         (self.root / "db").mkdir(parents=True, exist_ok=True)
 
+    def test_dae_serve_failure_is_retained_and_waiter_is_owned(self):
+        PREPARE.prepare(self.root)
+        lifecycle = (self.root / "dae/run.go").read_text(encoding="utf-8")
+        self.assertIn("routerServeErrors <- routerDaeServe(control.GetDaeNetns().With", lifecycle)
+        self.assertIn("case serveErr := <-routerServeErrors:", lifecycle)
+        self.assertIn("if !reloading { err = serveErr }", lifecycle)
+        self.assertIn("\treturn err\n}\n\nfunc newControlPlane(", lifecycle)
+        self.assertNotIn("\t\tcontrol.GetDaeNetns().With(func() error {", lifecycle)
+        for target, source in (("router_dae_serve.go", "dae_serve.go"), ("router_dae_serve_test.go", "dae_serve_test.go")):
+            self.assertEqual((self.root / "dae" / target).read_bytes(), (ROOT / "openwrt/wing" / source).read_bytes())
+
     def test_runtime_patch_is_reproducible_and_idempotent(self):
         PREPARE.prepare(self.root)
         self.assertIn('routerFileServer(webFS.', (self.root / "webrender/webrender.go").read_text(encoding="utf-8"))
