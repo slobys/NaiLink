@@ -334,7 +334,11 @@ def run_fixture(args, http_port, udp_port):
                     env['DAED_TEST_SINGBOX'] = str(args.client_singbox.resolve(strict=True))
                 if args.client_extra:
                     env['DAED_TEST_SINGBOX_EXTRA'] = str(args.client_extra.resolve(strict=True))
-                result = 0 if args.mihomo_only else subprocess.run(["go", "test", "-count=1", "-timeout=180s", "-v", "./graphql/service/node", "./dae", "github.com/daeuniverse/dae/control", "-run", "TestRouterProtocolInteroperability$|TestRouterCoreProtocolInteroperability$|TestRouterCoreBulkProbe$|TestRouterHTTPProtocolDownload$|TestRouterConnectionProtocolFailover$"], cwd=args.wing, env=env).returncode
+                # These packages share the same independent loopback servers.
+                # Run package processes in sequence to avoid cross-package
+                # listener/startup contention; each package still exercises
+                # its production node concurrency and bulk-probe assertions.
+                result = 0 if args.mihomo_only else subprocess.run(["go", "test", "-p=1", "-count=1", "-timeout=180s", "-v", "./graphql/service/node", "./dae", "github.com/daeuniverse/dae/control", "-run", "TestRouterProtocolInteroperability$|TestRouterCoreProtocolInteroperability$|TestRouterCoreBulkProbe$|TestRouterHTTPProtocolDownload$|TestRouterConnectionProtocolFailover$"], cwd=args.wing, env=env).returncode
                 if result == 0 and args.client_mihomo:
                     env['DAED_TEST_MIHOMO'] = str(args.client_mihomo.resolve(strict=True))
                     result = subprocess.run(['go', 'test', '-count=1', '-timeout=240s', '-v', './dae', '-run', '^TestRouterMihomoProtocolInteroperability$'], cwd=args.wing, env=env).returncode
