@@ -1,0 +1,29 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "cream-palette",
+        "value": "*",
+        "files": ["apps/web/dist-openwrt/index.html"],
+        "createdAt": "2026-11-16T04:27:10.128Z",
+        "reason": "Agent review: apps/web/DESIGN.md records the incumbent Amber palette; unchanged from base 57b6a49. Preserve this deliberate theme; the generated bundle is not a new palette decision."
+      },
+      {
+        "rule": "gradient-text",
+        "value": "*",
+        "files": ["apps/web/dist-openwrt/index.html"],
+        "createdAt": "2026-11-16T04:27:10.198Z",
+        "reason": "Agent review: generated linked CSS contains legacy text-gradient-primary from apps/web/src/index.css with no TS/TSX references. Existing DESIGN.md excludes these utilities from the console; source is unchanged from base 57b6a49."
+      },
+      {
+        "rule": "dark-glow",
+        "value": "*",
+        "files": ["apps/web/dist-openwrt/index.html"],
+        "createdAt": "2026-11-16T04:27:10.267Z",
+        "reason": "Agent review: generated linked CSS contains legacy glow-primary and badge-glow with no TS/TSX references. Console styles retain neutral elevation or no shadow; source is unchanged from base 57b6a49."
+      }
+    ]
+  }
+}
