@@ -7,7 +7,7 @@ set -eu
 umask 077
 
 REPOSITORY=slobys/NaiLink
-release=openwrt-v0.6.84
+release=openwrt-v0.6.85
 asset_dir=''
 mode=install
 action=install

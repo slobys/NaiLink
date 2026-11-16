@@ -344,7 +344,18 @@ func mihomoFromCanonical(profile sbObject, conf *daeConfig.Config, ports sbPorts
 		}
 	}
 	if conf.Global.DialMode != "ip" {
-		result["sniffer"] = sbObject{"enable": true, "force-dns-mapping": true, "parse-pure-ip": true, "override-destination": true, "sniff": sbObject{"HTTP": sbObject{"ports": []string{"1-65535"}}, "TLS": sbObject{"ports": []string{"1-65535"}}, "QUIC": sbObject{"ports": []string{"1-65535"}}}}
+		overrideDestination := true
+		for _, rule := range conf.Routing.Rules {
+			for _, match := range rule.AndFunctions {
+				if match.Name == "ipversion" {
+					// Mihomo clears DstIP when overriding the sniffed destination.
+					// Keep the actual address family for ipversion rules. SniffHost
+					// still supplies the domain to domain-based routing rules.
+					overrideDestination = false
+				}
+			}
+		}
+		result["sniffer"] = sbObject{"enable": true, "force-dns-mapping": true, "parse-pure-ip": true, "override-destination": overrideDestination, "sniff": sbObject{"HTTP": sbObject{"ports": []string{"1-65535"}}, "TLS": sbObject{"ports": []string{"1-65535"}}, "QUIC": sbObject{"ports": []string{"1-65535"}}}}
 	}
 	return result, nil
 }

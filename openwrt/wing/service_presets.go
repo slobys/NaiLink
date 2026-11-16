@@ -76,9 +76,30 @@ func serviceRouting(base, ai, netflix string) string {
 		position = strings.Index(base, "fallback:")
 	}
 	if position < 0 {
-		return strings.TrimSpace(base) + "\n" + block
+		return serviceNativeIPv6Fallback(strings.TrimSpace(base) + "\n" + block)
 	}
-	return base[:position] + block + base[position:]
+	return serviceNativeIPv6Fallback(base[:position] + block + base[position:])
+}
+
+// Only newly created presets use this policy. Explicit service, blocking and
+// user routing rules retain their priority; existing saved presets are untouched.
+// A proxy with IPv4-only egress must not break the LAN's working native IPv6.
+// The node server's own address family is independent of this destination rule.
+func serviceNativeIPv6Fallback(base string) string {
+	lines := strings.Split(base, "\n")
+	for _, line := range lines {
+		compact := strings.NewReplacer(" ", "", "\t", "").Replace(strings.TrimSpace(line))
+		if strings.HasPrefix(compact, "ipversion(6)->") {
+			return base // Preserve an explicit all-IPv6 routing decision.
+		}
+	}
+	for i, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "fallback:") {
+			lines[i] = "# Native IPv6 fallback; explicit routing above still takes priority\nipversion(6) -> direct\n" + line
+			return strings.Join(lines, "\n")
+		}
+	}
+	return base
 }
 
 func EnsureServicePresets(ctx context.Context, proxyID graphql.ID, name string, selectRoute bool) (string, error) {

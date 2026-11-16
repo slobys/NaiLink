@@ -221,6 +221,39 @@ func TestServiceDefaultsNeverRewriteExistingPreset(t *testing.T) {
 	}
 }
 
+func TestServicePresetNativeIPv6KeepsExplicitRoutingPriority(t *testing.T) {
+	base := "routing {\n# fallback: block (comment only)\ndip(geoip:private) -> direct\ndomain(full:custom.example) -> customProxy\ndip(geoip:cn) -> direct\nfallback: proxy\n}"
+	route := serviceRouting(base, "MyAI", "MyNetflix")
+	if _, err := dae.ParseConfig(nil, nil, &route); err != nil {
+		t.Fatal(err)
+	}
+	priorities := []string{
+		"domain(full:custom.example) -> customProxy",
+		"domain(suffix:chatgpt.com) -> MyAI",
+		"domain(geosite:netflix) -> MyNetflix",
+		"dip(geoip:cn) -> direct",
+		"ipversion(6) -> direct",
+		"fallback: proxy",
+	}
+	previous := -1
+	for _, rule := range priorities {
+		position := strings.Index(route, rule)
+		if position <= previous {
+			t.Fatalf("wrong routing priority for %s", rule)
+		}
+		previous = position
+	}
+	if got := serviceNativeIPv6Fallback(route); got != route {
+		t.Fatal("added a duplicate IPv6 fallback")
+	}
+	for _, target := range []string{"proxy", "block", "direct"} {
+		explicit := "routing {\nipversion ( 6 ) -> " + target + "\nfallback: proxy\n}"
+		if got := serviceNativeIPv6Fallback(explicit); got != explicit {
+			t.Fatal("overrode explicit IPv6 routing", target)
+		}
+	}
+}
+
 func TestServiceFallbackIsSnapshotOnlyAndOwnNodesWin(t *testing.T) {
 	ctx := serviceFixture(t)
 	d := db.DB(ctx)

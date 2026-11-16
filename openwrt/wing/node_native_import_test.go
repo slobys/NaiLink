@@ -8,6 +8,10 @@ import (
 	"github.com/daeuniverse/dae-wing/routercore"
 	_ "github.com/daeuniverse/outbound/dialer/http"
 	_ "github.com/daeuniverse/outbound/dialer/socks"
+	_ "github.com/daeuniverse/outbound/dialer/trojan"
+	_ "github.com/daeuniverse/outbound/dialer/v2ray"
+	_ "github.com/daeuniverse/outbound/protocol/trojanc"
+	_ "github.com/daeuniverse/outbound/protocol/vless"
 )
 
 func TestRouterMihomoTransportImportPreservesOriginalLink(t *testing.T) {
@@ -21,6 +25,32 @@ func TestRouterMihomoTransportImportPreservesOriginalLink(t *testing.T) {
 	}
 	if _, err = NewNodeModel(strings.Replace(link, "mode=auto", "mode=invalid", 1), nil, nil); err == nil {
 		t.Fatal("invalid transport saved")
+	}
+}
+
+func TestRouterIPv6ServerImportPreservesAddressAndTLSName(t *testing.T) {
+	for _, link := range []string{
+		"vless://11111111-1111-4111-8111-111111111111@[2001:db8::10]:443?encryption=none&security=tls&type=ws&sni=node.example&host=node.example&path=%2Fproxy#IPv6",
+		"trojan://fixture-password@[2001:db8::10]:443?sni=node.example#IPv6",
+		"socks5://fixture:password@[2001:db8::10]:443#IPv6",
+	} {
+		model, err := NewNodeModel(link, nil, nil)
+		if err != nil || model.Link != link || model.Address != "[2001:db8::10]:443" {
+			t.Fatal("IPv6 share-link metadata changed", strings.SplitN(link, ":", 2)[0], err)
+		}
+		native, err := routercore.Node(link, "fixture", routercore.NodeOptions{})
+		if err != nil || native["server"] != "2001:db8::10" {
+			t.Fatal("invalid sing-box IPv6 server", err)
+		}
+		mihomo, err := routercore.MihomoNode(native)
+		if err != nil || mihomo["server"] != "2001:db8::10" {
+			t.Fatal("invalid mihomo IPv6 server", err)
+		}
+		if strings.HasPrefix(link, "vless:") || strings.HasPrefix(link, "trojan:") {
+			if native["tls"].(routercore.Object)["server_name"] != "node.example" || mihomo["sni"] != "node.example" && mihomo["servername"] != "node.example" {
+				t.Fatal("replaced TLS server name with the IPv6 address")
+			}
+		}
 	}
 }
 
