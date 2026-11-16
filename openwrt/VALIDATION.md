@@ -1,5 +1,13 @@
 # NaiLink 发布验证记录
 
+## 0.6.85 IPv6 分流与 mihomo 地址族修复
+
+- 新建常用分流预设在明确的 AI、Netflix、自定义规则之后保留原生 IPv6 直连兜底；已有保存的路由和明确的全 IPv6 策略不自动改写。节点服务器 IPv6 地址与目标网站地址族分开处理。
+- mihomo 配置包含 `ipversion` 规则时，嗅探仍用于域名匹配，但保留原始目标 IP，避免 IPv6 规则因目标覆盖而失效。其他配置保留原有嗅探覆盖行为。
+- ARM64 iStoreOS 25.12.6 / Linux 6.12.112 开发补丁实测：dae、sing-box 1.14.4-nailink.1、mihomo 1.19.34 的 IPv6 连通、大包、双栈、DNS 检测及 IPv6 HTTPS 请求通过；mihomo 下现有 AI 群组的 IPv4、IPv6 强制目标请求均返回 200。此记录不等于登录账号与发送聊天消息验证。
+- 三内核通过本地 IPv6 SOCKS 服务端访问真实 IPv4、IPv6 目标均成功，IPv6 VLESS / Trojan / SOCKS5 导入和 TLS 名称回归通过。公网 IPv6 VPS 尚未部署，保持待测，不将本地夹具结果外推为公网部署已验证。
+- 保留 123 个节点、3 个订阅、3 个群组及绑定、配置和 DNS；临时测试进程清理，恢复原来运行状态。详细范围见 [IPv6 实测记录](../docs/ipv6-validation-2026-11-16.md)。版本更新仍走原有保留配置和备份流程；ARMv7 / MIPS 仍为实验构建。
+
 ## 0.6.84 订阅 XHTTP / VLESS Encryption 兼容修复
 
 - 修复普通 / Base64 节点列表与 Clash YAML 中的 VLESS XHTTP 导入，以及 VLESS Encryption 参数映射；SS `network: tcp/raw` 只视为传输标记，保留 UDP 开关原意。导入校验与执行内核分开，mihomo 消费已适配参数，dae / sing-box 明确返回 `node_requires_mihomo`，不会静默降级传输、删除加密或放宽证书校验。订阅仍只导入节点，不覆盖 DNS、路由和监听。
