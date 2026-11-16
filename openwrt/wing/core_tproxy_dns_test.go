@@ -2,13 +2,104 @@
 package dae
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	dnsmessage "github.com/miekg/dns"
 )
+
+func TestTProxyDNSExchangeBoundsBackupAndPreservesPolicy(t *testing.T) {
+	for _, network := range []string{"udp", "tcp"} {
+		for _, scenario := range []string{"lost-first", "slow-original", "denied", "truncated", "update", "canceled"} {
+			t.Run(network+"/"+scenario, func(t *testing.T) {
+				tcp, udp, err := routerLoopbackPair(net.Listen, net.ListenPacket)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer tcp.Close()
+				defer udp.Close()
+				var calls atomic.Int32
+				backupStarted := make(chan struct{})
+				release := make(chan struct{})
+				handler := dnsmessage.HandlerFunc(func(w dnsmessage.ResponseWriter, q *dnsmessage.Msg) {
+					n := calls.Add(1)
+					if scenario == "canceled" || scenario == "lost-first" && n == 1 {
+						return
+					}
+					if scenario == "slow-original" {
+						if n == 1 {
+							select {
+							case <-backupStarted:
+							case <-release:
+								return
+							}
+						} else {
+							close(backupStarted)
+							<-release
+							return
+						}
+					}
+					if scenario == "update" {
+						time.Sleep(50 * time.Millisecond)
+					}
+					a := mhTestDNSAnswer(q)
+					if scenario == "denied" {
+						a.Rcode, a.Answer = dnsmessage.RcodeNameError, nil
+					}
+					if scenario == "truncated" {
+						a.Truncated = true
+					}
+					_ = w.WriteMsg(a)
+				})
+				server := &dnsmessage.Server{Net: network, Handler: handler, MsgAcceptFunc: func(dnsmessage.Header) dnsmessage.MsgAcceptAction { return dnsmessage.MsgAccept }}
+				if network == "tcp" {
+					server.Listener = tcp
+				} else {
+					server.PacketConn = udp
+				}
+				started := make(chan struct{})
+				server.NotifyStartedFunc = func() { close(started) }
+				go func() { _ = server.ActivateAndServe() }()
+				defer server.Shutdown()
+				defer close(release)
+				<-started
+				q := new(dnsmessage.Msg)
+				q.SetQuestion("retry.test.", dnsmessage.TypeA)
+				if scenario == "update" {
+					q.Opcode = dnsmessage.OpcodeUpdate
+				}
+				budget := time.Second
+				if scenario == "canceled" {
+					budget = 300 * time.Millisecond
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), budget)
+				defer cancel()
+				a, err := routerTPDNSExchange(ctx, network, tcp.Addr().String(), q, 20*time.Millisecond)
+				if scenario == "canceled" {
+					if !errors.Is(err, context.DeadlineExceeded) || calls.Load() != 2 {
+						t.Fatal("original deadline or two-query limit lost", err, calls.Load())
+					}
+					return
+				}
+				if err != nil || !mhValidDNSAnswer(q, a) {
+					t.Fatal("valid original or backup reply lost", a, err)
+				}
+				wantCalls := int32(1)
+				if scenario == "lost-first" || scenario == "slow-original" {
+					wantCalls = 2
+				}
+				if calls.Load() != wantCalls || scenario == "denied" && a.Rcode != dnsmessage.RcodeNameError || scenario == "truncated" && !a.Truncated {
+					t.Fatal("policy, truncation or backup count changed", a, calls.Load())
+				}
+			})
+		}
+	}
+}
 
 func TestTProxyDNSIngressPreservesTransportReplyAndCloses(t *testing.T) {
 	backendTCP, backendUDP, err := routerLoopbackPair(net.Listen, net.ListenPacket)
