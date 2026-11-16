@@ -16,7 +16,9 @@
 
 管理节点、订阅和群组，测试节点延迟，查看实时流量，配置 DNS 与路由。支持电脑、手机和多种主题，沿用路由器 LuCI 登录，无需另设账户。
 
-基于 [daed](https://github.com/daeuniverse/daed) 二次开发，独立维护。当前版本为 **[0.6.83 正式版](https://github.com/slobys/NaiLink/releases/tag/openwrt-v0.6.83)**，提供 IPK / APK v3 安装包。
+基于 [daed](https://github.com/daeuniverse/daed) 二次开发，独立维护。当前版本为 **[0.6.84 正式版](https://github.com/slobys/NaiLink/releases/tag/openwrt-v0.6.84)**，提供 IPK / APK v3 安装包。
+
+**0.6.84 修复订阅格式兼容**。普通 / Base64 与 Clash 订阅可导入已支持的 VLESS XHTTP、VLESS Encryption 节点，使用这些节点请选择 mihomo。修复 SS 的 TCP 传输标记误判，保留现有节点、DNS 与分流配置。 [支持范围](https://slobys.github.io/NaiLink/nodes.html#xhttp)
 
 **0.6.83 新增内核独立更新**。在代理内核窗口检查和更新经过 NaiLink 验证的 sing-box、mihomo 兼容版，保留现有协议适配、节点和配置。更新前先切换到其他内核，完成后重新检查兼容性再切回。 [更新步骤](https://slobys.github.io/NaiLink/cores.html#core-updates)
 
@@ -114,7 +116,7 @@ nl=$(uclient-fetch -O- https://slobys.github.io/NaiLink/install.sh) && sh -c "${
 
 ## 源码与交流
 
-[完整源码包](https://github.com/slobys/NaiLink/releases/download/openwrt-v0.6.83/daed-openwrt-source.tar.gz) · [构建说明](openwrt/README.md#开发) · [验证记录](openwrt/VALIDATION.md) · [Logo](docs/site/assets/nailink-logo.png)
+[完整源码包](https://github.com/slobys/NaiLink/releases/download/openwrt-v0.6.84/daed-openwrt-source.tar.gz) · [构建说明](openwrt/README.md#开发) · [验证记录](openwrt/VALIDATION.md) · [Logo](docs/site/assets/nailink-logo.png)
 
 编译请使用完整源码包，或 `git clone --recurse-submodules https://github.com/slobys/NaiLink.git`。GitHub 的 Download ZIP 不包含后端子模块。
 

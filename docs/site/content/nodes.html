@@ -77,6 +77,21 @@
   节点。未知参数、格式错误、网页响应或保存失败会保留该订阅原有全部节点，并显示中文原因；内容不变时节点 ID
   不变，手动加入群组的旧节点也不会被自动删除。失败项可单独重试。
 </p>
+<h3 id="xhttp">XHTTP 与 VLESS Encryption</h3>
+<p>
+  0.6.84 起，普通 / Base64 和 Clash YAML / JSON 订阅可导入已支持的 VLESS XHTTP 与 VLESS Encryption 节点。 导入会保留
+  REALITY、flow、路径、模式、请求头和填充等已适配参数。Clash SS 的 <code>network: tcp</code>
+  仅表示普通传输，不会因此关闭 UDP；显式的 UDP 开关仍保留。
+</p>
+<p>
+  使用 XHTTP 或 VLESS Encryption 节点时，请在顶部<strong>内核</strong>选择 <strong>mihomo</strong>，检查兼容性后切换。
+  dae / sing-box 会提示需要 mihomo，不会将 XHTTP 改成 TCP 或删除加密参数。仅保存订阅不会自动切换内核或改变群组。
+</p>
+<p>
+  未映射的附加选项、冲突参数和无效内容仍会阻止导入，并保留原有节点。 导入成功表示节点信息已保存；端点超时、认证或 ECH
+  配置错误仍需按单个节点的测试结果排查。
+  两个订阅返回相同默认名称时，可手动填写不同标签；同一份订阅日常使用保留一种格式即可。
+</p>
 <h2 id="subscription-update">手动与自动更新</h2>
 <p>
   订阅卡片上的<strong>更新订阅</strong>会重新获取节点。更新时间和数量可帮助判断本次更新是否成功；编辑、移除等操作在更多菜单中，链接和自动更新规则可展开详情查看。
