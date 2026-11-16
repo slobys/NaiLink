@@ -11,17 +11,19 @@
 </p>
 <h2 id="current-version">v$version 更新与验证范围</h2>
 <p>
-  v$version 改进「高级设置 → 路由 → 进阶模式」的编辑体验。
-  <a href="https://github.com/slobys/NaiLink/releases/tag/$release">查看 v$version 正式版</a>。
+  v$version 修复 IPv6 分流及 mihomo 地址族匹配。<a href="https://github.com/slobys/NaiLink/releases/tag/$release"
+    >查看正式版与安装包</a
+  >。
 </p>
 <ul>
-  <li>长规则随编辑器宽度折行，并显示原有行号。</li>
-  <li>粘贴时整理常用符号间距，保留实际换行、注释和引号内的内容。</li>
-  <li>可以手动整理格式，也可以撤销整理。</li>
+  <li>新建常用分流预设在明确的 AI、Netflix、自定义规则之后保留原生 IPv6 兜底；升级不自动改写已有路由。</li>
+  <li>mihomo 配置包含 IPv4 / IPv6 匹配时保留原始目标地址，嗅探域名继续用于服务分流。</li>
+  <li>已有用户需要原生 IPv6 兜底时，可按<a href="network.html#ipv6">IPv6 设置</a>添加规则。</li>
 </ul>
 <p>
-  已在 ARM64 的 NanoPi R4S（iStoreOS 25.12.6）验证升级、原有配置保留、编辑器交互及代理恢复。
-  <a href="https://github.com/slobys/NaiLink/blob/main/openwrt/VALIDATION.md">查看验证记录</a>。
+  ARM64 iStoreOS 25.12.6 的三内核开发补丁实测通过 IPv6 连通、大包、双栈、DNS 与 HTTPS 请求；本地 IPv6 节点访问
+  IPv4、IPv6 目标也通过。公网 IPv6 VPS 尚未部署，仍待实测。正式包通过完整构建流水线和附件摘要校验，ARMv7 / MIPS
+  仍为实验构建。<a href="https://github.com/slobys/NaiLink/blob/main/openwrt/VALIDATION.md">查看完整验证记录</a>。
 </p>
 <h2 id="menu">打开安装管理菜单</h2>
 <p>安装成功后，在路由器 SSH 中运行：</p>
