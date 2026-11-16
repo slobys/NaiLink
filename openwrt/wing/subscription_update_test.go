@@ -54,6 +54,39 @@ func TestRouterSubscriptionStableIDsAndFailedRefreshPreserveData(t *testing.T) {
 	}
 }
 
+func TestRouterXHTTPRefreshKeepsIDsAndRejectsInvalidReplacement(t *testing.T) {
+	xhttp := "vless://11111111-1111-4111-8111-111111111111@192.0.2.10:443?type=xhttp&mode=auto&path=%2Ftransport#XHTTP"
+	payload := fixtureNode + "\n" + xhttp
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, payload) }))
+	defer srv.Close()
+	sub := updateFixture(t, srv.URL)
+	d := db.DB(context.Background())
+	if _, err := UpdateById(context.Background(), sub.ID); err != nil {
+		t.Fatal(err)
+	}
+	var before, after []db.Node
+	d.Order("id").Find(&before)
+	if len(before) != 2 {
+		t.Fatal("mixed subscription lost nodes")
+	}
+	if _, err := UpdateById(context.Background(), sub.ID); err != nil {
+		t.Fatal(err)
+	}
+	d.Order("id").Find(&after)
+	if !reflect.DeepEqual(before, after) {
+		t.Fatal("refresh changed IDs or original links")
+	}
+	payload = fixtureNode + "\n" + strings.Replace(xhttp, "mode=auto", "mode=invalid", 1)
+	if _, err := UpdateById(context.Background(), sub.ID); err == nil {
+		t.Fatal("invalid replacement accepted")
+	}
+	after = nil
+	d.Order("id").Find(&after)
+	if !reflect.DeepEqual(before, after) {
+		t.Fatal("failed replacement changed existing nodes")
+	}
+}
+
 func TestRouterSubscriptionPartialInsertFailureRollsBackRemovalAndInserts(t *testing.T) {
 	payload := fixtureNode
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, payload) }))

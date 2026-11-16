@@ -227,7 +227,7 @@ func ProbeRouterCoreNodesProgress(ctx context.Context, links []string, global da
 	var ordinary, extra []string
 	var indices, extraIndices, torIndices []int
 	for i, link := range links {
-		node, err := routercore.Node(link, "classify", routercore.NodeOptions{})
+		node, err := routercore.Node(link, "classify", routercore.NodeOptions{Import: true})
 		needs, tor := false, false
 		if err == nil {
 			for _, entry := range routercore.ExpandNode(node) {
@@ -676,6 +676,9 @@ func routerCoreProbeFailure(err error) string {
 		return "connection_closed"
 	}
 	message := strings.ToLower(err.Error())
+	if strings.Contains(message, "node_requires_mihomo") {
+		return "node_requires_mihomo"
+	}
 	if code := routercore.ProbeProtocolFailure(message); code != "" {
 		return code
 	}

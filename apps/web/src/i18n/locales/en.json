@@ -267,6 +267,7 @@
     "nodesMeasured": "{{ count }} nodes measured",
     "failed": "Failed",
     "nodeFailure": {
+      "mihomoRequired": "Requires mihomo",
       "protocol": "Unsupported by this core",
       "parameters": "Unsupported options",
       "ech": "Invalid ECH config",

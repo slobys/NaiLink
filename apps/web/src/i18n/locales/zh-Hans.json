@@ -267,6 +267,7 @@
     "nodesMeasured": "已测试 {{ count }} 个节点",
     "failed": "失败",
     "nodeFailure": {
+      "mihomoRequired": "请使用 mihomo",
       "protocol": "当前内核不支持",
       "parameters": "参数不兼容",
       "ech": "ECH 配置异常",

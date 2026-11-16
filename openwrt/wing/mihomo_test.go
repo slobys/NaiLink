@@ -27,6 +27,27 @@ import (
 	"golang.org/x/net/proxy"
 )
 
+func TestRouterMihomoOnlyTransportCapabilities(t *testing.T) {
+	link := "vless://11111111-1111-4111-8111-111111111111@fixture.invalid:443?type=xhttp&mode=auto&path=%2Fxhttp"
+	for _, engine := range []string{"dae", "sing-box", "mihomo"} {
+		n, err := routerParseCoreNode(engine, link, "fixture", routercore.NodeOptions{})
+		if engine == "mihomo" {
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = routercore.MihomoNode(n); err != nil {
+				t.Fatal(err)
+			}
+		} else if err == nil || err.Error() != "node_requires_mihomo" {
+			t.Fatal("unsupported engine accepted XHTTP", engine, err)
+		}
+	}
+	conf := &daeConfig.Config{Node: []daeConfig.KeyableString{daeConfig.KeyableString(link)}}
+	if problems := routerDaeNodeProblems(conf); len(problems) != 1 || !strings.Contains(problems[0], "mihomo") {
+		t.Fatal("dae switch lacks actionable explanation")
+	}
+}
+
 func TestPrivateListenerSurvivesAutomaticPortExhaustion(t *testing.T) {
 	calls := 0
 	l, err := routerListenLoopback(func(network, address string) (net.Listener, error) {

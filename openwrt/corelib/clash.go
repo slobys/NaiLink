@@ -37,7 +37,12 @@ func ClashLink(p Object) (string, error) {
 		return "", nil
 	}
 	if kind != "vmess" && kind != "vless" && kind != "trojan" {
-		for _, key := range []string{"network", "ws-opts", "ws-path", "ws-headers", "grpc-opts", "reality-opts"} {
+		// An explicit SS TCP marker describes the transport, not an instruction
+		// to disable UDP relay. Other transport options still fail closed.
+		if network := text("network"); network != "" && !(kind == "ss" && (network == "tcp" || network == "raw")) {
+			return "", OptionProblem("unsupported_node_option", "network")
+		}
+		for _, key := range []string{"ws-opts", "ws-path", "ws-headers", "grpc-opts", "xhttp-opts", "reality-opts"} {
 			if _, exists := p[key]; exists {
 				return "", OptionProblem("unsupported_node_option", key)
 			}
@@ -322,7 +327,7 @@ func ClashLink(p Object) (string, error) {
 	}
 	u.RawQuery = q.Encode()
 	link := u.String()
-	parsed, e := Node(link, "clash", NodeOptions{})
+	parsed, e := Node(link, "clash", NodeOptions{Import: true})
 	if e != nil {
 		return "", e
 	}
@@ -341,6 +346,28 @@ func clashTransport(p Object, used map[string]bool) (map[string]string, error) {
 	switch kind {
 	case "", "tcp", "raw":
 		return q, nil
+	case "xhttp":
+		if p["type"] != "vless" {
+			return nil, errors.New("unsupported_transport")
+		}
+		used["xhttp-opts"] = true
+		o := Object{}
+		if value, exists := p["xhttp-opts"]; exists {
+			var ok bool
+			o, ok = value.(map[string]any)
+			if !ok {
+				return nil, errors.New("unsupported_transport_option")
+			}
+		}
+		if err := validateXHTTP(o); err != nil {
+			return nil, err
+		}
+		extra := Object{}
+		for key, value := range o {
+			extra[xhttpJSONKeys[key]] = value
+		}
+		raw, _ := json.Marshal(extra)
+		q["type"], q["extra"] = "xhttp", string(raw)
 	case "ws":
 		q["type"] = "ws"
 		used["ws-opts"], used["ws-path"], used["ws-headers"] = true, true, true

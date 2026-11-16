@@ -95,6 +95,7 @@ var problemMessages = map[string]string{
 	"unsupported_node_path":               "当前协议不支持链接中的额外路径",
 	"unsupported_ss_plugin":               "Shadowsocks 插件尚未适配",
 	"unsupported_vless_encryption":        "VLESS 加密方式尚未适配",
+	"node_requires_mihomo":                "此节点使用 XHTTP 或 VLESS Encryption，请切换到 mihomo 内核运行；节点与原参数保留",
 	"unsupported_packet_encoding":         "UDP 数据包编码方式尚未适配",
 	"unsupported_tls":                     "传输安全方式尚未适配",
 	"invalid_reality":                     "REALITY 缺少有效公钥或认证参数",

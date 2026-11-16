@@ -55,6 +55,7 @@ describe('latency colors', () => {
       ['websocket_failed', 'websocket'],
       ['gateway_failed', 'gateway'],
       ['core_ports_unavailable', 'ports'],
+      ['node_requires_mihomo', 'mihomoRequired'],
     ]) {
       expect(formatLatencyLabel({ ...measured(0), alive: false, message }, translate)).toBe(
         `latency.nodeFailure.${key}`,

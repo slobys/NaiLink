@@ -14,6 +14,15 @@ import (
 	"time"
 )
 
+func TestRouterDAERejectsMihomoOnlyVLESSBeforeDialing(t *testing.T) {
+	for _, query := range []string{"type=xhttp", "net=xhttp", "network=xhttp", "encryption=mlkem768x25519plus.native.0rtt.fixture"} {
+		_, _, err := routerProtocolOptions("vless://fixture@192.0.2.1:443?"+query, nil, time.Second)
+		if err == nil || err.Error() != "node_requires_mihomo" {
+			t.Fatal("dae would silently downgrade transport", err)
+		}
+	}
+}
+
 type routerLockedReadConn struct {
 	net.Conn
 	mu      sync.Mutex

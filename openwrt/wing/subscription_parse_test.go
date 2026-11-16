@@ -3,6 +3,7 @@ package subscription
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -11,6 +12,86 @@ import (
 	"github.com/daeuniverse/dae-wing/routercore"
 	"gopkg.in/yaml.v3"
 )
+
+func TestMixedXHTTPSubscriptionsImportAllNodes(t *testing.T) {
+	xhttp := func(name string) map[string]any {
+		return map[string]any{"name": name, "type": "vless", "server": "fixture.invalid", "port": 443, "uuid": "11111111-1111-4111-8111-111111111111", "network": "xhttp", "tls": true, "xhttp-opts": map[string]any{"mode": "auto", "path": "/xhttp", "x-padding-bytes": "100-1000"}}
+	}
+	proxies := []map[string]any{
+		{"name": "ws-1", "type": "vless", "server": "fixture.invalid", "port": 443, "uuid": "11111111-1111-4111-8111-111111111111", "network": "ws", "ws-opts": map[string]any{"path": "/ws"}},
+		xhttp("xhttp-2"),
+		{"name": "hy-3", "type": "hysteria2", "server": "192.0.2.1", "port": 443, "password": "fixture"},
+		{"name": "hy-4", "type": "hysteria2", "server": "2001:db8::1", "port": 443, "password": "fixture"},
+		xhttp("xhttp-5"),
+		{"name": "trojan-6", "type": "trojan", "server": "fixture.invalid", "port": 443, "password": "fixture"},
+		{"name": "ss-7", "type": "ss", "server": "fixture.invalid", "port": 443, "cipher": "aes-128-gcm", "password": "fixture", "network": "tcp", "tls": false, "udp": true},
+	}
+	proxies[4]["encryption"] = "mlkem768x25519plus.native.0rtt." + base64.RawURLEncoding.EncodeToString(make([]byte, 32))
+	proxies[4]["flow"] = "xtls-rprx-vision"
+	clash, _ := json.Marshal(map[string]any{"proxies": proxies, "rules": []string{"MATCH,DIRECT"}, "dns": map[string]any{"enable": true}})
+	var plain []string
+	for _, p := range proxies {
+		link, err := routercore.ClashLink(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		plain = append(plain, link)
+	}
+	for _, payload := range [][]byte{clash, []byte(strings.Join(plain, "\n")), []byte(base64.StdEncoding.EncodeToString([]byte(strings.Join(plain, "\n"))))} {
+		links, err := decodeSubscriptionPayload(payload)
+		if err != nil || len(links) != 7 {
+			t.Fatal("subscription was rejected or lost nodes", len(links), err)
+		}
+		for _, link := range links {
+			model, err := db.NewNodeModel(link, nil, nil)
+			if err != nil || model.Link != link {
+				t.Fatal("refresh changes saved node", err)
+			}
+		}
+	}
+}
+
+// Private captures stay outside source control. Never print a payload or link
+// on failure; they contain the provider's subscription token and credentials.
+func TestPrivateSevenNodeSubscriptions(t *testing.T) {
+	dir := os.Getenv("NAILINK_PRIVATE_SUBSCRIPTION_DIR")
+	if dir == "" {
+		t.Skip("private capture not supplied")
+	}
+	for _, name := range []string{"links.txt", "clash.txt"} {
+		data, err := os.ReadFile(dir + "/" + name)
+		if err != nil {
+			t.Fatal("private capture unreadable")
+		}
+		links, err := decodeSubscriptionPayload(data)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if len(links) != 7 {
+			t.Fatalf("%s: count=%d", name, len(links))
+		}
+		for i, link := range links {
+			model, err := db.NewNodeModel(link, nil, nil)
+			if err != nil || model.Link != link {
+				t.Fatalf("%s item %d metadata mismatch", name, i+1)
+			}
+			node, err := routercore.Node(link, "fixture", routercore.NodeOptions{Mihomo: true})
+			// The provider's third node carries a malformed ECH public name.
+			// Metadata import must preserve it, while runtime validation must
+			// refuse to disable ECH or relax certificate checks as a fallback.
+			if i == 2 && err != nil && err.Error() == "invalid_ech_public_name" {
+				t.Logf("%s item 3: provider ECH requires correction; original link retained", name)
+				continue
+			}
+			if err != nil {
+				t.Fatalf("%s item %d canonical: %s", name, i+1, err.Error())
+			}
+			if _, err = routercore.MihomoNode(node); err != nil {
+				t.Fatalf("%s item %d mihomo: %s", name, i+1, err.Error())
+			}
+		}
+	}
+}
 
 const clashFixture = `mixed-port: 7890
 external-controller: 0.0.0.0:9090

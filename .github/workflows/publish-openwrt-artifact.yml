@@ -44,7 +44,7 @@ jobs:
           assert run['head_repository']['full_name']==repo
           sha = run['head_sha']; assert re.fullmatch(r'[a-f0-9]{40}', sha)
           jobs = api('/actions/runs/'+run_id+'/jobs?per_page=100')['jobs']
-          assert len(jobs)==33 and sum(j['conclusion']=='success' for j in jobs)==32
+          assert len(jobs)==34 and sum(j['conclusion']=='success' for j in jobs)==33
           assert all(j['conclusion']=='success' or (j['name']=='publish' and j['conclusion']=='skipped') for j in jobs)
           assert {'test','web','assemble'} <= {j['name'] for j in jobs}
           subprocess.run(['git','merge-base','--is-ancestor',sha,'HEAD'],check=True)
