@@ -9,7 +9,7 @@
     <strong>空间：</strong>v$version 的运行程序本体约 52–57 MiB，另需规则库、依赖、下载、解压和备份空间。16/32 MiB
     闪存设备通常不适合直接安装；脚本不会扩容。
   </li>
-  <li><strong>权限与网络：</strong>能够以 root 登录路由器 SSH，路由器自身可以解析并访问 GitHub。</li>
+  <li><strong>权限与网络：</strong>能够以 root 登录路由器 SSH，在线菜单需要路由器自身可以解析并访问 GitHub；也可使用<a href="local-installation.html">电脑下载后安装</a>，固件依赖仍需满足。</li>
 </ul>
 <p>
   本项目尚未给出覆盖所有设备的最低内存或吞吐保证。节点规模、规则数量、并发连接和协议都会影响资源占用，不宜只按 CPU
@@ -84,6 +84,7 @@
   <code>--dry-run</code>。APK 依赖预演使用本机已有索引。
 </p>
 <h2 id="packages">手动下载与源码</h2>
+<p>电脑可下载、路由器下载失败时，请按<a href="local-installation.html">电脑下载后安装指南</a>准备完整资产、校验和传输，再使用本地资产安装；固件依赖仍需匹配的软件源。</p>
 <p>
   <a href="https://github.com/slobys/NaiLink/releases/tag/$release">当前正式版发布页</a>提供 IPK / APK
   v3、校验清单和完整源码。优先使用安装脚本，以免手动漏装依赖或选错 ABI。APK 需要 apk-tools
