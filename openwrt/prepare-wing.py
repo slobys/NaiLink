@@ -136,6 +136,8 @@ def router_node_model(text):
         text = text.replace('if !strings.Contains(link, "://") {', 'if routercore.IsNativeURI(link) || strings.HasPrefix(strings.TrimSpace(link), "{") { return routerNativeNode(link, tag, subscriptionId) }\n\tif !strings.Contains(link, "://") {', 1)
     if 'routerChainNode(link, tag, subscriptionId)' not in text:
         text = text.replace('if routercore.IsNativeURI(link)', 'if strings.Count(link, routercore.ChainSeparator) == 1 { return routerChainNode(link, tag, subscriptionId) }\n\tif routercore.IsNativeURI(link)', 1)
+    if 'routerMihomoNode(link, tag, subscriptionId)' not in text:
+        text = text.replace('if routercore.IsNativeURI(link)', 'if routercore.RequiresMihomo(link) { return routerMihomoNode(link, tag, subscriptionId) }\n\tif routercore.IsNativeURI(link)', 1)
     if '"github.com/daeuniverse/dae-wing/routercore"' not in text:
         text = text.replace('import (', 'import (\n\t"github.com/daeuniverse/dae-wing/routercore"', 1)
     text = text.replace("dialer.InstanceOption{DisableCheck: false}", "dialer.InstanceOption{DisableCheck: true}")

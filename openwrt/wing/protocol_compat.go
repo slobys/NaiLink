@@ -259,6 +259,16 @@ func (c *routerStreamConn) Close() error {
 // checks and actual traffic use exactly the same protocol parameters.
 func routerProtocolOptions(link string, next netproxy.Dialer, hopInterval time.Duration) (string, netproxy.Dialer, error) {
 	scheme, _, _ := strings.Cut(link, "://")
+	if scheme == "vless" {
+		u, err := proxyurl.Parse(link)
+		if err != nil {
+			return "", nil, fmt.Errorf("invalid protocol URL")
+		}
+		q := u.Query()
+		if q.Get("type") == "xhttp" || q.Get("net") == "xhttp" || q.Get("network") == "xhttp" || (q.Get("encryption") != "" && q.Get("encryption") != "none") {
+			return "", nil, fmt.Errorf("node_requires_mihomo")
+		}
+	}
 	if scheme != "anytls" && scheme != "hysteria2" && scheme != "hy2" {
 		return link, next, nil
 	}

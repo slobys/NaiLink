@@ -34,9 +34,13 @@ func routerDaeNodeProblems(conf *daeConfig.Config) []string {
 		_, link := daeCommon.GetTagFromLinkLikePlaintext(string(n))
 		if strings.Count(link, routercore.ChainSeparator) == 1 {
 			entry, landing, err := routercore.ChainLinks(link)
-			if err != nil || routercore.IsNativeURI(entry) || routercore.IsNativeURI(landing) {
+			if err != nil || routercore.IsNativeURI(entry) || routercore.IsNativeURI(landing) || routercore.RequiresMihomo(entry) || routercore.RequiresMihomo(landing) {
 				p = append(p, fmt.Sprintf("节点 %d：链式代理的入口和落地节点都必须支持 dae。", i+1))
 			}
+			continue
+		}
+		if routercore.RequiresMihomo(link) {
+			p = append(p, fmt.Sprintf("节点 %d：%s", i+1, routercore.ProblemText("node_requires_mihomo")))
 			continue
 		}
 		if routercore.IsNativeURI(link) {

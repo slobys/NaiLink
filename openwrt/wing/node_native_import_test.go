@@ -10,6 +10,20 @@ import (
 	_ "github.com/daeuniverse/outbound/dialer/socks"
 )
 
+func TestRouterMihomoTransportImportPreservesOriginalLink(t *testing.T) {
+	link := "vless://11111111-1111-4111-8111-111111111111@fixture.invalid:443?type=xhttp&path=%2Fxhttp&mode=auto#XHTTP%20node"
+	model, err := NewNodeModel(link, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if model.Link != link || model.Name != "XHTTP node" || model.Address != "fixture.invalid:443" || model.Protocol != "vless" {
+		t.Fatal("saved metadata changed")
+	}
+	if _, err = NewNodeModel(strings.Replace(link, "mode=auto", "mode=invalid", 1), nil, nil); err == nil {
+		t.Fatal("invalid transport saved")
+	}
+}
+
 func TestRouterChainImportPreservesBothLinks(t *testing.T) {
 	entry := "socks5://user:fixture@entry.invalid:1080#入口"
 	landing := "http://user:fixture@landing.invalid:8080#落地"

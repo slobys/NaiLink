@@ -20,6 +20,9 @@ type NodeOptions struct {
 	UTLS          string
 	Warn          func(string)
 	Mihomo        bool
+	// Import validates stored metadata without selecting a runtime. Callers
+	// generating executable configurations must leave this false.
+	Import bool
 }
 
 func decode64(s string) ([]byte, error) {
@@ -124,7 +127,7 @@ func Node(link, tag string, opt NodeOptions) (Object, error) {
 		return nil, errors.New("invalid_node")
 	}
 	used := map[string]bool{"name": true, "remarks": true, "group": true}
-	allowed := strings.Fields("security sni peer serverName alpn insecure allowInsecure allow_insecure skip-cert-verify fp fingerprint type net network host path serviceName service_name authority mode flow pbk publicKey sid shortId encryption packetEncoding uuid password method cipher plugin obfs obfs-password obfsPassword mport ports hop-interval hopInterval upmbps downmbps up down congestion_control congestion-control udp_relay_mode udp-relay-mode zero_rtt_handshake disable_sni udp-over-tcp udp_over_tcp uot name remarks group headerType spx udp ech support-x25519mlkem768")
+	allowed := strings.Fields("security sni peer serverName alpn insecure allowInsecure allow_insecure skip-cert-verify fp fingerprint type net network host path serviceName service_name authority mode flow pbk publicKey sid shortId encryption packetEncoding uuid password method cipher plugin obfs obfs-password obfsPassword mport ports hop-interval hopInterval upmbps downmbps up down congestion_control congestion-control udp_relay_mode udp-relay-mode zero_rtt_handshake disable_sni udp-over-tcp udp_over_tcp uot name remarks group headerType spx udp ech support-x25519mlkem768 extra x_padding_bytes")
 	known := map[string]bool{}
 	for _, key := range allowed {
 		known[key] = true
@@ -265,7 +268,10 @@ func Node(link, tag string, opt NodeOptions) (Object, error) {
 				result["flow"] = flow
 			}
 			if enc := get("encryption"); enc != "" && enc != "none" {
-				return nil, errors.New("unsupported_vless_encryption")
+				if err := validateVLESSEncryption(enc); err != nil {
+					return nil, err
+				}
+				result["encryption"] = enc
 			}
 			if encoding := get("packetEncoding"); encoding != "" {
 				if encoding != "xudp" && encoding != "packetaddr" {
@@ -420,6 +426,14 @@ func Node(link, tag string, opt NodeOptions) (Object, error) {
 		sort.Strings(rejected)
 		return nil, OptionProblem("unsupported_node_option", rejected...)
 	}
+	if RequiresMihomo(link) {
+		if !vlessUUID.MatchString(username) {
+			return nil, OptionProblem("invalid_node", "uuid")
+		}
+		if !opt.Mihomo && !opt.Import {
+			return nil, errors.New("node_requires_mihomo")
+		}
+	}
 	return result, nil
 }
 
@@ -524,6 +538,18 @@ func nodeTransport(out Object, q url.Values, consumed ...map[string]bool) error 
 	transport := Object{"type": kind}
 	switch kind {
 	case "", "tcp", "raw":
+	case "xhttp":
+		if out["type"] != "vless" {
+			return errors.New("unsupported_transport")
+		}
+		mark("path", "host", "mode", "extra", "x_padding_bytes")
+		options, err := xhttpQuery(q)
+		if err != nil {
+			return err
+		}
+		for key, value := range options {
+			transport[key] = value
+		}
 	case "ws":
 		mark("path", "host")
 		transport["path"] = q.Get("path")

@@ -143,7 +143,7 @@ func MihomoNode(node Object) (Object, error) {
 	case "vmess":
 		copyFields(map[string]string{"uuid": "uuid", "security": "cipher", "alter_id": "alterId", "packet_encoding": "packet-encoding"})
 	case "vless":
-		copyFields(map[string]string{"uuid": "uuid", "flow": "flow", "packet_encoding": "packet-encoding"})
+		copyFields(map[string]string{"uuid": "uuid", "flow": "flow", "packet_encoding": "packet-encoding", "encryption": "encryption"})
 	case "trojan", "anytls", "http":
 		if kind == "anytls" {
 			copyFields(map[string]string{"idle_session_check_interval": "idle-session-check-interval", "idle_session_timeout": "idle-session-timeout", "min_idle_session": "min-idle-session"})
@@ -303,6 +303,20 @@ func MihomoNode(node Object) (Object, error) {
 	if tr, ok := node["transport"].(map[string]any); ok {
 		typ := stringValue(tr["type"])
 		switch typ {
+		case "xhttp":
+			if kind != "vless" {
+				return nil, OptionProblem("mihomo_option_unsupported", "transport")
+			}
+			v := Object{}
+			for key, value := range tr {
+				if key != "type" {
+					v[key] = value
+				}
+			}
+			if err := validateXHTTP(v); err != nil {
+				return nil, err
+			}
+			o["network"], o["xhttp-opts"] = "xhttp", v
 		case "ws":
 			if err := mhOnly(tr, "type", "path", "headers", "max_early_data", "early_data_header_name"); err != nil {
 				return nil, err

@@ -57,6 +57,7 @@ export function formatLatencyLabel(result: NodeLatencyProbeResult | undefined, t
       return t('latency.nodeFailure.parameters')
     }
     const reasons = {
+      node_requires_mihomo: 'mihomoRequired',
       extra_not_installed: 'extension',
       mihomo_option_unsupported: 'invalidNode',
       mihomo_configuration_invalid: 'invalidNode',
