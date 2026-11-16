@@ -140,6 +140,28 @@ fallback: proxy</code></pre>
 <pre><code class="language-text">domain(example.com) -&gt; AI
 fallback: proxy</code></pre>
 <p>把示例域名换成你确实需要分流的域名，并核对群组名称。服务通常涉及多个域名，只写一个域名不代表覆盖该服务所有连接。</p>
+<h2 id="ipv6">IPv6 节点与 IPv6 联网</h2>
+<p>
+  节点服务器的 IPv6 地址与目标网站的 IPv6 地址是两回事。使用 IPv6 服务器节点，需要路由器能访问该服务器的 IPv6
+  地址，并保留正确的端口、认证和 TLS / SNI；它可以继续代理 IPv4 网站。要通过节点访问 IPv6
+  网站，还需要节点服务端具有可用的 IPv6 出口。
+</p>
+<p>
+  新建的常用分流预设会在 AI、Netflix 和自定义规则之后、代理兜底之前添加原生 IPv6 直连规则。 这样，IPv4
+  出口节点不会阻断家中已经可用的 IPv6，明确指定的服务仍优先按原规则分流。升级保留已有路由，不自动改写用户配置。
+</p>
+<pre><code class="language-text"># 保留已有 AI、Netflix 和自定义规则在上方
+ipversion(6) -&gt; direct
+fallback: proxy</code></pre>
+<p>
+  已有用户可以在<strong>高级设置 → 路由 → 进阶模式</strong>中，将这行 IPv6 规则放在最后的
+  <code>fallback:</code> 前，保存并应用。若希望其余 IPv6 流量也经过节点，可删除这行，并先确认所选节点的 IPv6 出口可用。
+  路由器没有原生 IPv6 时，增加直连规则不能提供 IPv6；应使用具有 IPv6 出口的节点，并让相关流量走代理。
+</p>
+<p>
+  验证时分别检查 IPv6 连通、大包和双栈请求。仅看到节点名称中的 IPv6，或仅通过 IPv4
+  延迟测试，都不能证明这些路径已经可用。
+</p>
 <h2 id="apply-check">修改后怎样确认生效</h2>
 <ol>
   <li>保存修改，确认方案被选中。</li>

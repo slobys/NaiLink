@@ -22,6 +22,7 @@ import (
 
 	"github.com/daeuniverse/dae-wing/routercore"
 	daeConfig "github.com/daeuniverse/dae/config"
+	"github.com/daeuniverse/dae/pkg/config_parser"
 	dnsmessage "github.com/miekg/dns"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/net/proxy"
@@ -207,6 +208,46 @@ func TestNativeReadinessRequiresAuthenticatedListeners(t *testing.T) {
 	defer cancel()
 	if err := s.Ready(ctx); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRouterMihomoIPVersionRulesPreserveDestination(t *testing.T) {
+	for _, version := range []string{"", "4", "6"} {
+		t.Run("family"+version, func(t *testing.T) {
+			conf, dirs := coreFixtureConfig(t)
+			conf.Global.DialMode = "domain"
+			text := "global {}\nrouting {\ndomain(full:ai.example) -> proxy\n"
+			if version != "" {
+				text += "ipversion(" + version + ") -> direct\n"
+			}
+			sections, err := config_parser.Parse(text + "fallback: proxy\n}")
+			if err != nil {
+				t.Fatal(err)
+			}
+			parsed, err := daeConfig.New(sections)
+			if err != nil {
+				t.Fatal(err)
+			}
+			conf.Routing = parsed.Routing
+			before := restartConfigKey(conf)
+			ports := sbPorts{Mixed: 39001, API: 39002, DNS: 39003, Secret: "test-only"}
+			canonical, _, err := coreCanonicalConfig(conf, dirs, ports, false, "mihomo")
+			if err != nil {
+				t.Fatal(err)
+			}
+			profile, err := mihomoFromCanonical(canonical, conf, ports)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sniffer := profile["sniffer"].(sbObject)
+			if sniffer["enable"] != true || sniffer["override-destination"] != (version == "") {
+				t.Fatal("lost sniffing or discarded the original IP family", sniffer)
+			}
+			rules := profile["rules"].([]string)
+			if !strings.HasPrefix(rules[0], "DOMAIN,ai.example,") || before != restartConfigKey(conf) {
+				t.Fatal("changed explicit domain routing or source configuration", rules)
+			}
+		})
 	}
 }
 
