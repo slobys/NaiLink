@@ -62,8 +62,7 @@ func serveRouterTPDNSBridge(tcp net.Listener, udp net.PacketConn, upstreamPort i
 		}
 		attempt, stop := context.WithTimeout(b.ctx, 5*time.Second)
 		defer stop()
-		client := &dnsmessage.Client{Net: network, Timeout: 5 * time.Second, UDPSize: 4096}
-		if answer, _, err := client.ExchangeContext(attempt, q.Copy(), net.JoinHostPort("127.0.0.1", fmt.Sprint(upstreamPort))); err == nil && answer != nil {
+		if answer, err := routerTPDNSExchange(attempt, network, net.JoinHostPort("127.0.0.1", fmt.Sprint(upstreamPort)), q, 750*time.Millisecond); err == nil {
 			reply = answer
 		}
 		_ = w.WriteMsg(reply)
@@ -76,6 +75,77 @@ func serveRouterTPDNSBridge(tcp net.Listener, udp net.PacketConn, upstreamPort i
 		go func(server *dnsmessage.Server) { _ = server.ActivateAndServe() }(server)
 	}
 	return b
+}
+
+// A cold native DNS exchange can stop replying while later queries work. Keep
+// its original deadline and allow one same-protocol, same-loopback backup for
+// ordinary reads. Valid replies, including rejection and truncation, win intact.
+func routerTPDNSExchange(ctx context.Context, network, address string, q *dnsmessage.Msg, delay time.Duration) (*dnsmessage.Msg, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	type result struct {
+		answer *dnsmessage.Msg
+		err    error
+	}
+	results := make(chan result, 2)
+	pending := 0
+	start := func() {
+		pending++
+		go func() {
+			client := &dnsmessage.Client{Net: network, Timeout: 5 * time.Second, UDPSize: 4096}
+			conn, err := client.DialContext(ctx, address)
+			if err != nil {
+				results <- result{err: err}
+				return
+			}
+			defer conn.Close()
+			stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
+			defer stop()
+			answer, _, err := client.ExchangeWithConnContext(ctx, q.Copy(), conn)
+			if err == nil && !mhValidDNSAnswer(q, answer) {
+				err = errors.New("invalid_dns_reply")
+			}
+			results <- result{answer, err}
+		}()
+	}
+	start()
+	defer func() {
+		cancel()
+		for pending > 0 {
+			<-results
+			pending--
+		}
+	}()
+	var tick <-chan time.Time
+	if mhDNSReadOnly(q) {
+		timer := time.NewTimer(delay)
+		defer timer.Stop()
+		tick = timer.C
+	}
+	for {
+		select {
+		case r := <-results:
+			pending--
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			if deadline, ok := ctx.Deadline(); ok && !time.Now().Before(deadline) {
+				return nil, context.DeadlineExceeded
+			}
+			if r.err == nil {
+				return r.answer, nil
+			}
+			if pending == 0 {
+				return nil, r.err
+			}
+		case <-tick:
+			tick = nil
+			if ctx.Err() == nil {
+				start()
+			}
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 }
 
 func (b *routerTPDNSBridge) Close() {
