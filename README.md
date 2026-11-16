@@ -16,7 +16,9 @@
 
 管理节点、订阅和群组，测试节点延迟，查看实时流量，配置 DNS 与路由。支持电脑、手机和多种主题，沿用路由器 LuCI 登录，无需另设账户。
 
-基于 [daed](https://github.com/daeuniverse/daed) 二次开发，独立维护。当前版本为 **[0.6.85 正式版](https://github.com/slobys/NaiLink/releases/tag/openwrt-v0.6.85)**，提供 IPK / APK v3 安装包。
+基于 [daed](https://github.com/daeuniverse/daed) 二次开发，独立维护。当前版本为 **[0.6.87 正式版](https://github.com/slobys/NaiLink/releases/tag/openwrt-v0.6.87)**，提供 IPK / APK v3 安装包。
+
+**0.6.87 修复 DNS 传输**。修复 dae 的 TCP DNS 超时，以及 sing-box 非 TUN（TPROXY）模式的 IPv6 UDP DNS 回包地址与端口错误。保留现有节点、订阅、群组、DNS 和分流；最终安装包已在软路由上复测三个内核。 [验证记录](docs/dns-validation-2026-11-16.md)
 
 **0.6.85 修复 IPv6 分流**。新建常用分流预设保留原生 IPv6 联网，明确的 AI、Netflix 和自定义规则优先；升级保留已有路由。修复 mihomo 嗅探导致 IPv6 匹配失效的问题，三内核已完成软路由 IPv6 检测与本地 IPv6 节点验证。 [IPv6 设置与边界](https://slobys.github.io/NaiLink/network.html#ipv6)
 
@@ -118,7 +120,7 @@ nl=$(uclient-fetch -O- https://slobys.github.io/NaiLink/install.sh) && sh -c "${
 
 ## 源码与交流
 
-[完整源码包](https://github.com/slobys/NaiLink/releases/download/openwrt-v0.6.85/daed-openwrt-source.tar.gz) · [构建说明](openwrt/README.md#开发) · [验证记录](openwrt/VALIDATION.md) · [Logo](docs/site/assets/nailink-logo.png)
+[完整源码包](https://github.com/slobys/NaiLink/releases/download/openwrt-v0.6.87/daed-openwrt-source.tar.gz) · [构建说明](openwrt/README.md#开发) · [验证记录](openwrt/VALIDATION.md) · [Logo](docs/site/assets/nailink-logo.png)
 
 编译请使用完整源码包，或 `git clone --recurse-submodules https://github.com/slobys/NaiLink.git`。GitHub 的 Download ZIP 不包含后端子模块。
 
