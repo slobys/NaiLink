@@ -15,6 +15,19 @@ import tempfile
 
 HERE = Path(__file__).resolve().parent
 ORIGINAL = "ae8c0126a163fce0d7c1abea226579c69c9784f65e1e7f95bd1a8e903d450779"
+
+
+def router_kernel_dns_health(text):
+    # TCP DNS is routed through the control plane just like UDP DNS. Its
+    # synthetic outbound has no node health probe; gating it drops the SYN
+    # before the userspace DNS-over-TCP handler can accept the connection.
+    old = 'if (l4proto == IPPROTO_UDP && dport == bpf_htons(53))\n\t\treturn true;'
+    new = 'if ((l4proto == IPPROTO_UDP || l4proto == IPPROTO_TCP) &&\n\t    dport == bpf_htons(53))\n\t\treturn true;'
+    if new in text:
+        return text
+    if text.count(old) != 1:
+        raise ValueError("Unknown kernel DNS health gate; review before applying")
+    return text.replace(old, new, 1)
 TRANSACTION_DEFER = '''defer func() {
 		if err == nil {
 			tx.Commit()
@@ -564,6 +577,7 @@ func _fetchLinksContext(ctx context.Context, subscriptionLink string, transport 
         generated[name] = digest(data)
     # Keep latency fixes in the release source, without changing submodule pins.
     patches = {
+        "dae-core/control/kern/tproxy.c": ("bf167e21a8ee8105a7662657b0eb578197e5044bbed28cfccd34b705b2f0ac4c", router_kernel_dns_health),
         "graphql/service/config/global/schema.go": ("59e3eaee0ef6afd910b2d960c89f11b6d5fa7a4d5112de0f51cb08898cf7c5e1", lambda value: value.replace('structField := t.Field(i)', 'structField := t.Field(i)\n\t\tif structField.Name == "NailinkNodeDNS" {\n\t\t\tcontinue\n\t\t}')),
         "dae/flat_desc.go": ("ba276d448f769d1c537274cbed6f159549048cff6ebf5e59c4ac89639357c39f", lambda value: value.replace('mapping := section.Tag.Get("mapstructure")', 'mapping := section.Tag.Get("mapstructure")\n\t\tif mapping == "nailink_node_dns" { continue }')),
         "db/subscription.go": ("31a09ad8bab7dfe4d5c73d325ee3f05b09d24ecca7e67742f192cb2390f9f397", lambda value: value.replace('type Subscription struct {', 'type Subscription struct {\n\tNodeDNS string `gorm:"not null;default:\'\'"`')),
@@ -773,6 +787,8 @@ func routerSingleHopDialer(ctx context.Context, gOption *GlobalOption, iOption I
         ("dae/router_singbox_runtime.go", "singbox_runtime.go"),
         ("dae/router_core_network.go", "core_network.go"),
         ("dae/router_core_tproxy.go", "core_tproxy.go"),
+        ("dae/router_core_tproxy_dns.go", "core_tproxy_dns.go"),
+        ("dae/router_core_tproxy_dns_test.go", "core_tproxy_dns_test.go"),
         ("dae/router_core_tproxy_bridge.go", "core_tproxy_bridge.go"),
         ("dae/router_core_tproxy_test.go", "core_tproxy_test.go"),
         ("dae/router_core_dns_conntrack.go", "core_dns_conntrack.go"),
@@ -918,6 +934,7 @@ def prepare(root):
         "dae-core/component/outbound/dialer/connectivity_check.go",
         "dae-core/component/interface_manager.go",
         "dae-core/control/dial.go", "dae-core/control/dns_control.go",
+        "dae-core/control/kern/tproxy.c",
         "dae-core/control/dns_control_cache_cleanup_test.go",
         "dae-core/control/dns.go", "dae-core/control/dns_lifecycle_test.go", "dae-core/control/control_plane.go",
         "dae-core/control/dns_udp_packetconn_test.go",

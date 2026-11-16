@@ -275,6 +275,7 @@ type routerSingBoxSession struct {
 	tpDone        chan struct{}
 	engine        string
 	dnsBridge     *mhDNSBridge
+	dnsIngress    *routerTPDNSBridge
 	nodeDNSBridge *mhDNSBridge
 	hasTor        bool
 	mu            sync.Mutex
@@ -328,6 +329,8 @@ func newRouterNativeSession(ctx context.Context, log *logrus.Logger, conf *daeCo
 		}
 	}()
 	ports.Mode = routerMode(ctx)
+	privateDNS := ports.DNS
+	var dnsReserved []io.Closer
 	if transparent && conf != EmptyConfig && ports.Mode == "tproxy" {
 		for _, target := range []*int{&ports.TProxy, &ports.DNS} {
 			port, held, e := routerTPReserve()
@@ -336,6 +339,9 @@ func newRouterNativeSession(ctx context.Context, log *logrus.Logger, conf *daeCo
 			}
 			*target = port
 			reserved = append(reserved, held...)
+			if target == &ports.DNS && engine == "sing-box" {
+				dnsReserved = held
+			}
 		}
 	}
 	profile, _, err := coreCanonicalConfig(conf, dirs, ports, transparent, engine)
@@ -344,6 +350,13 @@ func newRouterNativeSession(ctx context.Context, log *logrus.Logger, conf *daeCo
 	}
 	for _, hook := range profileHooks {
 		hook(profile, ports)
+	}
+	if len(dnsReserved) > 0 {
+		for _, inbound := range mhObjects(profile["inbounds"]) {
+			if inbound["tag"] == "dns-in" {
+				inbound["listen"], inbound["listen_port"] = "127.0.0.1", privateDNS
+			}
+		}
 	}
 	program, hasTor := routerSingBoxBinary, false
 	var bridge *mhDNSBridge
@@ -425,6 +438,9 @@ func newRouterNativeSession(ctx context.Context, log *logrus.Logger, conf *daeCo
 		s.owned = true
 	}
 	cleanupFailure := func(cause error) error {
+		if s.dnsIngress != nil {
+			s.dnsIngress.Close()
+		}
 		if s.owned {
 			if cleanupErr := routerReleaseSingboxNetwork(dirs[0]); cleanupErr != nil {
 				return errors.New("core_cleanup_failed")
@@ -432,6 +448,22 @@ func newRouterNativeSession(ctx context.Context, log *logrus.Logger, conf *daeCo
 		}
 		_ = os.RemoveAll(dir)
 		return cause
+	}
+	if len(dnsReserved) > 0 {
+		// Rebind only after the dedicated firewall guard is installed. Closing
+		// the reservations also discards connections queued before that guard.
+		for _, listener := range dnsReserved {
+			_ = listener.Close()
+		}
+		s.dnsIngress, err = startRouterTPDNSBridge(ports.DNS, privateDNS)
+		if err != nil {
+			return nil, cleanupFailure(err)
+		}
+		defer func() {
+			if failure != nil {
+				s.dnsIngress.Close()
+			}
+		}()
 	}
 	s.cmd = exec.Command(program, "run", "--disable-color", "-D", dir, "-c", path)
 	if engine == "mihomo" {
@@ -652,6 +684,9 @@ func (s *routerSingBoxSession) Stop(ctx context.Context) error {
 	}()
 	s.ready.Store(false)
 	s.closeControlAPI()
+	if s.dnsIngress != nil {
+		s.dnsIngress.Close()
+	}
 	if s.cmd != nil && s.cmd.Process != nil {
 		_ = syscall.Kill(-s.cmd.Process.Pid, syscall.SIGTERM)
 	}

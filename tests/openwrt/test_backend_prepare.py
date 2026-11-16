@@ -41,6 +41,7 @@ SOURCES = (
     "dae-core/component/outbound/dialer/register.go",
     "dae-core/component/interface_manager.go",
     "dae-core/control/dial.go", "dae-core/control/dns_control.go",
+    "dae-core/control/kern/tproxy.c",
     "dae-core/control/dns_control_cache_cleanup_test.go",
     "dae-core/control/dns.go", "dae-core/control/dns_lifecycle_test.go",
     "dae-core/control/control_plane.go",

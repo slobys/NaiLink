@@ -94,14 +94,28 @@ def serve_wan(args):
             process.terminate()
             for server in servers:server.shutdown()
 
-def client_dns(address,name):
+def client_dns(address,name,transport='udp'):
     qtype=28 if name in ('probe6.test','ai6.test') else 1
     question=b"".join(bytes([len(p)])+p.encode() for p in name.split("."))+b"\0"+struct.pack('!HH',qtype,1)
     payload=struct.pack("!HHHHHH",12345,0x100,1,0,0,0)+question
-    with socket.socket(socket.AF_INET6 if ':' in address else socket.AF_INET,socket.SOCK_DGRAM) as sock:
+    with socket.socket(socket.AF_INET6 if ':' in address else socket.AF_INET,socket.SOCK_STREAM if transport=='tcp' else socket.SOCK_DGRAM) as sock:
         # Keep the same IPv4/IPv6 tuple across every transition.
-        sock.bind(('::' if ':' in address else '0.0.0.0',54053))
-        sock.settimeout(8);sock.sendto(payload,(address,53));answer=sock.recv(8192)
+        if transport=='udp':sock.bind(('::' if ':' in address else '0.0.0.0',54053))
+        sock.settimeout(8);sock.connect((address,53))
+        if transport=='tcp':
+            sock.sendall(struct.pack('!H',len(payload))+payload)
+            def read(size):
+                data=b''
+                while len(data)<size:
+                    part=sock.recv(size-len(data))
+                    assert part,'DNS TCP response ended early'
+                    data+=part
+                return data
+            answer=read(struct.unpack('!H',read(2))[0])
+        else:
+            # A connected socket rejects answers from an internal redirected
+            # port or a different IPv6 source address, just like real clients.
+            sock.send(payload);answer=sock.recv(8192)
     assert answer[:2]==payload[:2] and answer[3]&15==0 and struct.unpack("!H",answer[6:8])[0]>0,answer.hex()
     print(socket.inet_ntop(socket.AF_INET6,answer[-16:]) if qtype==28 else socket.inet_ntoa(answer[-4:]))
 
@@ -172,6 +186,10 @@ subprocess.run(['nft','-f','-'],input=body.encode(),check=True)
         run('sysctl','-w','net.ipv4.conf.lan-port.rp_filter=0')
         run('nft','add','table','bridge','unrelated_bridge_sentinel')
     if args.ipv6:
+        # Multiple LAN prefixes reproduce IPv6 wildcard UDP source selection:
+        # REDIRECT may pick the global address while the client uses the ULA.
+        run('ip','-6','addr','add','2001:db8:81::1/64','dev','lan0','nodad')
+        run('ip','netns','exec','core-client','ip','-6','addr','add','2001:db8:81::2/64','dev','lan-peer','nodad')
         for iface,space,local,remote in [('lan0','core-client','fd81:81::1/64','fd81:81::2/64'),('wan0','core-wan','fd81:82::1/64','fd81:82::2/64')]:
             peer='lan-peer' if iface=='lan0' else 'wan-peer';run('ip','-6','addr','add',local,'dev',iface,'nodad');run('ip','netns','exec',space,'ip','-6','addr','add',remote,'dev',peer,'nodad');run('ip','netns','exec',space,'ip','-6','route','add','default','via',local.split('/')[0])
         run('ip','-6','route','add','default','via','fd81:82::2','dev','wan0');run('sysctl','-w','net.ipv6.conf.all.forwarding=1')
@@ -243,8 +261,11 @@ subprocess.run(['nft','-f','-'],input=body.encode(),check=True)
             destinations=[("probe.test","203.0.113.80"),("ai.test","203.0.113.81")]
             if args.ipv6:destinations.extend([('probe6.test','2001:db8:83::80'),('ai6.test','2001:db8:83::81')])
             for name,expected in destinations:
-                for resolver in (['198.51.100.53','10.81.0.1','fd81:81::1'] if args.ipv6 else ['198.51.100.53','10.81.0.1']):
+                resolvers=['198.51.100.53','10.81.0.1','fd81:81::1','2001:db8:81::1'] if args.ipv6 else ['198.51.100.53','10.81.0.1']
+                for resolver in resolvers:
                     got=run("ip","netns","exec","core-client",sys.executable,Path(__file__).resolve(),"--client-dns",resolver,name).strip();assert got==expected,(label,resolver,name,got)
+                    if name in ('probe.test','probe6.test'):
+                        got=run("ip","netns","exec","core-client",sys.executable,Path(__file__).resolve(),"--client-dns",resolver,name,'tcp').strip();assert got==expected,(label,'tcp',resolver,name,got)
                 resolved='['+expected+']' if ':' in expected else expected
                 body=run("ip","netns","exec","core-client","curl","--noproxy","*","--resolve",f"{name}:8080:{resolved}","-fsS","-m","10",f"http://{name}:8080/identity")
                 assert json.loads(body)["peer"] not in ("10.81.0.2","10.82.0.1",'fd81:81::2','fd81:82::1'),(label,"traffic bypassed proxy",body)
@@ -415,7 +436,7 @@ subprocess.run(['nft','-f','-'],input=body.encode(),check=True)
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     for name in ("runtime","mihomo","singbox","probe","nft-root","workspace","host-netns","cgroup-root"):parser.add_argument("--"+name)
-    parser.add_argument("--inside",action="store_true");parser.add_argument("--wan",action="store_true");parser.add_argument("--client-dns",nargs=2)
+    parser.add_argument("--inside",action="store_true");parser.add_argument("--wan",action="store_true");parser.add_argument("--client-dns",nargs='+')
     parser.add_argument('--target-core',choices=['sing-box','mihomo'],default='sing-box')
     parser.add_argument('--fw4',action='store_true')
     parser.add_argument('--ipv6',action='store_true')

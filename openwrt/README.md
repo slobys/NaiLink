@@ -1,5 +1,9 @@
 # NaiLink · 奶油互联
 
+## 0.6.86 DNS 数据面修复
+
+修复 dae 接管时 IPv4 / IPv6 TCP DNS 被健康门控丢弃的问题。sing-box / TPROXY 使用保留 IPv6 原始目的地址的 DNS 入口，修复回复端口变成内部随机端口造成的超时；DNS 上游及分流策略继续由原内核处理。保留现有节点、订阅、群组和配置，兼容内核版本不变。实机验证记录见 `docs/dns-validation-2026-11-16.md`。
+
 ## 0.6.85 IPv6 分流修复
 
 新建分流预设保留原生 IPv6 联网，明确的 AI、Netflix 和自定义规则优先；升级保留已有路由。修复 mihomo 嗅探清空原始地址导致 IPv6 规则失效，保留 IPv6 服务器节点的地址和 TLS / SNI。IPv6 公网 VPS 尚待部署实测，见 VALIDATION.md。
