@@ -11,6 +11,7 @@ import http.server
 import json
 import os
 from pathlib import Path
+import secrets
 import socket
 import socketserver
 import ssl
@@ -56,6 +57,13 @@ class UDP(socketserver.BaseRequestHandler):
         sock.sendto(data, self.client_address)
 
 
+class HTTPServer(http.server.ThreadingHTTPServer):
+    # Native probes race both address families, and the bulk test exercises
+    # eight workers. The stdlib's queue of five can drop loopback SYN bursts.
+    request_queue_size = 128
+    daemon_threads = True
+
+
 _reserved_ports = {}
 
 
@@ -70,9 +78,12 @@ def port(udp=False):
     for _ in range(64):
         tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        tcp.bind(('127.0.0.1', 0))
-        number = tcp.getsockname()[1]
         try:
+            # The child must rebind after reservations are released. Keep its
+            # ports outside the standard Linux ephemeral range so unrelated
+            # outbound sockets cannot claim them in that handoff window.
+            number = 10000 + secrets.randbelow(20000)
+            tcp.bind(('127.0.0.1', number))
             udp_socket.bind(('127.0.0.1', number))
         except OSError:
             tcp.close(); udp_socket.close()
@@ -83,7 +94,7 @@ def port(udp=False):
 
 
 def run(args):
-    with http.server.ThreadingHTTPServer((args.fixture_address, 0), HTTP) as http_server, socketserver.UDPServer((args.fixture_address, 0), UDP) as udp:
+    with HTTPServer((args.fixture_address, 0), HTTP) as http_server, socketserver.UDPServer((args.fixture_address, 0), UDP) as udp:
         for server in (http_server, udp):
             threading.Thread(target=server.serve_forever, daemon=True).start()
         try:
@@ -109,7 +120,7 @@ def run_fixture(args, http_port, udp_port):
             "-out", str(work / "vless-cert.pem"), "-subj", "/CN=vless.fixture.test", "-addext", "subjectAltName=DNS:vless.fixture.test", "-days", "1",
         ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         vless_tls = {"enabled": True, "certificate_path": str(work / "vless-cert.pem"), "key_path": str(work / "vless-key.pem")}
-        cover = http.server.ThreadingHTTPServer(('127.0.0.1', 0), HTTP)
+        cover = HTTPServer(('127.0.0.1', 0), HTTP)
         cover_tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         cover_tls.minimum_version = ssl.TLSVersion.TLSv1_3
         cover_tls.load_cert_chain(work / 'vless-cert.pem', work / 'vless-key.pem')
@@ -172,9 +183,23 @@ def run_fixture(args, http_port, udp_port):
         ssh_source = Path(__file__).with_name('ssh_fixture.go')
         subprocess.run(['go', 'build', '-o', str(work / 'ssh-fixture'), str(ssh_source)], cwd=args.wing, check=True)
         release_port(ssh_port)
-        ssh_process = subprocess.Popen([str(work / 'ssh-fixture'), str(work / 'ssh-key'), str(ssh_port), str(http_port)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        ssh_log = cleanup.enter_context((work / 'ssh.log').open('w', encoding='utf-8'))
+        ssh_process = subprocess.Popen([str(work / 'ssh-fixture'), str(work / 'ssh-key'), str(ssh_port), str(http_port)], stdout=ssh_log, stderr=subprocess.STDOUT)
         cleanup.callback(ssh_process.wait, 5)
         cleanup.callback(ssh_process.terminate)
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            if ssh_process.poll() is not None:
+                raise RuntimeError('SSH fixture exited: ' + (work / 'ssh.log').read_text())
+            try:
+                with socket.create_connection(('127.0.0.1', ssh_port), timeout=0.2) as connection:
+                    if connection.recv(256).startswith(b'SSH-'):
+                        break
+            except OSError:
+                pass
+            time.sleep(0.05)
+        else:
+            raise RuntimeError('SSH fixture was not ready: ' + (work / 'ssh.log').read_text())
         host_key = ' '.join((work / 'ssh-key.pub').read_text().split()[:2])
         native_cases.append({'Name': 'ssh-uri-host-key', 'Link': f'ssh://fixture:fixture@127.0.0.1:{ssh_port}?host_key=' + urllib.parse.quote(host_key, safe=''), 'TCPOnly': True})
         native_case('ssh-native-json', {'type': 'ssh', 'server': '127.0.0.1', 'server_port': ssh_port, 'user': 'fixture', 'password': 'fixture', 'host_key': [host_key]}, 'ssh-json', True)
@@ -348,6 +373,7 @@ def run_fixture(args, http_port, udp_port):
                     lines=(work / "server.log").read_text(errors="replace").splitlines()
                     relevant=[line[:300] for line in lines if 'wireguard' in line.lower() or '10.66.66.' in line]
                     print("Independent WireGuard fixture trace:\n"+'\n'.join(relevant[-48:]),flush=True)
+                    print("Independent SSH fixture trace:\n" + '\n'.join((work / 'ssh.log').read_text(errors='replace').splitlines()[-12:]), flush=True)
                 return result
             finally:
                 process.terminate()
