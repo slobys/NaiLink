@@ -71,6 +71,7 @@ jobs:
         run: |
           python3 openwrt/prepare-wing.py wing
           cd wing
+          go generate ./graphql/service/config/global
           go test -race -count=1 -tags dae_stub_ebpf ./dae -run '^TestRouter(Dae|Core|RetiredDae|ReloadReleases|Readiness)'
           go test -race -count=1 -tags dae_stub_ebpf ./graphql/service/config -run '^TestService'
 
