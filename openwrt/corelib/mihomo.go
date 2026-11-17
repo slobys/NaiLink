@@ -19,6 +19,16 @@ const MihomoVersion = "1.19.33"
 const MihomoRelease = "openwrt-v0.6.40"
 const MihomoBinaryPath = "/usr/libexec/daed/cores/mihomo"
 
+// Keep the original default valid for installations without a version receipt.
+// New installs publish a receipt for the reviewed compatibility core.
+const ReviewedMihomoVersion = "1.19.34-nailink.1"
+const ReviewedMihomoRelease = "nailink-cores-20261117"
+
+var ReviewedMihomoReleases = map[string]Release{
+	"amd64": {"x86_64", "nailink-mihomo-1.19.34-nailink.1-x86_64.tar.gz", "aed28a081ff80f234e15484d238b4f02b43c64bb51082c0ecca977b7c8576603"},
+	"arm64": {"arm64", "nailink-mihomo-1.19.34-nailink.1-arm64.tar.gz", "d235ca113901b47c4ff415635f0d690efaf580b2cbe364d3b294494b0014385f"},
+}
+
 var MihomoReleases = map[string]Release{
 	"amd64": {"x86_64", "nailink-mihomo-1.19.33-x86_64.tar.gz", "db29d98245b0f8edde2fd337987a2002396ceeffcf1716a5ecf1f387453710f7"},
 	"arm64": {"arm64", "nailink-mihomo-1.19.33-arm64.tar.gz", "6e79715e8c63786bbda35298c7b4bf56acae1d3401ae97dcc0e4c764404c897f"},

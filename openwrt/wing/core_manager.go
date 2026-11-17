@@ -180,7 +180,11 @@ func (m *routerCoreManager) plan(ctx context.Context, target string, modes ...st
 		ports := sbPorts{Mixed: 39001, API: 39002, DNS: 39003, Mode: mode, TProxy: 39006, Secret: "configuration-check-only"}
 		profile, warnings, err = coreCanonicalConfig(conf, m.dirs, ports, !m.dry, target)
 		if err == nil && target == "mihomo" {
-			profile, err = mihomoFromCanonical(profile, conf, ports)
+			preserved := routerMihomoPreservesSniffedIP()
+			profile, err = mihomoFromCanonical(profile, conf, ports, preserved)
+			if !preserved && conf.Global.DialMode != "ip" && mihomoHasIPVersionPolicy(conf) {
+				warnings = append(warnings, "旧版 mihomo 保留原地址转发；IPv6 域名代理修复需要在代理内核窗口检查并更新 NaiLink 兼容内核，现有节点与规则保留。")
+			}
 			for i := range warnings {
 				warnings[i] = strings.ReplaceAll(warnings[i], "sing-box", "mihomo")
 			}

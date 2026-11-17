@@ -142,7 +142,7 @@ func (m *maintenanceManager) coreStatus() *coreMaintenanceStatus {
 	}
 	status.Engines = map[string]optionalCoreStatus{
 		"sing-box": {Installed: status.Installed, Supported: supported, Version: m.installedCoreVersion("sing-box"), BundledVersion: routercore.SingBoxVersion, Update: m.checkedUpdate("sing-box")},
-		"mihomo":   {Installed: mhInstalled, Supported: mhSupported, Version: m.installedCoreVersion("mihomo"), BundledVersion: routercore.MihomoVersion, Update: m.checkedUpdate("mihomo")},
+		"mihomo":   {Installed: mhInstalled, Supported: mhSupported, Version: m.installedCoreVersion("mihomo"), BundledVersion: routercore.ReviewedMihomoVersion, Update: m.checkedUpdate("mihomo")},
 	}
 	var saved storedCorePlan
 	if readMaintenanceJSON(filepath.Join(m.stateDir, "core-plan.json"), &saved) == nil && m.now().Unix()-saved.Checked <= 600 && saved.Checked <= m.now().Unix()+60 {
@@ -310,8 +310,8 @@ func (m *maintenanceManager) installOptionalCore(ctx context.Context, job *maint
 	prefix := "sing-box version " + version + "\n"
 	versionError := "singbox_version_mismatch"
 	if engine == "mihomo" {
-		binary, version, releaseTag = m.mihomoPath(), routercore.MihomoVersion, routercore.MihomoRelease
-		releases = routercore.MihomoReleases
+		binary, version, releaseTag = m.mihomoPath(), routercore.ReviewedMihomoVersion, routercore.ReviewedMihomoRelease
+		releases = routercore.ReviewedMihomoReleases
 		versionArgs = []string{"-v"}
 		prefix = "Mihomo Meta v" + version + " "
 		versionError = "mihomo_version_mismatch"

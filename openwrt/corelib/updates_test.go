@@ -65,3 +65,25 @@ func TestCorePublishLockExcludesStartup(t *testing.T) {
 		t.Fatal("published during startup")
 	}
 }
+
+func TestMihomoLegacyAndReviewedReceiptsRemainDistinct(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Chmod(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	binary := filepath.Join(root, "mihomo")
+	if err := os.WriteFile(binary, []byte("test-binary"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if v, err := ExpectedCoreVersion(binary, "mihomo"); err != nil || v != "1.19.33" {
+		t.Fatal("legacy installations without receipts changed", v, err)
+	}
+	digest, _ := BinarySHA256(binary)
+	data, _ := json.Marshal(CoreReceipt{Engine: "mihomo", Version: ReviewedMihomoVersion, SHA256: digest, MinAdapter: AdapterRevision, MaxAdapter: AdapterRevision})
+	if err := Write(ReceiptPath(binary), data); err != nil {
+		t.Fatal(err)
+	}
+	if v, err := ExpectedCoreVersion(binary, "mihomo"); err != nil || v != ReviewedMihomoVersion {
+		t.Fatal("reviewed version receipt not honored", v, err)
+	}
+}

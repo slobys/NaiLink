@@ -235,7 +235,7 @@ subprocess.run(['nft','-f','-'],input=body.encode(),check=True)
         dns="upstream { test: 'udp://198.51.100.53:53' }\nrouting { request { fallback: test } }"
         if args.target_core=='mihomo':dns="upstream { domestic: 'udp://198.51.100.53:53'\n foreignTcp: 'tcp://198.51.100.53:53'\n foreignUdp: 'udp://198.51.100.53:53' }\nrouting { request { qname(full:ai.test,full:ai6.test) -> foreignTcp\nqname(full:probe.test,full:probe6.test) -> foreignUdp\nfallback: domestic } }"
         did=gql('mutation{createDns(name:"Core DNS",dns:'+json.dumps(dns)+'){id}}')["createDns"]["id"]
-        routing="dip(10.82.0.0/24) -> direct\ndomain(full:ai.test,full:ai6.test) -> AI\nfallback: proxy"
+        routing="dip(10.82.0.0/24) -> direct\ndomain(full:ai.test) -> AI\nipversion(6) && domain(full:ai6.test) -> AI\ndomain(full:ai6.test) -> block\nfallback: proxy"
         rid=gql('mutation{createRouting(name:"Core route",routing:'+json.dumps(routing)+'){id}}')["createRouting"]["id"]
         gql('mutation{selectConfig(id:'+json.dumps(cid)+') selectDns(id:'+json.dumps(did)+') selectRouting(id:'+json.dumps(rid)+')}')
         node_ids=[]

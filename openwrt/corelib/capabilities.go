@@ -37,5 +37,5 @@ func ProtocolCapabilities() []EngineCapability {
 	}
 	mh = append(mh, ProtocolCapability{"VLESS XHTTP / Encryption", "vless:// / Clash YAML", true, "支持常用 XHTTP 参数及 ML-KEM 加密；不会忽略未知附加选项"})
 	mh = append(mh, ProtocolCapability{"ShadowsocksR", "ssr://", true, ""}, ProtocolCapability{"Hysteria 1", "hysteria:// / JSON", true, ""}, ProtocolCapability{"SSH", "ssh:// / JSON", true, "支持内联私钥和主机公钥，不读取用户文件路径"}, ProtocolCapability{"Snell v4", "snell:// / JSON", true, "v6 暂不能转换"}, ProtocolCapability{"WireGuard", "wireguard:// / endpoint JSON", true, "内置用户态实现，默认 1 个工作线程"}, ProtocolCapability{"Naive / Tor / Juicity / ShadowTLS", "", false, "本轮适配暂不支持；运行配置引用这些节点时会阻止切换，原节点保留"})
-	return []EngineCapability{{ID: "dae", Version: "内置", Protocols: dae}, {ID: "sing-box", Version: SingBoxVersion, Protocols: sb}, {ID: "mihomo", Version: MihomoVersion, Protocols: mh}}
+	return []EngineCapability{{ID: "dae", Version: "内置", Protocols: dae}, {ID: "sing-box", Version: SingBoxVersion, Protocols: sb}, {ID: "mihomo", Version: ReviewedMihomoVersion, Protocols: mh}}
 }
