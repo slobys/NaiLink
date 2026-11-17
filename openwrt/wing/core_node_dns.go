@@ -37,9 +37,9 @@ func routerWithNodeDNS(conf *daeConfig.Config, log *logrus.Logger, native ...boo
 		return nil, nil, errors.New("节点引导 DNS 配置无效")
 	}
 	servers := []sbObject{{"tag": "fallback", "type": "udp", "server": resolvers[0].Addr().String(), "server_port": int(resolvers[0].Port())}}
-	// Native cores previously bootstrapped through the first configured DNS.
-	// Keep that path for all hosts outside the imported exact-host policy.
-	if len(native) > 0 && native[0] && len(conf.Dns.Upstream) > 0 {
+	// Without an explicit bootstrap choice, keep the native cores' first-DNS
+	// default for hosts outside the imported exact-host policy.
+	if len(native) > 0 && native[0] && strings.TrimSpace(conf.Global.BootstrapResolver) == "" && len(conf.Dns.Upstream) > 0 {
 		_, raw := daeCommon.GetTagFromLinkLikePlaintext(string(conf.Dns.Upstream[0]))
 		if u, err := url.Parse(raw); err == nil && net.ParseIP(u.Hostname()) != nil {
 			kind, port := u.Scheme, 53

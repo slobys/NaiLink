@@ -766,6 +766,7 @@ func routerSingleHopDialer(ctx context.Context, gOption *GlobalOption, iOption I
         ("dae/router_core_group_runtime.go", "core_group_runtime.go"),
         ("dae/router_service_probe.go", "service_probe.go"),
         ("graphql/service/config/router_service_presets.go", "service_presets.go"),
+        ("graphql/service/config/router_service_presets_ipv6.go", "service_presets_ipv6.go"),
         ("db/router_service_group_refs.go", "service_group_refs.go"),
         ("graphql/service/node/router_service_cache.go", "node_service_cache.go"),
         ("graphql/router_service_mutations.go", "service_mutations.go"),
@@ -805,6 +806,7 @@ func routerSingleHopDialer(ctx context.Context, gOption *GlobalOption, iOption I
         ("graphql/service/node/router_test_jobs_test.go", "node_test_jobs_test.go"),
         ("graphql/service/node/router_service_cache_test.go", "node_service_cache_test.go"),
         ("graphql/service/config/router_service_presets_test.go", "service_presets_test.go"),
+        ("graphql/service/config/router_service_presets_ipv6_test.go", "service_presets_ipv6_test.go"),
         ("dae/router_service_probe_test.go", "service_probe_test.go"),
         ("graphql/router_test_jobs.go", "test_job_mutations.go"),
         ("dae/router_core_manager_test.go", "core_manager_test.go"),
@@ -905,6 +907,16 @@ func routerSingleHopDialer(ctx context.Context, gOption *GlobalOption, iOption I
     cmd_text = cmd_text[:begin] + restore + cmd_text[end:]
     if 'dae.InitializeRouterCores(cfgDir)' not in cmd_text:
         cmd_text = cmd_text.replace('// Read config from --config cfgDir.', 'if err := dae.InitializeRouterCores(cfgDir); err != nil { logrus.Fatal("Core state unavailable: ", err) }\n\n\t\t\t// Read config from --config cfgDir.', 1)
+    if 'config.UpgradeLegacyServiceIPv6Presets' not in cmd_text:
+        if cmd_text.count('subscription.UpdateAll(context.TODO())') != 1:
+            raise ValueError("Unknown preset startup sequence; review before applying")
+        cmd_text = cmd_text.replace('subscription.UpdateAll(context.TODO())', '''if count, err := config.UpgradeLegacyServiceIPv6Presets(context.Background(), []string{cfgDir, cfgDir + "/geodata/current"}); err != nil {
+                logrus.Warn("IPv6 preset upgrade skipped; existing routing retained")
+            } else if count > 0 {
+                logrus.Infof("Updated %d unedited IPv6 service preset(s)", count)
+            }
+
+            subscription.UpdateAll(context.TODO())''', 1)
     if 'if dae.RouterCoreRecovered()' not in cmd_text:
         cmd_text = re.sub(r'(func restoreRunningState\(\) (?:error|\(err error\)) \{)', r'\1\n\tif dae.RouterCoreRecovered() { return nil }', cmd_text, count=1)
     cmd_file.write_text(cmd_text, encoding="utf-8", newline="\n")

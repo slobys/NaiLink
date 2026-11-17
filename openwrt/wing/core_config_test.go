@@ -309,6 +309,116 @@ func TestRouterCoreDefaultConfigurationConversion(t *testing.T) {
 		t.Fatalf("%v: %s", err, output)
 	}
 }
+
+func TestRouterCoreExplicitNodeBootstrapPreservesWebsiteDNS(t *testing.T) {
+	for _, address := range []string{"1.1.1.1:5353", "[2606:4700:4700::1111]:53"} {
+		t.Run(address, func(t *testing.T) {
+			conf, dirs := coreFixtureConfig(t)
+			baseline, _, err := singBoxConfig(conf, dirs, sbPorts{}, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			before := baseline["dns"].(sbObject)
+			conf.Global.BootstrapResolver = address
+			original := restartConfigKey(conf)
+			profile, _, err := singBoxConfig(conf, dirs, sbPorts{}, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			dns := profile["dns"].(sbObject)
+			servers := dns["servers"].([]sbObject)
+			previous := before["servers"].([]sbObject)
+			if len(servers) != len(previous)+1 || dns["final"] != before["final"] {
+				t.Fatal("node bootstrap replaced website DNS")
+			}
+			oldServers, _ := json.Marshal(previous)
+			newServers, _ := json.Marshal(servers[:len(previous)])
+			oldRules, _ := json.Marshal(before["rules"])
+			newRules, _ := json.Marshal(dns["rules"])
+			if string(oldServers) != string(newServers) || string(oldRules) != string(newRules) {
+				t.Fatal("changed website DNS upstreams or routing")
+			}
+			server := servers[len(previous)]
+			if server["tag"] != "dns:nailink-bootstrap" || server["type"] != "udp" || server["detour"] != nil {
+				t.Fatal("node resolver inherited the website proxy detour")
+			}
+			route := profile["route"].(sbObject)
+			if route["default_domain_resolver"].(sbObject)["server"] != server["tag"] {
+				t.Fatal("sing-box did not select the explicit node resolver")
+			}
+			mh, err := mihomoFromCanonical(profile, conf, sbPorts{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			canonical := mh["_nailink_dns"].(sbObject)
+			if canonical["route"].(sbObject)["default_domain_resolver"].(sbObject)["server"] != server["tag"] {
+				t.Fatal("mihomo DNS bridge lost the explicit node resolver")
+			}
+			if restartConfigKey(conf) != original {
+				t.Fatal("modified the user's source configuration")
+			}
+		})
+	}
+}
+
+func TestRouterCoreRejectsInvalidExplicitBootstrap(t *testing.T) {
+	for _, address := range []string{"resolver.example:53", "https://1.1.1.1/dns-query", "1.1.1.1:0", "2606:4700:4700::1111:53"} {
+		conf, dirs := coreFixtureConfig(t)
+		conf.Global.BootstrapResolver = address
+		if _, _, err := singBoxConfig(conf, dirs, sbPorts{}, true); err == nil {
+			t.Fatal("silently ignored invalid bootstrap", address)
+		}
+	}
+}
+
+func TestRouterCoreNodeBootstrapDoesNotCollideWithUserDNSTags(t *testing.T) {
+	conf, dirs := coreFixtureConfig(t)
+	conf.Global.BootstrapResolver = "1.1.1.1:53"
+	conf.Dns.Upstream = append(conf.Dns.Upstream, daeConfig.KeyableString("nailink-bootstrap:udp://9.9.9.9:53"))
+	profile, _, err := singBoxConfig(conf, dirs, sbPorts{}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tags := map[string]bool{}
+	for _, server := range profile["dns"].(sbObject)["servers"].([]sbObject) {
+		tag := server["tag"].(string)
+		if tags[tag] {
+			t.Fatal("duplicate DNS server tag", tag)
+		}
+		tags[tag] = true
+	}
+	if profile["route"].(sbObject)["default_domain_resolver"].(sbObject)["server"] == "dns:nailink-bootstrap" {
+		t.Fatal("node resolver selected the user's website DNS alias")
+	}
+}
+
+func TestRouterCoreServiceIPv6AssetsRequireEveryCategory(t *testing.T) {
+	_, dirs := coreFixtureConfig(t)
+	if RouterServiceIPv6AssetsAvailable(dirs) {
+		t.Fatal("CN-only rules accepted for automatic upgrade")
+	}
+	data := &geodata.GeoSiteList{}
+	for _, code := range []string{"GOOGLE", "YOUTUBE", "GITHUB"} {
+		data.Entry = append(data.Entry, &geodata.GeoSite{CountryCode: code, Domain: []*geodata.Domain{{Type: geodata.Domain_RootDomain, Value: "fixture.example"}}})
+	}
+	encoded, err := proto.Marshal(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dirs[0], "geosite.dat")
+	if err = os.WriteFile(path, encoded, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if !RouterServiceIPv6AssetsAvailable(dirs) {
+		t.Fatal("complete service rule data rejected")
+	}
+	if err = os.WriteFile(path, []byte("invalid geodata"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if RouterServiceIPv6AssetsAvailable(dirs) {
+		t.Fatal("corrupt geodata accepted")
+	}
+}
 func TestRouterCoreUnsupportedConfigNeverFallsBackToDirect(t *testing.T) {
 	conf, dirs := coreFixtureConfig(t)
 	conf.Global.Mptcp = true

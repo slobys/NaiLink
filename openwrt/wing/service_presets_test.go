@@ -223,7 +223,7 @@ func TestServiceDefaultsNeverRewriteExistingPreset(t *testing.T) {
 
 func TestServicePresetNativeIPv6KeepsExplicitRoutingPriority(t *testing.T) {
 	base := "routing {\n# fallback: block (comment only)\ndip(geoip:private) -> direct\ndomain(full:custom.example) -> customProxy\ndip(geoip:cn) -> direct\nfallback: proxy\n}"
-	route := serviceRouting(base, "MyAI", "MyNetflix")
+	route := serviceRouting(base, "customProxy", "MyAI", "MyNetflix")
 	if _, err := dae.ParseConfig(nil, nil, &route); err != nil {
 		t.Fatal(err)
 	}
@@ -231,6 +231,7 @@ func TestServicePresetNativeIPv6KeepsExplicitRoutingPriority(t *testing.T) {
 		"domain(full:custom.example) -> customProxy",
 		"domain(suffix:chatgpt.com) -> MyAI",
 		"domain(geosite:netflix) -> MyNetflix",
+		"ipversion(6) && domain(geosite:google, geosite:youtube, geosite:github) -> customProxy",
 		"dip(geoip:cn) -> direct",
 		"ipversion(6) -> direct",
 		"fallback: proxy",

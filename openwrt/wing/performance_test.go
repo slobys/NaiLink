@@ -20,6 +20,31 @@ import (
 
 type nodeDNSRoundTripper func(*http.Request) (*http.Response, error)
 
+func TestRouterCoreNativeNodeDNSKeepsExplicitBootstrap(t *testing.T) {
+	for _, explicit := range []bool{false, true} {
+		conf, _ := coreFixtureConfig(t)
+		conf.Global.NailinkNodeDNS = routercore.PackNodeDNS(`{"node.fixture.test":["https://dns.google/dns-query"]}`)
+		want := "223.5.5.5"
+		if explicit {
+			conf.Global.BootstrapResolver = "1.1.1.1:53"
+			want = "1.1.1.1"
+		}
+		before := restartConfigKey(conf)
+		_, bridge, err := routerWithNodeDNS(conf, nil, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bridge.upstreams["fallback"]["server"] != want {
+			bridge.Close()
+			t.Fatal("native subscription DNS bridge ignored the bootstrap choice")
+		}
+		bridge.Close()
+		if restartConfigKey(conf) != before {
+			t.Fatal("changed the saved bootstrap choice")
+		}
+	}
+}
+
 func TestNodeDNSMetadataSurvivesRecoverySnapshot(t *testing.T) {
 	conf, _ := coreFixtureConfig(t)
 	conf.Global.NailinkNodeDNS = routercore.PackNodeDNS(`{"node.fixture.test":["https://dns.google/dns-query?value=a'b"]}`)
