@@ -229,7 +229,7 @@ func TestMihomoArchiveAndFailurePreserveExisting(t *testing.T) {
 	db := filepath.Join(m.configDir, "wing.db")
 	os.WriteFile(db, []byte("all user nodes and configuration"), 0600)
 	m.fetch = func(_ context.Context, address, dest string, _ int64) error {
-		if address != "https://github.com/slobys/NaiLink/releases/download/"+routercore.MihomoRelease+"/"+routercore.MihomoReleases["amd64"].Archive {
+		if address != "https://github.com/slobys/NaiLink/releases/download/"+routercore.ReviewedMihomoRelease+"/"+routercore.ReviewedMihomoReleases["amd64"].Archive {
 			t.Fatal("unexpected origin", address)
 		}
 		data, e := os.ReadFile(archive)

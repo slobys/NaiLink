@@ -235,13 +235,17 @@ func TestRouterMihomoIPVersionRulesPreserveDestination(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			profile, err := mihomoFromCanonical(canonical, conf, ports)
+			profile, err := mihomoFromCanonical(canonical, conf, ports, false)
 			if err != nil {
 				t.Fatal(err)
 			}
 			sniffer := profile["sniffer"].(sbObject)
 			if sniffer["enable"] != true || sniffer["override-destination"] != (version == "") {
 				t.Fatal("lost sniffing or discarded the original IP family", sniffer)
+			}
+			compatible, err := mihomoFromCanonical(canonical, conf, ports, true)
+			if err != nil || compatible["sniffer"].(sbObject)["override-destination"] != true {
+				t.Fatal("compatible core cannot dial sniffed proxy domains", err)
 			}
 			rules := profile["rules"].([]string)
 			if !strings.HasPrefix(rules[0], "DOMAIN,ai.example,") || before != restartConfigKey(conf) {

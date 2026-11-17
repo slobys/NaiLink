@@ -17,6 +17,17 @@ import (
 
 var routerMihomoBinary = routercore.MihomoBinaryPath
 
+func mihomoHasIPVersionPolicy(conf *daeConfig.Config) bool {
+	for _, rule := range conf.Routing.Rules {
+		for _, match := range rule.AndFunctions {
+			if match.Name == "ipversion" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func mhRuleTarget(match, target string) string {
 	parts := strings.SplitN(match, ",", 3)
 	if len(parts) < 2 {
@@ -227,7 +238,7 @@ func (c *mhRuleCompiler) match(rule sbObject) (string, error) {
 
 // Convert the existing validated, database-independent canonical profile. The
 // sing-box executable is not needed and no user record is migrated or rewritten.
-func mihomoFromCanonical(profile sbObject, conf *daeConfig.Config, ports sbPorts) (sbObject, error) {
+func mihomoFromCanonical(profile sbObject, conf *daeConfig.Config, ports sbPorts, preservedSniffedIP ...bool) (sbObject, error) {
 	sets := map[string][]sbObject{}
 	for _, set := range mhObjects(profile["route"].(sbObject)["rule_set"]) {
 		sets[mhString(set["tag"])] = mhObjects(set["rules"])
@@ -347,10 +358,10 @@ func mihomoFromCanonical(profile sbObject, conf *daeConfig.Config, ports sbPorts
 		overrideDestination := true
 		for _, rule := range conf.Routing.Rules {
 			for _, match := range rule.AndFunctions {
-				if match.Name == "ipversion" {
+				if match.Name == "ipversion" && len(preservedSniffedIP) > 0 && !preservedSniffedIP[0] {
 					// Mihomo clears DstIP when overriding the sniffed destination.
-					// Keep the actual address family for ipversion rules. SniffHost
-					// still supplies the domain to domain-based routing rules.
+					// Legacy cores keep their previous safe IP-routing behavior.
+					// The reviewed core retains the IP while dialing proxy names.
 					overrideDestination = false
 				}
 			}

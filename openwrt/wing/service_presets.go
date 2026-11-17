@@ -60,12 +60,20 @@ func SetGroupService(ctx context.Context, encoded graphql.ID, profile string) (i
 	q := db.DB(ctx).Model(&db.Group{}).Where("id = ?", id).Update("service_profile", profile)
 	return int32(q.RowsAffected), q.Error
 }
-func serviceRouting(base, ai, netflix string) string {
+
+const serviceIPv6Routing = "# NaiLink IPv6 service routing\nipversion(6) && domain(geosite:google, geosite:youtube, geosite:github) -> "
+
+func serviceRouting(base, proxy, ai, netflix string) string {
 	block := serviceSplitStart
 	for _, match := range serviceAIMatches {
 		block += "domain(" + match + ") -> " + ai + "\n"
 	}
 	block += "domain(geosite:netflix) -> " + netflix + "\n# End NaiLink service split\n"
+	// Keep the native fallback for other IPv6 destinations, but route these
+	// services before CN shortcuts, whose domain lists can overlap with them.
+	if !serviceHasIPv6Decision(base) {
+		block += serviceIPv6Routing + proxy + "\n"
+	}
 	// Keep custom blocking/private rules ahead of the preset. Place service
 	// domains before the ordinary CN shortcut, or before the final fallback.
 	position := strings.Index(base, "dip(geoip:cn)")
@@ -81,18 +89,15 @@ func serviceRouting(base, ai, netflix string) string {
 	return serviceNativeIPv6Fallback(base[:position] + block + base[position:])
 }
 
-// Only newly created presets use this policy. Explicit service, blocking and
-// user routing rules retain their priority; existing saved presets are untouched.
+// Preset construction preserves explicit IPv6 decisions. Updating a recognized
+// unedited legacy preset is handled separately by the guarded startup migration.
 // A proxy with IPv4-only egress must not break the LAN's working native IPv6.
 // The node server's own address family is independent of this destination rule.
 func serviceNativeIPv6Fallback(base string) string {
-	lines := strings.Split(base, "\n")
-	for _, line := range lines {
-		compact := strings.NewReplacer(" ", "", "\t", "").Replace(strings.TrimSpace(line))
-		if strings.HasPrefix(compact, "ipversion(6)->") {
-			return base // Preserve an explicit all-IPv6 routing decision.
-		}
+	if serviceHasIPv6Decision(base) {
+		return base
 	}
+	lines := strings.Split(base, "\n")
 	for i, line := range lines {
 		if strings.HasPrefix(strings.TrimSpace(line), "fallback:") {
 			lines[i] = "# Native IPv6 fallback; explicit routing above still takes priority\nipversion(6) -> direct\n" + line
@@ -100,6 +105,23 @@ func serviceNativeIPv6Fallback(base string) string {
 		}
 	}
 	return base
+}
+
+func serviceHasIPv6Decision(base string) bool {
+	parsed, err := dae.ParseConfig(nil, nil, &base)
+	if err != nil {
+		return true // Do not reinterpret an unrecognized user policy.
+	}
+	for _, rule := range parsed.Routing.Rules {
+		if len(rule.AndFunctions) == 1 {
+			f := rule.AndFunctions[0]
+			if f.Name == "ipversion" && len(f.Params) == 1 && f.Params[0].Key == "" &&
+				((!f.Not && f.Params[0].Val == "6") || (f.Not && f.Params[0].Val == "4")) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func EnsureServicePresets(ctx context.Context, proxyID graphql.ID, name string, selectRoute bool) (string, error) {
@@ -200,7 +222,7 @@ func EnsureServicePresets(ctx context.Context, proxyID graphql.ID, name string, 
 			if e = tx.Where("selected = ?", true).First(&base).Error; e != nil {
 				return e
 			}
-			text := serviceRouting(base.Routing, groups["ai"].Name, groups["netflix"].Name)
+			text := serviceRouting(base.Routing, proxy.Name, groups["ai"].Name, groups["netflix"].Name)
 			if _, e = dae.ParseConfig(nil, nil, &text); e != nil {
 				return fmt.Errorf("分流规则校验失败: %w", e)
 			}

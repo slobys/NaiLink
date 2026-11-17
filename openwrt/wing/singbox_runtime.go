@@ -375,7 +375,7 @@ func newRouterNativeSession(ctx context.Context, log *logrus.Logger, conf *daeCo
 			}
 		}
 		program = routerMihomoBinary
-		profile, err = mihomoFromCanonical(profile, conf, ports)
+		profile, err = mihomoFromCanonical(profile, conf, ports, routerMihomoPreservesSniffedIP())
 		if err != nil {
 			return nil, err
 		}

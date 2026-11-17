@@ -64,13 +64,17 @@ def main():
     catalog = json.loads((Path(__file__).parent/'core-updates-sources.json').read_text())
     entry = catalog[args.engine]
     if args.engine == 'mihomo':
-        import mihomo
-        mihomo.VERSION = entry['version']
-        mihomo.COMMIT = entry['commit']
-        mihomo.SOURCE_URL = entry['source_url']
-        mihomo.SOURCE_SHA = entry['source_sha256']
-        mihomo.CPUS = entry['binaries']
-        mihomo.package(args.cpu, args.work, args.output)
+        if '-nailink.' in entry['version']:
+            import mihomo_compat
+            mihomo_compat.package(entry, args.cpu, args.work, args.output)
+        else:
+            import mihomo
+            mihomo.VERSION = entry['version']
+            mihomo.COMMIT = entry['commit']
+            mihomo.SOURCE_URL = entry['source_url']
+            mihomo.SOURCE_SHA = entry['source_sha256']
+            mihomo.CPUS = entry['binaries']
+            mihomo.package(args.cpu, args.work, args.output)
     else:
         build_singbox(entry, args.cpu, args.work.resolve(), args.output.resolve())
 

@@ -16,6 +16,11 @@ import (
 	daeConfig "github.com/daeuniverse/dae/config"
 )
 
+func routerMihomoPreservesSniffedIP() bool {
+	version, err := routercore.ExpectedCoreVersion(routerMihomoBinary, "mihomo")
+	return err == nil && version == routercore.ReviewedMihomoVersion
+}
+
 func routerParseCoreNode(engine, link, tag string, opt routercore.NodeOptions) (sbObject, error) {
 	opt.Mihomo = engine == "mihomo"
 	return routercore.Node(link, tag, opt)
@@ -52,7 +57,7 @@ func routerCheckNative(ctx context.Context, conf *daeConfig.Config, dirs []strin
 	if e != nil {
 		return e
 	}
-	profile, e = mihomoFromCanonical(profile, conf, ports)
+	profile, e = mihomoFromCanonical(profile, conf, ports, routerMihomoPreservesSniffedIP())
 	if e != nil {
 		return e
 	}

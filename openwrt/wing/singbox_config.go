@@ -386,6 +386,26 @@ func (c *sbConverter) asset(name string) (string, error) {
 	}
 	return "", errors.New("geodata_missing")
 }
+
+// A custom or incomplete rule database must not make an upgrade change a
+// working legacy preset into a configuration that cannot be loaded.
+func RouterServiceIPv6AssetsAvailable(dirs []string) bool {
+	c := sbConverter{dirs: dirs}
+	file, err := c.asset("geosite.dat")
+	if err != nil {
+		return false
+	}
+	log := logrus.New()
+	log.SetOutput(io.Discard)
+	for _, code := range []string{"google", "youtube", "github"} {
+		entry, err := geodata.UnmarshalGeoSite(log, file, code)
+		if err != nil || len(entry.Domain) == 0 {
+			return false
+		}
+	}
+	return true
+}
+
 func (c *sbConverter) georule(kind, code string, external ...string) (string, error) {
 	filename := kind + ".dat"
 	if len(external) > 0 {
@@ -740,13 +760,27 @@ func (c *sbConverter) dns() (sbObject, string, error) {
 		}
 		rules = append([]sbObject{{"query_type": []string{blocked}, "action": "predefined", "rcode": "NOERROR"}}, rules...)
 	}
-	c.warnings = append(c.warnings, "sing-box 的节点域名引导解析使用首个直连 DNS 上游；其余 DNS 上游经默认群组。")
-	if c.conf.Global.NailinkNodeDNS != "" {
-		if host, port, err := net.SplitHostPort(c.conf.Global.BootstrapResolver); err == nil && net.ParseIP(host) != nil && net.ParseIP(host).IsLoopback() {
-			p, _ := strconv.Atoi(port)
-			bootstrap = "dns:nailink-node-server"
-			servers = append(servers, sbObject{"tag": bootstrap, "type": "udp", "server": host, "server_port": p})
+	if raw := strings.TrimSpace(c.conf.Global.BootstrapResolver); raw != "" {
+		address, err := netip.ParseAddrPort(raw)
+		if err != nil || address.Port() == 0 {
+			return nil, "", errors.New("invalid_bootstrap_resolver")
 		}
+		bootstrap = "dns:nailink-bootstrap"
+		if c.conf.Global.NailinkNodeDNS != "" && address.Addr().IsLoopback() {
+			bootstrap = "dns:nailink-node-server"
+		}
+		stem := bootstrap
+		for suffix := 1; names[strings.TrimPrefix(bootstrap, "dns:")]; suffix++ {
+			bootstrap = fmt.Sprintf("%s-%d", stem, suffix)
+		}
+		// This direct server is only selected by the node domain resolver. The
+		// website DNS rules and their final server were determined above.
+		servers = append(servers, sbObject{"tag": bootstrap, "type": "udp", "server": address.Addr().String(), "server_port": int(address.Port())})
+		c.warnings = append(c.warnings, "节点域名使用配置的引导 DNS；网站 DNS 继续按原有规则解析。")
+	} else {
+		c.warnings = append(c.warnings, "节点域名引导解析使用首个直连 DNS 上游；其余 DNS 上游经默认群组。")
+	}
+	if c.conf.Global.NailinkNodeDNS != "" {
 		c.warnings = append(c.warnings, "仅节点服务器域名使用订阅专用 DNS，网站 DNS 与分流规则保持不变。")
 	}
 	return sbObject{"servers": servers, "rules": rules, "final": final}, bootstrap, nil

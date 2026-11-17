@@ -7,7 +7,7 @@ on:
     inputs:
       version:
         description: 'Package version (X.Y.Z), must match source'
-        default: '0.6.87'
+        default: '0.6.89'
         required: true
       publish:
         description: 'After all checks, upload to a release draft (main only)'
@@ -71,7 +71,9 @@ jobs:
         run: |
           python3 openwrt/prepare-wing.py wing
           cd wing
+          go generate ./graphql/service/config/global
           go test -race -count=1 -tags dae_stub_ebpf ./dae -run '^TestRouter(Dae|Core|RetiredDae|ReloadReleases|Readiness)'
+          go test -race -count=1 -tags dae_stub_ebpf ./graphql/service/config -run '^TestService'
 
   web:
     needs: test
@@ -291,12 +293,14 @@ jobs:
           # following namespace test verifies actual broute and TPROXY support.
           sudo modprobe -a br_netfilter nft_meta_bridge
           sudo env "PATH=$PATH" python3 tests/openwrt/core_netns.py --runtime "$PWD/.build/runtime/daed" --probe "$PWD/.build/runtime/btf-probe" --singbox /tmp/nailink-core-static/usr/bin/sing-box --mihomo /tmp/nailink-mihomo-static/usr/bin/mihomo --target-core mihomo --nft-root / --workspace /tmp/nailink-mihomo-tproxy --fw4 --ipv6 --mode tproxy --bridge
+          sudo env "PATH=$PATH" python3 tests/openwrt/core_netns.py --runtime "$PWD/.build/runtime/daed" --probe "$PWD/.build/runtime/btf-probe" --singbox /tmp/nailink-updated-cores/sing-box --mihomo /tmp/nailink-updated-cores/mihomo --target-core mihomo --nft-root / --workspace /tmp/nailink-reviewed-mihomo-tun --fw4 --ipv6
+          sudo env "PATH=$PATH" python3 tests/openwrt/core_netns.py --runtime "$PWD/.build/runtime/daed" --probe "$PWD/.build/runtime/btf-probe" --singbox /tmp/nailink-updated-cores/sing-box --mihomo /tmp/nailink-updated-cores/mihomo --target-core mihomo --nft-root / --workspace /tmp/nailink-reviewed-mihomo-tproxy --fw4 --ipv6 --mode tproxy --bridge
           sudo env "PATH=$PATH" python3 tests/openwrt/core_netns.py --runtime "$PWD/.build/runtime/daed" --probe "$PWD/.build/runtime/btf-probe" --singbox /tmp/nailink-updated-cores/sing-box --nft-root / --workspace /tmp/nailink-updated-singbox-tproxy --fw4 --ipv6 --mode tproxy
           sudo env "PATH=$PATH" python3 tests/openwrt/core_netns.py --runtime "$PWD/.build/runtime/daed" --probe "$PWD/.build/runtime/btf-probe" --singbox /tmp/nailink-updated-cores/sing-box --mihomo /tmp/nailink-updated-cores/mihomo --target-core mihomo --nft-root / --workspace /tmp/nailink-updated-mihomo-tproxy --fw4 --ipv6 --mode tproxy --bridge
       - name: LuCI gateway authentication and upgrade tests
         if: matrix.cpu == 'x86_64'
         run: |
-          (cd wing && DAED_TEST_CORE_UPDATES="$GITHUB_WORKSPACE/.build/reviewed-cores" DAED_TEST_MIHOMO_ARCHIVE="$GITHUB_WORKSPACE/.build/mihomo-core/nailink-mihomo-1.19.33-x86_64.tar.gz" DAED_TEST_EXTRA_ARCHIVE="$GITHUB_WORKSPACE/.build/extra-core/nailink-sing-box-extra-1.14.3-nailink.2-x86_64.tar.gz" DAED_TEST_SINGBOX_ARCHIVE=/tmp/nailink-core-static/core.ipk go test ../openwrt/luci-proxy.go ../openwrt/luci-proxy_test.go ../openwrt/maintenance.go ../openwrt/maintenance-geodata.go ../openwrt/maintenance-core.go ../openwrt/maintenance-core-updates.go ../openwrt/maintenance_test.go ../openwrt/maintenance-core_test.go ../openwrt/maintenance-core-updates_test.go)
+          (cd wing && DAED_TEST_CORE_UPDATES="$GITHUB_WORKSPACE/.build/reviewed-cores" DAED_TEST_MIHOMO_ARCHIVE="$GITHUB_WORKSPACE/.build/reviewed-cores/nailink-mihomo-1.19.34-nailink.1-x86_64.tar.gz" DAED_TEST_EXTRA_ARCHIVE="$GITHUB_WORKSPACE/.build/extra-core/nailink-sing-box-extra-1.14.3-nailink.2-x86_64.tar.gz" DAED_TEST_SINGBOX_ARCHIVE=/tmp/nailink-core-static/core.ipk go test ../openwrt/luci-proxy.go ../openwrt/luci-proxy_test.go ../openwrt/maintenance.go ../openwrt/maintenance-geodata.go ../openwrt/maintenance-core.go ../openwrt/maintenance-core-updates.go ../openwrt/maintenance_test.go ../openwrt/maintenance-core_test.go ../openwrt/maintenance-core-updates_test.go)
           curl -fL --proto '=https' -o /tmp/luci-rootfs-25.tar.gz https://downloads.openwrt.org/releases/25.12.4/targets/x86/64/openwrt-25.12.4-x86-64-rootfs.tar.gz
           echo '0b80f307a5383a0c2c08712c500a4351f7b7cad0a6c2963e02a74db4e6831bf4  /tmp/luci-rootfs-25.tar.gz' | sha256sum -c -
           mkdir /tmp/luci-rootfs-25
