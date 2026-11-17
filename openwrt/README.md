@@ -1,5 +1,9 @@
 # NaiLink · 奶油互联
 
+## 0.6.89 IPv6 网页与兼容内核
+
+新建默认预设在 CN 直连前补齐 Google、YouTube、GitHub 的 IPv6 分类；只迁移未编辑的旧默认预设。sing-box / mihomo 遵循节点引导 DNS，网站 DNS 保留。mihomo 1.19.34-nailink.1 同时保留 IP 路由判断、代理域名拨号和原生直连；旧内核需在内核窗口检查兼容更新，插件升级不静默替换已有内核。最终 ARM64 安装包已经五模式和三个浏览器 IPv6 实测，见 `docs/performance-validation-2026-11-17.md`。
+
 ## 0.6.87 DNS 数据面修复
 
 修复 dae 接管时 IPv4 / IPv6 TCP DNS 被健康门控丢弃的问题。sing-box / TPROXY 使用保留 IPv6 原始目的地址的 DNS 入口，修复回复端口变成内部随机端口造成的超时；DNS 上游及分流策略继续由原内核处理。保留现有节点、订阅、群组和配置，兼容内核版本不变。实机验证记录见 `docs/dns-validation-2026-11-16.md`。
@@ -17,7 +21,7 @@
 维护者通过 `core-updates-sources.json` 固定来源和原始摘要，用 `python3 openwrt/core-updates-build.py --engine sing-box --cpu x86_64 --work /tmp/nailink-core-build --output .build/reviewed-cores` 构建，mihomo / ARM64 同理。脚本核对最终归档与 `core-updates.json`，CI 验证真实协议和数据面后，独立发布 `nailink-cores-日期` 归档与对应源码；审核目录记录每个架构的摘要及适配器范围，版本须递增。无需为了发布内核而修改用户的群组、路由或插件版本。
 
 支持 OpenWrt、ImmortalWrt、iStoreOS 的现代 LuCI，提供 x86_64 / ARM64 及试验性 ARMv7 / MIPS32 / MIPSel32 的
-IPK 和 APK v3 安装包。当前正式版 [openwrt-v0.6.87](https://github.com/slobys/NaiLink/releases/tag/openwrt-v0.6.87)。
+IPK 和 APK v3 安装包。当前正式版 [openwrt-v0.6.89](https://github.com/slobys/NaiLink/releases/tag/openwrt-v0.6.89)。
 
 本项目从 0.6.14 起更名为 NaiLink（奶油互联），侧边栏显示 **NaiLink**。0.6.13 及更早版本显示 **Daed**。沿用原有包名、服务、路径和配置，可继续保留数据升级。
 
@@ -141,7 +145,7 @@ sing-box / mihomo 的连接接口返回完整明细。运行概况改为逐条�
 
 ## 0.6.40 三内核管理
 
-- 面板可切换 dae、sing-box、mihomo；Mihomo 1.19.33 按需安装，限 x86_64 / ARM64，不选用时不运行。
+- 面板可切换 dae、sing-box、mihomo；Mihomo 1.19.34-nailink.1 按需安装，限 x86_64 / ARM64，不选用时不运行。
 - 沿用节点、订阅和运行配置；切换前检查实际配置、DNS 与连接，失败尝试恢复原可用内核，不应用尚未保存的编辑。
 - 保留现有 DNS 请求策略和传输路径，使用私有 DNS 桥接；代理 DNS 失败不静默直连。自动 WAN 下测试进程使用真实出口，避免被活动 TUN 再次接管。
 - 协议与高级参数以兼容性报告为准，仅从 Clash YAML / JSON 提取内嵌节点，不应用完整配置。[完整范围与限制](../docs/core-switching.md)。

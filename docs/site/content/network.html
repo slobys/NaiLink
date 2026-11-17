@@ -145,6 +145,17 @@ fallback: proxy</code></pre>
 <pre><code class="language-text">domain(example.com) -&gt; AI
 fallback: proxy</code></pre>
 <p>把示例域名换成你确实需要分流的域名，并核对群组名称。服务通常涉及多个域名，只写一个域名不代表覆盖该服务所有连接。</p>
+<h3 id="ipv6-services">Google、YouTube、GitHub 的 IPv6 分流</h3>
+<p>
+  0.6.89 的新建默认预设在 CN 直连前添加下面的服务分类，AI 和 Netflix
+  规则仍在此前。升级只补齐完全未编辑的旧默认预设；自定义路由保留，需要时自行添加，并将 proxy 换成实际代理群组。
+</p>
+<pre><code class="language-text">ipversion(6) &amp;&amp; domain(geosite:google, geosite:youtube, geosite:github) -&gt; proxy</code></pre>
+<p>
+  其他目的地继续按原有 IPv6 兜底。mihomo 需更新到 1.19.34-nailink.1 才能同时保留 IP 规则判断与代理域名转发。节点引导 DNS
+  只影响节点服务器解析；sing-box / mihomo 遵循已填写的 IP:端口 或 [IPv6]:端口，留空保留原默认方式，网站 DNS
+  规则不随之改写。
+</p>
 <h2 id="ipv6">IPv6 节点与 IPv6 联网</h2>
 <p>
   节点服务器的 IPv6 地址与目标网站的 IPv6 地址是两回事。使用 IPv6 服务器节点，需要路由器能访问该服务器的 IPv6

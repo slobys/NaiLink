@@ -11,31 +11,38 @@
 </p>
 <h2 id="current-version">v$version 更新与验证范围</h2>
 <p>
-  v$version 修复 DNS 传输问题。<a href="https://github.com/slobys/NaiLink/releases/tag/$release">查看正式版与安装包</a
+  v$version 优化 IPv6 网页分流、节点引导 DNS 和 mihomo 域名转发。<a
+    href="https://github.com/slobys/NaiLink/releases/tag/$release"
+    >查看正式版与安装包</a
   >。
 </p>
 <ul>
-  <li>dae 支持 IPv4 / IPv6 的 TCP DNS 查询，修复握手被健康门控丢弃造成的超时。</li>
   <li>
-    sing-box 非 TUN（TPROXY）在 LAN 有多个 IPv6 地址时保留 DNS 查询的原始目的地址，回复继续使用客户端期望的地址与 53
-    端口。
+    新建常用分流预设在 CN 直连前补齐 Google、YouTube、GitHub 的 IPv6
+    分类。升级只补齐未编辑的旧默认预设；自定义规则保留。
   </li>
-  <li>普通只读 DNS 查询无回复时，在原有期限内最多发起一次同协议回环备用请求，拒绝和截断原样保留。</li>
-  <li>升级保留节点、订阅、群组、DNS、路由、当前内核和接管方式；兼容内核版本不变。</li>
+  <li>sing-box / mihomo 遵循已填写的节点引导 DNS，网站 DNS 上游与出口策略保留。</li>
+  <li>
+    mihomo 1.19.34-nailink.1 保留原始 IP
+    做规则判断，代理发送嗅探域名，直连继续使用原地址。已有内核不随插件升级静默替换，请在内核窗口检查兼容更新。
+  </li>
+  <li>保留节点、订阅、群组、DNS、路由、账号、自启设置、当前内核和接管方式。</li>
 </ul>
 <p>
-  最终 ARM64 安装包已在 R4S / iStoreOS 25.12.6 上升级并复测：dae、sing-box TUN / TPROXY、mihomo TUN / TPROXY 共 250 次
-  DNS 检查及 40 项联网检查通过；三个内核的浏览器 IPv6 检测均为 10/10。保留 124 个节点、3 个订阅和 3
-  个群组，测试后恢复原内核与模式。<a
-    href="https://github.com/slobys/NaiLink/blob/main/docs/dns-validation-2026-11-16.md"
-    >查看完整记录</a
+  最终 ARM64 APK 已原生升级到 R4S / iStoreOS 25.12.6，实测 dae、sing-box TUN / TPROXY、mihomo TUN /
+  TPROXY。五模式及补测共 500/500 DNS，三个内核普通 Chrome 的 IPv6 检测均为 10/10。保留 125 节点、3 订阅、3
+  群组及全部用户字段，测试后恢复原内核与模式。
+</p>
+<p>
+  首轮 LAN 联网 39/40、网页 88/90；三项异常各重复两次均通过，首轮记录保留。命令行解析与路由器实际 DNS
+  的差异另行核对，不把工具环境异常直接计为路由器故障。<a
+    href="https://github.com/slobys/NaiLink/blob/main/docs/performance-validation-2026-11-17.md"
+    >查看完整验证与边界</a
   >。
 </p>
 <p>
-  IPv6 检测通过包含原生 IPv6 直连，并不证明所有流量经过代理；公网 IPv6 VPS 尚未提供实测，ARMv7 / MIPS 仍为实验构建。<a
-    href="network.html#ipv6"
-    >查看 IPv6 设置与边界</a
-  >。
+  IPv6 检测包括原生直连，并不表示全部 IPv6 经代理；公网 IPv6 VPS 尚未提供实测，ARMv7 / MIPS
+  仍为实验构建。首页响应也不等于 Gemini Flash 账号对话已通过。<a href="network.html#ipv6">查看 IPv6 设置</a>。
 </p>
 <h2 id="menu">打开安装管理菜单</h2>
 <p>安装成功后，在路由器 SSH 中运行：</p>
