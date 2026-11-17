@@ -236,6 +236,13 @@ subprocess.run(['nft','-f','-'],input=body.encode(),check=True)
         if args.target_core=='mihomo':dns="upstream { domestic: 'udp://198.51.100.53:53'\n foreignTcp: 'tcp://198.51.100.53:53'\n foreignUdp: 'udp://198.51.100.53:53' }\nrouting { request { qname(full:ai.test,full:ai6.test) -> foreignTcp\nqname(full:probe.test,full:probe6.test) -> foreignUdp\nfallback: domestic } }"
         did=gql('mutation{createDns(name:"Core DNS",dns:'+json.dumps(dns)+'){id}}')["createDns"]["id"]
         routing="dip(10.82.0.0/24) -> direct\ndomain(full:ai.test) -> AI\nipversion(6) && domain(full:ai6.test) -> AI\ndomain(full:ai6.test) -> block\nfallback: proxy"
+        # Legacy Mihomo deliberately retains route-only sniffing with IP rules.
+        # Exercise its original domain-only profile separately from the reviewed
+        # core, whose receipt enables preserved-IP destination replacement.
+        receipt=Path(str(args.mihomo)+'.version.json') if args.mihomo else None
+        reviewed=receipt and receipt.is_file() and json.loads(receipt.read_text()).get('version')=='1.19.34-nailink.1'
+        if args.target_core=='mihomo' and not reviewed:
+            routing="dip(10.82.0.0/24) -> direct\ndomain(full:ai.test,full:ai6.test) -> AI\nfallback: proxy"
         rid=gql('mutation{createRouting(name:"Core route",routing:'+json.dumps(routing)+'){id}}')["createRouting"]["id"]
         gql('mutation{selectConfig(id:'+json.dumps(cid)+') selectDns(id:'+json.dumps(did)+') selectRouting(id:'+json.dumps(rid)+')}')
         node_ids=[]
