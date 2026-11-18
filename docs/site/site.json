@@ -18,6 +18,11 @@
           "description": "先确认固件、CPU 与内核兼容，再用中文菜单安装。"
         },
         {
+          "id": "local-installation",
+          "title": "电脑下载后安装",
+          "description": "确认包架构，在电脑下载并校验发行资产，传到路由器本地安装。"
+        },
+        {
           "id": "quick-start",
           "title": "首次设置",
           "description": "导入节点、加入群组、应用配置，完成第一次联网。"

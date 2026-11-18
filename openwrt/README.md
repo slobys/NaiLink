@@ -466,6 +466,8 @@ nl=$(uclient-fetch -O- https://slobys.github.io/NaiLink/install.sh) && sh -c "${
 
 旧版菜单无法访问 `raw.githubusercontent.com` 时，可使用上面的固定入口。
 
+电脑可下载但路由器下载发行文件失败时，参照[电脑下载后安装指南](https://slobys.github.io/NaiLink/local-installation.html)：准备同一发行版的脚本、清单、检查器、CPU 探针、运行包和 LuCI 包，校验后传到路由器，以 `--asset-dir` 安装。固件依赖仍使用本固件软件源；普通保留配置安装与需要 `rollback/` 旧版资产的 `--update-only` 不同。
+
 如果 `github.com` 也无法解析，请先检查路由器自身的 DNS：`nslookup github.com`。
 手机或电脑能够上网，并不能证明路由器 SSH 中的域名解析正常；无需因此删除节点或清空配置。
 

@@ -1,0 +1,156 @@
+<h2 id="scope">适用情况与边界</h2>
+<p>
+  电脑可以从 GitHub 下载，但路由器下载 <code>releases.atom</code>、<code>SHA256SUMS</code> 或安装包超时，
+  可以先在电脑下载 NaiLink 发行资产，再传到路由器用 <code>--asset-dir</code> 安装。
+  <code>api.github.com</code> 能返回版本列表，不代表发行文件下载也可用；仅凭超时日志无法确定现场网络原因。
+</p>
+<p>
+  <strong>这是本地发行资产安装，不是完全离线安装。</strong>它跳过 NaiLink 发行文件的联网下载，
+  固件的索引、缺失依赖、内核模块、规则库及必要的 <code>vmlinux-btf</code> 仍由当前固件软件源提供。
+  软件源不可用时应先修复软件源或补齐匹配依赖；不能用其他固件的软件包、强制忽略依赖或关闭证书校验。
+</p>
+<p>
+  下文以当前公开版本 <strong>$release</strong> 为目标。新安装和已有的受管理安装均可使用普通
+  <code>--install</code>；已有配置会保留并备份，但普通安装不会预备旧包自动回退。
+  需要严格更新模式时，先阅读<a href="#local-update">旧版更新与回退资产</a>。
+</p>
+<h2 id="identify">1. 在路由器上确认格式、包架构和空间</h2>
+<p>以 root 登录<strong>路由器 SSH</strong>，执行以下只读命令，并记录输出。固件名称（例如 FanchmWrt）不能替代架构信息。</p>
+<pre><code class="language-sh">cat /etc/openwrt_release
+uname -m
+uname -r
+if command -v apk &gt;/dev/null 2&gt;&amp;1; then
+  apk --version
+  if [ -s /etc/apk/arch ]; then cat /etc/apk/arch; else apk --print-arch; fi
+elif command -v opkg &gt;/dev/null 2&gt;&amp;1; then
+  opkg print-architecture
+else
+  echo '没有受支持的包管理器，请停止安装'
+fi
+df -h /tmp /overlay</code></pre>
+<ul>
+  <li><code>opkg</code> 使用 <strong>IPK</strong>；<code>apk</code> 使用 <strong>APK v3</strong>，必须是 apk-tools 3.x。两者都存在时安装器优先使用 APK，不要混装格式。</li>
+  <li>IPK 按 <code>opkg print-architecture</code> 的优先级从高到低，排除 <code>all</code>/<code>noarch</code>；APK 按非空 <code>/etc/apk/arch</code> 的顺序，列表为空才使用 <code>apk --print-arch</code>。</li>
+  <li>在发行版 <code>manifest.tsv</code> 中，选择格式一致、与 CPU 相容的第一个受支持包架构的 <code>daed-router</code> 行。不要仅凭 <code>uname -m</code> 猜包名或修改 APK 架构文件。</li>
+  <li>例如 ARM64 的固件包架构可能是 <code>aarch64_generic</code>，探针却使用 <code>btf-probe-arm64</code>；MIPS 必须区分 <code>mips_*</code> 与 <code>mipsel_*</code>。</li>
+  <li>仍需满足<a href="installation.html#requirements">内核、BTF、LuCI 等安装条件</a>。ARMv7/MIPS 为实验构建，暂不推荐用于透明代理，不能因文件齐全就绕过内核检查。</li>
+  <li><code>/tmp</code> 通常占用内存且重启会清空；安装器还会复制资产到临时目录，需要同时容纳上传文件和暂存副本。overlay 另需安装、解压和备份空间。空间不足时不要继续。</li>
+</ul>
+<h2 id="download-local">2. 在电脑下载同一发行版的完整必需文件</h2>
+<p>
+  在<strong>电脑</strong>打开<a href="https://github.com/slobys/NaiLink/releases/tag/$release">当前正式版发布页</a>，
+  展开 Assets，建立目录 <code>nailink-$version</code>。保持原文件名，将下面的文件放在目录同一层，不要混用其他版本：
+</p>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>文件</th><th>如何选择</th></tr></thead>
+    <tbody>
+      <tr><td><code>install.sh</code></td><td>发行资产中的脚本，不是 Pages 固定入口；后者默认加上 <code>--latest</code>，不能配合本地资产参数。</td></tr>
+      <tr><td><code>SHA256SUMS</code>、<code>manifest.tsv</code></td><td>两份都下载。前者用于校验下载内容，后者供安装器选择和校验本机资产。不要编辑清单。</td></tr>
+      <tr><td><code>daed-check</code></td><td>独立兼容性检查器，不能省略。</td></tr>
+      <tr><td><code>btf-probe-CPU</code></td><td>x86_64 → <code>btf-probe-x86_64</code>；ARM64 → <code>btf-probe-arm64</code>；实验 ARMv7/MIPS/MIPSel 分别为 <code>btf-probe-armv7</code>、<code>btf-probe-mips</code>、<code>btf-probe-mipsle</code>。</td></tr>
+      <tr><td><code>daed-router-$version-包架构.ipk</code> 或 <code>.apk</code></td><td>下载上一步选中的运行包。<code>manifest.tsv</code> 的第四列是准确文件名，第五列为 SHA-256，第六列为版本。</td></tr>
+      <tr><td><code>luci-app-daed-router-$version.ipk</code> 或 <code>.apk</code></td><td>与运行包使用同一格式。该包在清单中的架构为 <code>all</code>，是独立的第二个包。</td></tr>
+    </tbody>
+  </table>
+</div>
+<p>
+  例如 x86_64 + IPK 的目录应含下面七个文件；其他架构或 APK 用户必须换成自己对应的探针和两包，不能照搬：
+</p>
+<pre><code>nailink-$version/
+  install.sh
+  SHA256SUMS
+  manifest.tsv
+  daed-check
+  btf-probe-x86_64
+  daed-router-$version-x86_64.ipk
+  luci-app-daed-router-$version.ipk</code></pre>
+<p>
+  GitHub 的 Source code ZIP/tar.gz、完整源码包、各架构 <code>*.tsv</code> 记录均不能替代上述文件。
+  基础安装不需要下载 sing-box/mihomo 扩展压缩包；以后安装其他内核或更新规则库有各自的下载流程。
+  仅上传一个运行包或只在 LuCI 上传一个 IPK/APK，不能完成本指南的检查与安装流程。
+</p>
+<h2 id="verify-pc">3. 在电脑先核对 SHA-256</h2>
+<p>
+  使用官方 HTTPS 发布页下载的 <code>SHA256SUMS</code>，逐个核对六个资产文件的文件名和完整哈希；
+  <code>SHA256SUMS</code> 本身不在自己的清单中。不要使用来历不明的脚本或校验清单。所有哈希相同才继续，
+  不相同就重新下载，不能修改清单让校验通过。
+</p>
+<p>Windows：在下载目录打开 PowerShell，执行：</p>
+<pre><code class="language-powershell">Get-FileHash -Algorithm SHA256 -Path .\install.sh, .\manifest.tsv, .\daed-check, .\btf-probe-*, .\daed-router-*, .\luci-app-daed-router-* | Format-List Path, Hash</code></pre>
+<p>Linux：在下载目录执行下面命令，将输出逐行与 <code>SHA256SUMS</code> 比较。macOS 将 <code>sha256sum</code> 换为 <code>shasum -a 256</code>。</p>
+<pre><code class="language-sh">sha256sum install.sh manifest.tsv daed-check btf-probe-* daed-router-* luci-app-daed-router-*</code></pre>
+<p>清单还包含其他平台和源码资产，未下载的其他平台文件不需要补齐；但上一步列出的本机必需文件不能缺少。</p>
+<h2 id="transfer-local">4. 从电脑传输到路由器</h2>
+<p>
+  在下载目录的<strong>上一级</strong>执行下面命令，把 <code>ROUTER_IP</code> 替换为自己路由器的管理地址：
+</p>
+<pre><code class="language-sh">scp -O -r ./nailink-$version root@ROUTER_IP:/tmp/</code></pre>
+<p>
+  <code>-O</code> 使用传统 SCP，适合没有 SFTP 服务的固件。也可使用 WinSCP 的 SCP 模式或固件已有的文件传输服务，
+  保留原文件名和目录层级；不必为此关闭 SSH 校验或更换固件。上传后应存在
+  <code>/tmp/nailink-$version/install.sh</code>，不要多嵌套一层目录。
+</p>
+<h2 id="run-local">5. 在路由器校验并预演，再正式安装</h2>
+<p>
+  回到<strong>路由器 SSH</strong>。下面命令只校验已下载的必需文件，并调用安装器预演；任一文件缺失、哈希不符或清单记录不唯一都会停止，
+  不会继续执行安装脚本。运行脚本前也校验 <code>install.sh</code> 和 <code>manifest.tsv</code>：
+</p>
+<pre><code id="local-verify" class="language-sh">(
+  set -eu
+  cd /tmp/nailink-$version
+  for file in install.sh manifest.tsv daed-check btf-probe-* daed-router-* luci-app-daed-router-*; do
+    [ -f "$$file" ] || { echo "缺少文件: $$file" &gt;&amp;2; exit 1; }
+    record=$$(awk -v name="$$file" '$$2 == name { print; count++ } END { if (count != 1) exit 1 }' SHA256SUMS)
+    printf '%s\n' "$$record" | sha256sum -c -
+  done
+  sh ./install.sh --install --release $release --asset-dir "$$PWD" --dry-run
+)</code></pre>
+<p>
+  必须看到所有文件校验成功且预演通过再继续。<code>--dry-run</code> 不安装依赖、不刷新软件源、不停止服务；
+  APK 依赖模拟依靠已有索引，IPK 预演不能证明依赖可下载。若仅缺 BTF，预演也会失败，不会自动补装；
+  应先从本固件获取与当前内核匹配的 BTF，再重新检查。
+</p>
+<p>确认预演通过、固件软件源正常且已有数据已备份后，执行正式安装：</p>
+<pre><code id="local-install" class="language-sh">cd /tmp/nailink-$version &amp;&amp;
+sh ./install.sh --install --release $release --asset-dir "$$PWD"</code></pre>
+<p>
+  不要加 <code>--latest</code>，不要用 <code>--reinstall</code> 或先卸载来解决下载失败。
+  安装器从本地清单选包并再次校验检查器、探针和两包；需要依赖时仍访问固件软件源。
+  依赖包括 <code>ca-bundle</code>、<code>jshn</code>、<code>jsonfilter</code>、<code>uclient-fetch</code>、
+  <code>kmod-sched-core</code>、<code>kmod-sched-bpf</code>、<code>kmod-veth</code>、
+  <code>v2ray-geoip</code>、<code>v2ray-geosite</code>，以及 LuCI/rpcd；脚本还要求固件提供
+  <code>flock</code> 等基础工具。内核模块必须匹配当前固件 ABI。
+</p>
+<p>
+  APK 在已安装/缓存的依赖足够时可使用无网络事务；这不保证其他设备也能离线完成。
+  出现 <code>Missing local asset</code> 时补齐指定文件；出现包架构或兼容性错误时重新核对设备，不要改名强装。
+  成功后刷新 LuCI，进入<strong>服务 → NaiLink</strong>并查看状态和日志；界面打开不代表透明代理流量已经验证。
+  整个过程无需提供订阅地址、节点密码或配置数据库。
+</p>
+<h2 id="local-update">旧版更新与回退资产</h2>
+<p>
+  普通 <code>--install</code> 会为已有受管理安装备份配置、数据库和 WAL，并保留原自启选择；
+  <strong>不会预先下载旧版两包，不能承诺包更换失败后自动恢复旧版本。</strong>提前妥善保存备份，
+  它包含私密数据，不要上传到 issue。
+</p>
+<p>
+  如果选择 <code>--update-only</code>，安装器要求已有受管理安装且目标版本不得降级。
+  先用 <code>cat /usr/share/daed-router/version</code> 确认当前已安装版本；
+  去掉末尾软件包修订号（例如 <code>-1</code>）后，到该旧版本的官方发布页另外下载
+  <code>SHA256SUMS</code>、<code>manifest.tsv</code>、同格式同包架构的旧 <code>daed-router</code> 包和旧 LuCI 包。
+  在电脑逐个校验后，把这四个文件放进目标目录的 <code>rollback/</code> 子目录；
+  不要用新版本清单覆盖旧清单。
+</p>
+<p>
+  在路由器上再次核对 <code>rollback/</code> 中旧 manifest 和两包的哈希与旧 SHA256SUMS 一致。
+  全部核对完成后，才可把正式安装命令改为：
+</p>
+<pre><code id="local-update-command" class="language-sh">cd /tmp/nailink-$version &amp;&amp;
+sh ./install.sh --install --update-only --release $release --asset-dir "$$PWD"</code></pre>
+<p>
+  此模式会在停止服务前准备并验证 <code>rollback/manifest.tsv</code> 及旧两包；缺失时停止并保留原服务。
+  <code>--dry-run</code> 提前返回，<strong>不验证这组回退资产</strong>。
+  正式更新失败时会尝试旧包和快照恢复，但回退也可能失败，仍需保留备份。
+  本地资产不能绕过自定义外部数据库链接、未知旧版本、内核兼容性或固件依赖检查。
+</p>
