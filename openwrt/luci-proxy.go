@@ -4,8 +4,6 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -24,7 +22,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/daeuniverse/dae-wing/db"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -60,54 +57,6 @@ func cacheableAsset(name string, response *http.Response) bool {
 type credentials struct {
 	Username string `json:"username"`
 	Secret   string `json:"secret"`
-}
-
-// Run once with the service stopped. Existing users and their per-user defaults
-// are reused, so upgrading does not reset selected configurations or accounts.
-func prepare(configDir string) error {
-	if err := os.MkdirAll(configDir, 0700); err != nil {
-		return err
-	}
-	if err := db.InitDatabase(configDir); err != nil {
-		return err
-	}
-	var users []db.User
-	if err := db.DB(context.Background()).Order("id").Limit(1).Find(&users).Error; err != nil {
-		return err
-	}
-	var user db.User
-	if len(users) > 0 {
-		user = users[0]
-	} else {
-		secret := make([]byte, 32)
-		if _, err := rand.Read(secret); err != nil {
-			return err
-		}
-		user = db.User{Username: "luci", PasswordHash: "!", JwtSecret: hex.EncodeToString(secret), JsonStorage: "{}"}
-		if err := db.DB(context.Background()).Create(&user).Error; err != nil {
-			return errors.New("cannot create local LuCI identity")
-		}
-	}
-	if user.Username == "" || user.JwtSecret == "" {
-		return errors.New("invalid local identity")
-	}
-	data, err := json.Marshal(credentials{user.Username, user.JwtSecret})
-	if err != nil {
-		return err
-	}
-	file, err := os.CreateTemp(configDir, ".luci-session-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(file.Name())
-	if _, err = file.Write(data); err != nil {
-		file.Close()
-		return err
-	}
-	if err = file.Close(); err != nil {
-		return err
-	}
-	return os.Rename(file.Name(), filepath.Join(configDir, credentialName))
 }
 
 func readCredentials(configDir string) (credentials, error) {
@@ -365,7 +314,10 @@ func main() {
 		return
 	}
 	if *initialize {
-		if err := prepare(*configDir); err != nil {
+		// Keep the existing CLI available for local maintenance scripts.
+		command := exec.Command("/usr/bin/daed", "prepare-luci", "--config", *configDir)
+		command.Stderr = os.Stderr
+		if err := command.Run(); err != nil {
 			fmt.Fprintln(os.Stderr, "Cannot prepare LuCI access:", err)
 			os.Exit(1)
 		}

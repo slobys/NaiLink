@@ -58,7 +58,7 @@ def main():
     if args.singbox_package:
         (root / "dev/net").mkdir(exist_ok=True)
         os.mknod(root / "dev/net/tun",stat.S_IFCHR|0o600,os.makedev(10,200))
-    subprocess.run([str(args.proxy), "--config", str(root / "etc/daed"), "--prepare"], check=True)
+    subprocess.run([str(args.runtime), "prepare-luci", "--config", str(root / "etc/daed")], check=True)
     files = {
         "www/cgi-bin/daed-router": project / "openwrt/files/luci-cgi",
         "usr/libexec/rpcd/daed-router": project / "openwrt/files/rpcd-daed",
@@ -244,7 +244,7 @@ def main():
                     for cache in (root / "tmp").glob("luci-indexcache*"):
                         if cache.is_file():
                             cache.unlink()
-                    subprocess.run([str(args.proxy), "--config", str(root / "etc/daed"), "--prepare"], check=True)
+                    subprocess.run([str(args.runtime), "prepare-luci", "--config", str(root / "etc/daed")], check=True)
                     daemon = start_daemon(args.runtime)
                     marker.write_text(runtime_version(args.runtime) + "\n")
                     after = snapshot()

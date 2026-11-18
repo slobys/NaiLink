@@ -188,14 +188,15 @@ func routerCoreOverview(windowSec, maxPoints int) (*RuntimeOverview, bool, error
 		s.statsNextAt = now.Add(time.Second)
 		s.statsError = err
 		if err != nil {
+			s.statsNextAt = now.Add(5 * time.Second)
 			if s.log != nil && (s.statsLogAt.IsZero() || now.Sub(s.statsLogAt) >= 30*time.Second) {
 				s.statsLogAt = now
 				s.log.WithField("core", name).WithField("code", err.Error()).Warn("Core runtime statistics unavailable; proxy configuration unchanged")
 			}
 			return nil, true, err
 		}
-		// Large tables are expensive for the native core to serialize too. Share
-		// one reduced sample between tabs; never speed up retries after a failure.
+		// Large tables are expensive for the native core to serialize too.
+		// Share one reduced sample between tabs.
 		if connections.Connections >= 8192 {
 			s.statsNextAt = now.Add(4 * time.Second)
 		} else if connections.Connections >= 2048 {

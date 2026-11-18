@@ -7,14 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '~/components/ui/button'
 import { EDITOR_OPTIONS, EDITOR_THEME_DARK, EDITOR_THEME_LIGHT } from '~/constants/editor'
-import {
-  applyShikiThemes,
-  getLspClient,
-  handleEditorBeforeMount,
-  initLsp,
-  isShikiReady,
-  syncModelWithLsp,
-} from '~/monaco'
+import { getLspClient, handleEditorBeforeMount, initLsp, syncModelWithLsp } from '~/monaco'
 
 import { colorSchemeAtom } from '~/store'
 import { watchEditorLayout } from '~/utils/editor-layout'
@@ -55,7 +48,7 @@ function formatRouting(editor: CodeEditor, pastedRange?: monacoEditor.Range) {
  * DAE config editor component with LSP support
  *
  * Wraps Monaco editor with:
- * - Shiki syntax highlighting
+ * - Routing and DNS syntax highlighting
  * - DAE LSP for completions, hover, diagnostics
  * - Context-aware completion filtering based on configType
  */
@@ -70,7 +63,6 @@ export function DaeEditor({
   const { t } = useTranslation()
   const colorScheme = useStore(colorSchemeAtom)
   const [routingEditor, setRoutingEditor] = useState<CodeEditor>()
-  const [, forceUpdate] = useState({})
   const monacoRef = useRef<Monaco | null>(null)
   const lspSyncRef = useRef<{ dispose: () => void } | null>(null)
   const modelRef = useRef<monacoEditor.editor.ITextModel | null>(null)
@@ -107,12 +99,6 @@ export function DaeEditor({
         })
       }
 
-      // Apply Shiki themes if not ready
-      if (!isShikiReady()) {
-        await applyShikiThemes(monacoInstance)
-        forceUpdate({})
-      }
-
       // Initialize LSP client
       await initLsp(monacoInstance)
 
@@ -133,13 +119,7 @@ export function DaeEditor({
     [configType, routingTools],
   )
 
-  const theme = isShikiReady()
-    ? colorScheme === 'dark'
-      ? EDITOR_THEME_DARK
-      : EDITOR_THEME_LIGHT
-    : colorScheme === 'dark'
-      ? 'vs-dark'
-      : 'vs'
+  const theme = colorScheme === 'dark' ? EDITOR_THEME_DARK : EDITOR_THEME_LIGHT
 
   const editor = (
     <Editor

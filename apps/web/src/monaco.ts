@@ -2,42 +2,26 @@ import type { RoutingACompletionItem } from '@daeuniverse/dae-editor'
 import type { Monaco } from '@monaco-editor/react'
 import type * as monacoEditor from 'monaco-editor'
 import {
-  applyShikiThemes as applyShikiThemesBase,
   DiagnosticSeverity,
-  formatRoutingA,
-  GITHUB_THEMES,
-  initShikiHighlighter,
-  isShikiReady,
   MonacoLspClient,
   registerRoutingALanguage,
   setDynamicCompletionItems as setDynamicCompletionItemsBase,
-  SHIKI_THEMES,
 } from '@daeuniverse/dae-editor'
 // Import the browser LSP server worker
 import DaeLspWorker from '@daeuniverse/dae-lsp/server/browser?worker'
 import { loader } from '@monaco-editor/react'
+import { textmateThemeToMonacoTheme } from '@shikijs/monaco'
 import * as monaco from 'monaco-editor'
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
-import HtmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
-import JsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
-import TsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
+import { normalizeTheme } from 'shiki/core'
+import darkTheme from 'shiki/themes/vitesse-dark.mjs'
+import lightTheme from 'shiki/themes/vitesse-light.mjs'
+import { EDITOR_THEME_DARK, EDITOR_THEME_LIGHT } from '~/constants/editor'
 import { subscribeEditorCompletions } from '~/utils/editor-completions'
 
 // Configure Monaco workers for Vite
 globalThis.MonacoEnvironment = {
-  getWorker(_, label) {
-    if (label === 'json') {
-      return new JsonWorker()
-    }
-
-    if (label === 'html') {
-      return new HtmlWorker()
-    }
-
-    if (label === 'typescript' || label === 'javascript') {
-      return new TsWorker()
-    }
-
+  getWorker() {
     return new EditorWorker()
   },
 }
@@ -45,15 +29,25 @@ globalThis.MonacoEnvironment = {
 // Configure loader to use local monaco-editor package
 loader.config({ monaco })
 
+// Routing and DNS tokenize with Monarch. Only convert the theme colors and rules.
+for (const [name, theme] of [
+  [EDITOR_THEME_LIGHT, lightTheme],
+  [EDITOR_THEME_DARK, darkTheme],
+] as const) {
+  // Shiki's converter types use the optional monaco-editor-core peer, which
+  // isn't installed here. Its standalone theme data is the same in Monaco.
+  monaco.editor.defineTheme(
+    name,
+    textmateThemeToMonacoTheme(normalizeTheme(theme)) as monacoEditor.editor.IStandaloneThemeData,
+  )
+}
+
 // LSP Client instance (singleton)
 let lspClient: MonacoLspClient | null = null
 let lspInitialized = false
 
 // Cache for dynamic completion items (set before LSP client is initialized)
 let pendingDynamicCompletionItems: RoutingACompletionItem[] = []
-
-// Re-export from @daeuniverse/dae-editor
-export { formatRoutingA, GITHUB_THEMES, initShikiHighlighter, isShikiReady, SHIKI_THEMES }
 
 /**
  * Register a lightweight DNS config language for Monaco.
@@ -151,11 +145,6 @@ async function initLspClient(monacoInstance: Monaco): Promise<void> {
 export function handleEditorBeforeMount(monacoInstance: Monaco) {
   registerRoutingALanguage(monacoInstance)
   registerDnsALanguage(monacoInstance)
-}
-
-// Apply Shiki themes to Monaco (call after editor is mounted)
-export async function applyShikiThemes(monacoInstance: Monaco) {
-  await applyShikiThemesBase(monacoInstance)
 }
 
 /**

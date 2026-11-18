@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/daeuniverse/dae-wing/db"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -25,47 +24,12 @@ func fixtureAccess(active bool, session string) authResult {
 	return authResult{401, "session_expired"}
 }
 
-func TestPreparePreservesExistingUserAndPreferences(t *testing.T) {
+func TestReadCredentialsRejectsExposedCredentials(t *testing.T) {
 	directory := t.TempDir()
-	if err := db.InitDatabase(directory); err != nil {
-		t.Fatal(err)
-	}
-	old := db.User{Username: "existing", PasswordHash: "unchanged", JwtSecret: "existing-secret", JsonStorage: `{"mode":"rule","defaultConfigID":"42"}`}
-	if err := db.DB(context.Background()).Create(&old).Error; err != nil {
-		t.Fatal(err)
-	}
-	for range 2 {
-		if err := prepare(directory); err != nil {
-			t.Fatal(err)
-		}
-	}
-	var users []db.User
-	db.DB(context.Background()).Find(&users)
-	if len(users) != 1 || users[0].PasswordHash != old.PasswordHash || users[0].JsonStorage != old.JsonStorage {
-		t.Fatalf("existing account changed: %d users", len(users))
-	}
-	value, err := readCredentials(directory)
-	if err != nil || value.Username != old.Username || value.Secret != old.JwtSecret {
-		t.Fatal("existing identity was not preserved", err)
-	}
-}
-
-func TestPrepareFreshInstallAndPrivateCredentials(t *testing.T) {
-	directory := t.TempDir()
-	if err := prepare(directory); err != nil {
-		t.Fatal(err)
-	}
-	value, err := readCredentials(directory)
-	if err != nil || value.Username != "luci" || len(value.Secret) != 64 {
-		t.Fatal("missing private identity", err)
-	}
-	var user db.User
-	db.DB(context.Background()).First(&user)
-	if user.PasswordHash != "!" {
-		t.Fatal("local identity must not have a usable password")
-	}
 	name := filepath.Join(directory, credentialName)
-	os.Chmod(name, 0644)
+	if err := os.WriteFile(name, []byte(`{"username":"luci","secret":"local-fixture"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := readCredentials(directory); err == nil {
 		t.Fatal("accepted exposed credentials")
 	}

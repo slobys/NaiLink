@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { useGeneralQuery } from '~/apis'
 import { ServiceLogo } from '~/components/ServiceLogo'
 import { Button } from '~/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '~/components/ui/dialog'
 import { Switch } from '~/components/ui/switch'
 import { useGQLQueryClient } from '~/contexts'
 import { useRouterMaintenance } from '~/hooks/useRouterMaintenance'
@@ -39,6 +40,127 @@ function Bar({ sample }: { sample?: ConnectivitySample }) {
           : undefined
       }
     />
+  )
+}
+
+interface WebsiteDiagnosis {
+  status: string
+  code?: string
+  core?: string
+  group?: string
+  node?: string
+  httpStatus?: number
+  ms?: Partial<Record<'dns' | 'nativeDns' | 'connect' | 'tls' | 'ttfb', number>>
+}
+
+const diagnosisErrors: Record<string, string> = {
+  busy: '已有网页诊断在进行，请稍后重试。',
+  core_not_ready: '当前代理配置尚未就绪。',
+  configuration_changed: '测试期间已应用的配置发生变化，请重试。',
+  dns_failed: 'DNS 解析失败。',
+  tls_failed: 'TLS 校验失败。',
+  timeout: '请求超时。',
+  connection_failed: '无法建立连接。',
+}
+
+function WebsiteDiagnosisDialog({ enabled }: { enabled: boolean }) {
+  const gql = useGQLQueryClient()
+  const [open, setOpen] = useState(false)
+  const diagnose = useMutation({
+    retry: false,
+    mutationFn: async (target: 'chatgpt' | 'gemini') => {
+      const data = await gql.request<{ diagnoseWebsite: string }, { target: string }>(
+        'mutation DiagnoseWebsite($target: String!) { diagnoseWebsite(target: $target) }',
+        { target },
+      )
+      return JSON.parse(data.diagnoseWebsite) as WebsiteDiagnosis
+    },
+  })
+  const result = diagnose.data
+  const native = result?.core === 'sing-box' || result?.core === 'mihomo'
+  const stages = [
+    [native ? 'nativeDns' : 'dns', native ? 'DNS（独立查询）' : 'DNS 解析'],
+    ['connect', native ? '建立连接（含内核解析）' : '建立连接'],
+    ['tls', 'TLS 握手'],
+    ['ttfb', '首字节（从发起请求算起）'],
+  ] as const
+  const rows = result
+    ? [
+        ['内核', result.core],
+        ['命中群组', result.group],
+        ['实际节点', result.node],
+        ...stages.map(([key, name]) => {
+          const ms = result.ms?.[key]
+          return [name, typeof ms === 'number' ? `${ms} ms` : undefined]
+        }),
+      ]
+    : []
+  return (
+    <>
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+        网页诊断
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>网页诊断</DialogTitle>
+            <DialogDescription>
+              从路由器按当前生效的分流发起请求。终端专属规则和登录后的对话表现可能不同。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              disabled={!enabled || diagnose.isPending}
+              onClick={() => diagnose.mutate('chatgpt')}
+            >
+              测试 ChatGPT
+            </Button>
+            <Button
+              variant="outline"
+              disabled={!enabled || diagnose.isPending}
+              onClick={() => diagnose.mutate('gemini')}
+            >
+              测试 Gemini
+            </Button>
+          </div>
+          {!enabled && (
+            <p role="status" className="text-sm text-muted-foreground">
+              代理配置生效后可开始测试。
+            </p>
+          )}
+          {diagnose.isPending && (
+            <p role="status" className="text-sm text-muted-foreground">
+              正在测试…
+            </p>
+          )}
+          {diagnose.isError && (
+            <p role="alert" className="text-sm text-destructive">
+              无法取得诊断结果，请重试。
+            </p>
+          )}
+          {result && (
+            <>
+              <p role="status" className="text-sm">
+                {diagnose.variables === 'chatgpt' ? 'ChatGPT' : 'Gemini'}
+                {' · '}
+                {result.httpStatus ? `HTTP ${result.httpStatus}` : (diagnosisErrors[result.code ?? ''] ?? '诊断未完成')}
+              </p>
+              {result.core && (
+                <dl className="grid grid-cols-2 gap-2 text-sm">
+                  {rows.map(([label, value]) => (
+                    <div key={label} className="contents">
+                      <dt className="text-muted-foreground">{label}</dt>
+                      <dd className="break-all">{value || '未观测到'}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 
@@ -126,6 +248,7 @@ export function ConnectivityOverview() {
           )}
         </div>
         <div className="flex items-center gap-3">
+          <WebsiteDiagnosisDialog enabled={enabled} />
           <label
             className="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground"
             htmlFor="connectivity-auto"

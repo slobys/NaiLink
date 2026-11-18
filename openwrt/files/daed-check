@@ -13,12 +13,14 @@ check_only=0
 selected_core=''
 selected_mode=''
 strict_core=0
+first_core_preflight=0
 while [ "$#" -gt 0 ]; do
 	case "$1" in
 		--listen) listen_only=1 ;;
 		--check) check_only=1 ;;
 		--core) [ "$#" -gt 1 ] || exit 1; selected_core=$2; strict_core=1; shift ;;
 		--mode) [ "$#" -gt 1 ] || exit 1; selected_mode=$2; shift ;;
+		--first-core-preflight) first_core_preflight=1 ;;
 		*) exit 1 ;;
 	esac
 	shift
@@ -176,6 +178,7 @@ else
 		add_check nftables ok 'nftables is available; The selected core validates actual routing at startup.'
 	else add_check nftables error 'The selected core requires working nftables / fw4. Other proxy rules are not changed.'; fi
 	if [ -x /usr/libexec/daed/cores/"$selected_core" ]; then add_check core_binary ok 'The selected managed core is installed; its pinned version is checked by the manager.'
+	elif [ "$first_core_preflight" = 1 ]; then add_check core_binary warning 'The selected compatible core will be verified during installation.'
 	else add_check core_binary error 'Install the selected optional core from NaiLink first.'; fi
 fi
 if [ -n "$listen" ]; then

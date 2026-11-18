@@ -186,24 +186,8 @@ class InstallerMenuTests(unittest.TestCase):
         self.assertFalse(list((self.router.root / 'tmp').glob('daed-install.*')))
 
     def test_latest_update_uses_new_installer_without_recursing_into_menu(self):
-        source = (test_router.OPENWRT / 'install.sh').read_text()
-        source = re.sub(r'^release=openwrt-v\d+\.\d+\.\d+$', 'release=openwrt-v0.7.99', source, flags=re.MULTILINE)
-        self.router.write('/fixtures/latest-installer', source)
-        self.router.assets(version='0.7.99')
-        self.router.script('/bin/curl', '''output=''; url=''
-while [ "$#" -gt 0 ]; do
- case "$1" in
- --output) output=$2; shift 2 ;;
- http://*|https://*) url=$1; shift ;;
- *) shift ;;
- esac
-done
-printf '%s\\n' "$url" >> /tmp/download-urls
-case "$url" in
- https://raw.githubusercontent.com/slobys/NaiLink/main/openwrt/install.sh) cp /fixtures/latest-installer "$output" ;;
- https://github.com/slobys/NaiLink/releases/download/openwrt-v0.7.99/*) cp "/assets/${url##*/}" "$output" ;;
- *) exit 44 ;;
-esac''')
+        self.prepare_network_update()
+        self.downloader('curl')
         result = self.menu('1\n')
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertIn('release 0.7.99', result.stdout)
@@ -356,6 +340,7 @@ printf '%s %s\\n' "''' + client + '''" "$url" >> /tmp/download-urls
  [ "$accept" = 'Accept: application/vnd.github.raw+json' ] || exit 45
  cp /fixtures/latest-installer "$output" ;;
  https://github.com/slobys/NaiLink/releases/download/openwrt-v0.7.99/*) cp "/assets/${url##*/}" "$output" ;;
+ https://github.com/slobys/NaiLink/releases/download/openwrt-v0.1.0/*) cp "/assets/rollback/${url##*/}" "$output" ;;
  *) exit 44 ;;
 esac''')
 
@@ -417,6 +402,15 @@ output=''; url=''; accept='' '''))
         self.router.write('/fixtures/release.json', json.dumps(metadata))
         for index, name in enumerate(assets):
             self.router.write('/fixtures/asset-' + str(index + 1), (self.router.root / 'assets' / name).read_bytes())
+        rollback = self.router.root / 'assets/rollback'
+        old_assets = sorted(p.name for p in rollback.iterdir())
+        self.router.write('/fixtures/release-openwrt-v0.1.0.json', json.dumps({
+            'tag_name': 'openwrt-v0.1.0', 'draft': False, 'assets': [
+                {'id': index, 'name': name, 'state': 'uploaded'} for index, name in enumerate(old_assets, 101)
+            ],
+        }))
+        for index, name in enumerate(old_assets, 101):
+            self.router.write('/fixtures/asset-' + str(index), (rollback / name).read_bytes())
         self.router.script('/bin/curl', '''output=''; url=''; accept=''
 while [ "$#" -gt 0 ]; do
  case "$1" in
@@ -429,8 +423,12 @@ done
 printf '%s %s\\n' "$url" "$accept" >> /tmp/download-urls
 case "$url" in
  https://raw.githubusercontent.com/*) cp /fixtures/latest-installer "$output" ;;
+ https://github.com/slobys/NaiLink/releases/download/openwrt-v0.1.0/*) cp "/assets/rollback/${url##*/}" "$output" ;;
  https://github.com/*) printf partial > "$output"; exit 28 ;;
- https://api.github.com/repos/slobys/NaiLink/releases/tags/*)
+ https://api.github.com/repos/slobys/NaiLink/releases/tags/openwrt-v0.1.0)
+ [ "$accept" = 'Accept: application/vnd.github+json' ] || exit 45
+ cp /fixtures/release-openwrt-v0.1.0.json "$output" ;;
+ https://api.github.com/repos/slobys/NaiLink/releases/tags/openwrt-v0.7.99)
  [ "$accept" = 'Accept: application/vnd.github+json' ] || exit 45
  cp /fixtures/release.json "$output" ;;
  https://api.github.com/repos/slobys/NaiLink/releases/assets/*)
@@ -444,10 +442,11 @@ esac''')
         self.asset_api_downloader()
         self.assert_network_update_preserved_data(self.menu('1\n'))
         urls = (self.router.root / 'tmp/download-urls').read_text()
-        self.assertEqual(urls.count('https://api.github.com/repos/slobys/NaiLink/releases/tags/'), 1)
+        for tag in ('openwrt-v0.7.99', 'openwrt-v0.1.0'):
+            self.assertEqual(urls.count('https://api.github.com/repos/slobys/NaiLink/releases/tags/' + tag), 1)
         self.assertIn('Accept: application/octet-stream', urls)
         # Only the first asset re-probes the failed website (normal + IPv4).
-        self.assertEqual(sum(line.startswith('https://github.com/') for line in urls.splitlines()), 2)
+        self.assertEqual(urls.count('https://github.com/slobys/NaiLink/releases/download/openwrt-v0.7.99/'), 2)
 
     def test_preferred_api_failure_can_recover_through_website(self):
         self.asset_api_downloader()

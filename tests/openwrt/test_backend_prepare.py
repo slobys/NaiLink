@@ -11,6 +11,7 @@ SPEC = importlib.util.spec_from_file_location("prepare_wing", ROOT / "openwrt/pr
 PREPARE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(PREPARE)
 SOURCES = (
+    "Makefile",
     "go.mod",
     "webrender/webrender.go",
     "graphql/service/config/mutation_utils.go",
@@ -76,6 +77,7 @@ class BackendPrepareTests(unittest.TestCase):
 
     def test_runtime_patch_is_reproducible_and_idempotent(self):
         PREPARE.prepare(self.root)
+        self.assertIn(' -lt $$(stat -c %s "{}".gz)', (self.root / "Makefile").read_text(encoding="utf-8"))
         self.assertIn('routerFileServer(webFS.', (self.root / "webrender/webrender.go").read_text(encoding="utf-8"))
         cache = (self.root / "graphql/service/node/latency_cache.go").read_text(encoding="utf-8")
         self.assertIn('mergeRuntimeLatencyResults(merged, runtimeResults)', cache)

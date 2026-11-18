@@ -1,6 +1,5 @@
 """Download deadline and dependency recovery with real BusyBox ash."""
 import unittest
-import shutil
 
 import test_router
 
@@ -122,9 +121,7 @@ exit 28'''
 
     def test_preparation_budget_is_checked_again_before_stopping_service(self):
         self.router.managed()
-        shutil.copytree(self.router.root/'assets', self.router.root/'old-assets')
         self.router.assets(version='0.2.0')
-        shutil.copytree(self.router.root/'old-assets', self.router.root/'assets/rollback')
         self.router.script('/bin/date', '''if [ "$*" = +%s ]; then
  if [ -f /tmp/preflight-complete ]; then echo 2000; else echo 1000; fi
 else /bin/busybox date "$@"; fi''')
@@ -145,3 +142,39 @@ else /bin/busybox date "$@"; fi''')
                 self.assertNotEqual(result.returncode,0)
                 self.assertIn('Invalid preparation timeout',result.stderr)
                 self.assertFalse((self.router.root/'var/lock/daed-install.lock').exists())
+
+    def test_update_staging_budget_includes_rollback_before_copying_packages(self):
+        self.router.use_apk()
+        manager = self.router.root / 'bin/apk'
+        manager.write_text(manager.read_text().replace('add)\n', "adbdump) echo '  installed-size: 4096' ;;\nadd)\n", 1))
+        self.router.managed()
+        database = self.router.write('/etc/daed/wing.db', 'keep original database')
+        for relative, size in (('assets', 1024 * 1024), ('assets/rollback', 4 * 1024 * 1024)):
+            manifest = self.router.root / relative / 'manifest.tsv'
+            with manifest.open('a') as stream:
+                stream.write(f'# size\truntime.apk\t{size}\n')
+        self.router.script('/bin/df', '''case "$2" in
+ /tmp/daed-install.*) available=4096; mount=/tmp ;;
+ /mnt/staging/*) available=8192; mount=/mnt/staging ;;
+ *) available=262144; mount=/ ;;
+esac
+printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n%s 524288 0 %s 0%% %s\n' "$mount" "$available" "$mount"''')
+        self.router.script('/bin/cp', '''case "$1" in /assets/*.apk) echo "$2" >>/tmp/staged-packages ;; esac
+exec /bin/busybox cp "$@"''')
+        failure = self.router.install('--install')
+        self.assertNotEqual(failure.returncode, 0, failure.stdout)
+        self.assertIn('Not enough staging space', failure.stderr)
+        self.assertFalse((self.router.root / 'tmp/staged-packages').exists())
+        self.assertTrue((self.router.root / 'tmp/daemon-running').exists())
+        self.assertEqual(database.read_text(), 'keep original database')
+
+        directory = self.router.root / 'mnt/staging'
+        directory.mkdir(parents=True)
+        result = self.router.install('--install', '--staging-dir', '/mnt/staging')
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        copies = (self.router.root / 'tmp/staged-packages').read_text().splitlines()
+        self.assertEqual(len(copies), 4)
+        self.assertTrue(all(name.startswith('/mnt/staging/daed-install.') for name in copies))
+        self.assertEqual(list(directory.iterdir()), [])
+        self.assertTrue((self.router.root / 'tmp/daemon-running').exists())
+        self.assertEqual(database.read_text(), 'keep original database')

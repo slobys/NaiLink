@@ -1,4 +1,6 @@
 """Online update rollback with native BusyBox/UCI and package-manager faults."""
+import hashlib
+from itertools import product
 from pathlib import Path
 import shutil
 import sqlite3
@@ -22,9 +24,7 @@ class UpdateRecoveryTests(unittest.TestCase):
         case.write('/etc/daed/wing.db', 'original nodes/config/groups')
         case.write('/etc/daed/wing.db-wal', 'original WAL')
         before = (case.root/'etc/config/daed').read_bytes()
-        shutil.copytree(case.root/'assets', case.root/'old-assets')
         case.assets(fmt, 'aarch64_cortex-a53' if fmt == 'apk' else 'x86_64', '0.2.0')
-        shutil.copytree(case.root/'old-assets', case.root/'assets/rollback')
         case.write('/tmp/recovery-mode', mode)
         # Pass package paths into a fault injector. The real package solvers'
         # downgrade behavior is covered independently by native APK/opkg tests.
@@ -50,28 +50,108 @@ case "$*" in
   echo 0.2.0-1 > /usr/share/daed-router/version
   echo 'new process DB' > /etc/daed/wing.db
   echo 'new process WAL' > /etc/daed/wing.db-wal
+  if [ -f /tmp/change-rules ]; then echo 'changed rules' > /etc/daed/geodata/current/geoip.dat; fi
   case "$mode" in package_failed|rollback_failed) exit 23;; http_failed) touch /tmp/http-fail;; esac ;;
 esac''')
         case.script('/bin/sleep', ':')
         return case, before
 
     def test_package_and_management_failure_restore_data_version_and_service(self):
-        for fmt in ('ipk', 'apk'):
-            for mode in ('package_failed', 'http_failed'):
-                with self.subTest(format=fmt, failure=mode):
-                    case, before = self.make_router(mode, fmt)
-                    result = case.install('--install', '--update-only')
-                    self.assertNotEqual(result.returncode, 0)
-                    self.assertIn('previous installation and service state restored', result.stderr)
-                    self.assertEqual((case.root/'usr/share/daed-router/version').read_text().strip(), '0.1.0-1')
-                    self.assertEqual((case.root/'etc/config/daed').read_bytes(), before)
-                    self.assertEqual((case.root/'etc/daed/wing.db').read_text(), 'original nodes/config/groups')
-                    self.assertEqual((case.root/'etc/daed/wing.db-wal').read_text(), 'original WAL')
-                    self.assertTrue((case.root/'tmp/daemon-running').exists())
-                    self.assertFalse((case.root/'tmp/autostart').exists())
-                    failed = next((case.root/'root/daed-backups').glob('failed-update-*.tar.gz'))
-                    with tarfile.open(failed) as archive:
-                        self.assertEqual(archive.extractfile('etc/daed/wing.db').read(), b'new process DB\n')
+        for fmt, mode, menu in product(('ipk', 'apk'), ('package_failed', 'http_failed'), (False, True)):
+            with self.subTest(format=fmt, failure=mode, menu=menu):
+                case, before = self.make_router(mode, fmt)
+                result = (
+                    case.run_router('/bin/sh', '/installer/install.sh', '--menu',
+                                    '--release', 'openwrt-v0.2.0', '--asset-dir', '/assets', input='1\n')
+                    if menu else case.install('--install', '--update-only')
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('previous installation and service state restored', result.stderr)
+                self.assertEqual((case.root/'usr/share/daed-router/version').read_text().strip(), '0.1.0-1')
+                self.assertEqual((case.root/'etc/config/daed').read_bytes(), before)
+                self.assertEqual((case.root/'etc/daed/wing.db').read_text(), 'original nodes/config/groups')
+                self.assertEqual((case.root/'etc/daed/wing.db-wal').read_text(), 'original WAL')
+                self.assertTrue((case.root/'tmp/daemon-running').exists())
+                self.assertFalse((case.root/'tmp/autostart').exists())
+                failed = next((case.root/'root/daed-backups').glob('failed-update-*.tar.gz'))
+                with tarfile.open(failed) as archive:
+                    self.assertEqual(archive.extractfile('etc/daed/wing.db').read(), b'new process DB\n')
+
+    def write_managed_rules(self, case):
+        data = hashlib.shake_256(b'NaiLink backup fixture').digest(512 * 1024)
+        for batch in ('data-100', 'data-200'):
+            for name in ('geoip.dat', 'geosite.dat'):
+                case.write(f'/etc/daed/geodata/{batch}/{name}', data)
+        (case.root/'etc/daed/geodata/current').symlink_to('data-200')
+        return data
+
+    def test_unchanged_managed_rules_are_reused_and_custom_data_is_in_config_backup(self):
+        case, _ = self.make_router('success')
+        data = self.write_managed_rules(case)
+        case.write('/etc/daed/geosite.dat', 'my custom rules')
+        backup_dir = case.root/'root/daed-backups'
+        fingerprints = []
+        for _ in range(2):
+            result = case.install('--install')
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            rules, = (backup_dir/'geodata').glob('*.tar.gz')
+            fingerprints.append((rules.name, rules.stat().st_ino, rules.stat().st_mtime_ns))
+            # Simulate another upgrade from the same verified fixture release.
+            case.write('/usr/share/daed-router/version', '0.1.0-1\n')
+        configurations = sorted(backup_dir.glob('*.tar.gz'))
+        self.assertEqual(len(configurations), 2)
+        self.assertEqual(fingerprints[0], fingerprints[1])
+        for configuration in configurations:
+            self.assertEqual(configuration.with_suffix('.gz.rules').read_text().strip(), 'geodata/' + rules.name)
+            self.assertLess(configuration.stat().st_size, 4096)
+            with tarfile.open(configuration) as archive:
+                self.assertEqual(archive.extractfile('etc/daed/geosite.dat').read(), b'my custom rules')
+                self.assertTrue(all(not name.startswith('etc/daed/geodata') for name in archive.getnames()))
+        with tarfile.open(rules) as archive:
+            self.assertEqual(archive.getmember('etc/daed/geodata/current').linkname, 'data-200')
+            for batch in ('data-100', 'data-200'):
+                self.assertEqual(archive.extractfile(f'etc/daed/geodata/{batch}/geoip.dat').read(), data)
+
+    def test_rollback_restores_changed_managed_rules_and_preserves_failed_snapshot(self):
+        case, _ = self.make_router('http_failed')
+        data = self.write_managed_rules(case)
+        case.write('/tmp/change-rules', '')
+        result = case.install('--install')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('previous installation and service state restored', result.stderr)
+        self.assertEqual((case.root/'etc/daed/geodata/current/geoip.dat').read_bytes(), data)
+        failed = next((case.root/'root/daed-backups').glob('failed-update-*.tar.gz'))
+        with tarfile.open(failed) as archive:
+            self.assertEqual(archive.extractfile('etc/daed/geodata/data-200/geoip.dat').read(), b'changed rules\n')
+
+    def test_insufficient_backup_space_does_not_stop_the_service(self):
+        case, _ = self.make_router('success')
+        case.script('/bin/df', '''echo 'Filesystem 1024-blocks Used Available Capacity Mounted on'
+case "$2" in
+ /root/daed-backups) echo 'fixture 10 10 0 100% /' ;;
+ *) echo 'staging 8192 0 8192 0% /tmp' ;;
+esac''')
+        case.write('/tmp/service-calls', '')
+        result = case.install('--install')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Not enough space for the configuration backup', result.stderr)
+        self.assertNotIn('stop', (case.root/'tmp/service-calls').read_text().splitlines())
+        self.assertTrue((case.root/'tmp/daemon-running').exists())
+
+    def test_space_budget_reserves_larger_rollback_payload(self):
+        case, _ = self.make_router('success', 'apk')
+        manager = case.root/'bin/apk'
+        manager.write_text(manager.read_text().replace('case "$1" in', '''case "$1" in
+adbdump)
+ case "$2" in */rollback/runtime.apk) echo '  installed-size: 16777216';;
+                  *) echo '  installed-size: 1048576';; esac ;;
+''', 1))
+        case.script('/bin/df', "printf '%s\\n' 'Filesystem 1024-blocks Used Available Capacity Mounted on' 'fixture 20480 16384 4096 80% /'")
+        case.write('/tmp/service-calls', '')
+        result = case.install('--install')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Not enough space for new and rollback packages', result.stderr)
+        self.assertNotIn('stop', (case.root/'tmp/service-calls').read_text().splitlines())
 
     def test_backup_failure_restarts_untouched_old_service(self):
         case, before = self.make_router('backup_failed')

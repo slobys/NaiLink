@@ -215,11 +215,38 @@ const PickerNodeCard = memo(
   },
 )
 
+interface PickerCatalog {
+  pending: boolean
+  error: boolean
+  retry: () => void
+}
+
+function PickerCatalogStatus({ catalog }: { catalog: PickerCatalog }) {
+  const { t } = useTranslation()
+  if (catalog.error) {
+    return (
+      <div role="alert" className="mb-3 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+        <span>{t('panel.loadFailed')}</span>
+        <Button variant="outline" size="sm" onClick={catalog.retry}>
+          {t('panel.retry')}
+        </Button>
+      </div>
+    )
+  }
+  if (!catalog.pending) return null
+  return (
+    <p role="status" className="py-3 text-sm text-muted-foreground">
+      {t('panel.loading')}
+    </p>
+  )
+}
+
 export function GroupAddNodesModal({
   opened,
   onClose,
   groupName,
   items,
+  catalog,
   loading,
   resetKey,
   onSubmit,
@@ -230,6 +257,7 @@ export function GroupAddNodesModal({
   onClose: () => void
   groupName: string
   items: GroupPickerItem[]
+  catalog: PickerCatalog
   loading?: boolean
   resetKey: string
   onSubmit: (ids: string[]) => Promise<void>
@@ -417,6 +445,7 @@ export function GroupAddNodesModal({
           />
         </div>
         <ScrollableDialogBody className="node-picker-body px-4 py-3">
+          <PickerCatalogStatus catalog={catalog} />
           <div data-picker-list className="picker-node-grid">
             {filteredItems.map((item) => (
               <PickerNodeCard
@@ -433,7 +462,7 @@ export function GroupAddNodesModal({
                 onToggle={toggleItem}
               />
             ))}
-            {!filteredItems.length && (
+            {!catalog.pending && !catalog.error && !filteredItems.length && (
               <p className="col-span-full py-8 text-center text-sm text-muted-foreground">
                 {t(query.trim() ? 'groupPicker.noSearchResults' : 'groupPicker.noAvailableNodes')}
               </p>
@@ -485,6 +514,7 @@ export function GroupAddSubscriptionsModal({
   onClose,
   groupName,
   items,
+  catalog,
   loading,
   resetKey,
   onSubmit,
@@ -496,6 +526,7 @@ export function GroupAddSubscriptionsModal({
   onClose: () => void
   groupName: string
   items: GroupPickerItem[]
+  catalog: PickerCatalog
   loading?: boolean
   resetKey: string
   onSubmit: (values: { ids: string[]; nameFilterRegex?: string | null }) => Promise<void>
@@ -659,6 +690,7 @@ export function GroupAddSubscriptionsModal({
 
           <LatencyStatus tests={tests} scope={scope} />
           <ServiceCheckBar checks={checks} />
+          <PickerCatalogStatus catalog={catalog} />
           <div className="subscription-picker-grid">
             {filteredItems.map((item) => {
               const checked = selectedIds.includes(item.id)
@@ -733,7 +765,7 @@ export function GroupAddSubscriptionsModal({
                 </article>
               )
             })}
-            {!filteredItems.length && (
+            {!catalog.pending && !catalog.error && !filteredItems.length && (
               <p className="py-10 text-center text-sm text-muted-foreground">
                 {t(query.trim() ? 'groupPicker.noSearchResults' : 'groupPicker.noAvailableSubscriptions')}
               </p>

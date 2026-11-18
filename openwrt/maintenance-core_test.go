@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/daeuniverse/dae-wing/routercore"
@@ -162,6 +163,61 @@ func TestCorePinnedArchiveInstall(t *testing.T) {
 	result := runFixtureJob(t, m, "core_install_singbox")
 	if result.Job.State != "success" || !result.Cores.Installed {
 		t.Fatal(result.Job)
+	}
+}
+
+func TestPrepareFirstCoreUsesReviewedArchiveAndPreservesExistingDatabase(t *testing.T) {
+	for _, item := range []struct{ engine, env string }{
+		{"sing-box", "DAED_TEST_SINGBOX_ARCHIVE"}, {"mihomo", "DAED_TEST_MIHOMO_ARCHIVE"},
+	} {
+		t.Run(item.engine, func(t *testing.T) {
+			archive := os.Getenv(item.env)
+			if archive == "" {
+				t.Skip("provide the pinned compatibility archive")
+			}
+			m := maintenanceFixture(t)
+			binary := filepath.Join(t.TempDir(), "core", item.engine)
+			if item.engine == "sing-box" {
+				m.coreBinary = binary
+			} else {
+				m.mihomoBinary = binary
+			}
+			if err := os.WriteFile(filepath.Join(m.configDir, ".pending-first-core"), []byte(item.engine+"\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			m.fetch = func(_ context.Context, _, dest string, _ int64) error {
+				data, err := os.ReadFile(archive)
+				if err != nil {
+					return err
+				}
+				return os.WriteFile(dest, data, 0600)
+			}
+			m.run = func(ctx context.Context, args ...string) ([]byte, error) {
+				if args[0] == "/usr/libexec/daed/check" {
+					if strings.Join(args[1:], " ") != "--check --core "+item.engine+" --mode tproxy" {
+						t.Fatalf("unexpected compatibility command %v", args[1:])
+					}
+					return nil, nil
+				}
+				return maintenanceCommand(ctx, args...)
+			}
+			if err := m.prepareFirstCore(t.Context(), item.engine, "tproxy"); err != nil {
+				t.Fatal(err)
+			}
+			state, err := routercore.ReadState(m.configDir)
+			if err != nil || state.Current != item.engine || state.Mode != "tproxy" || state.Running {
+				t.Fatal(state, err)
+			}
+			if err := m.prepareFirstCore(t.Context(), item.engine, "tproxy"); err != nil {
+				t.Fatal("resuming an interrupted bootstrap should be safe", err)
+			}
+			if err := os.WriteFile(filepath.Join(m.configDir, "wing.db"), []byte("fixture nodes"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := m.prepareFirstCore(t.Context(), item.engine, "tproxy"); err == nil || err.Error() != "unsafe_state" {
+				t.Fatal("first install accepted an existing database", err)
+			}
+		})
 	}
 }
 

@@ -17,7 +17,7 @@ start_service() {
 	[ -x /usr/bin/daed ] || return 1
 	mkdir -p /etc/daed /var/log/daed /var/run/daed
 	chmod 700 /etc/daed /var/log/daed /var/run/daed
-	/usr/libexec/daed/luci-proxy --prepare || return 1
+	/usr/bin/daed prepare-luci --config /etc/daed || return 1
 	procd_open_instance main
 	procd_set_param command /usr/bin/daed run --config /etc/daed --listen "$listen" \
 		--logfile /var/log/daed/daed.log --logfile-maxsize 1 --logfile-maxbackups 1

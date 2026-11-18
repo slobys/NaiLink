@@ -133,6 +133,20 @@ class ReleaseSafetyTest(unittest.TestCase):
     def test_valid_complete_artifact_set(self):
         self.assertEqual(len(release.validate_assets(self.directory, VERSION, SHA)), len(list(self.directory.iterdir())))
 
+    def test_manifest_sizes_are_checked_against_release_assets(self):
+        manifest = self.directory / "manifest.tsv"
+        name = self.rows[0][3]
+        size = (self.directory / name).stat().st_size
+        with manifest.open("a") as stream:
+            stream.write(f"# size\t{name}\t{size}\n")
+        self.checksums()
+        self.assertEqual(len(release.validate_assets(self.directory, VERSION, SHA)), len(list(self.directory.iterdir())))
+        manifest.write_text(manifest.read_text().replace(f"\t{name}\t{size}\n", f"\t{name}\t{size + 1}\n"))
+        self.checksums()
+        with self.assertRaisesRegex(ValueError, "Manifest size differs"):
+            self.publish()
+        self.assertEqual(self.calls, [])
+
     def test_missing_optional_core_source_blocks_release(self):
         (self.directory / 'nailink-sing-box-1.14.3-nailink.1-source.tar.gz').unlink()
         self.checksums()

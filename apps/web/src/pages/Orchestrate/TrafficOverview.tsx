@@ -1,19 +1,27 @@
 import type { CSSProperties, ReactNode } from 'react'
-import type { ChartConfig } from '~/components/ui/chart'
 import dayjs from 'dayjs'
 import { ArrowDown, ArrowUp, ChevronDown, Download, Link2, Radio, Upload } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { lazy, Suspense, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts'
 
 import { useTrafficOverviewQuery } from '~/apis'
 import { Button } from '~/components/ui/button'
 import { Card, CardContent } from '~/components/ui/card'
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from '~/components/ui/chart'
 import { useRouterMaintenanceQuery } from '~/hooks/useRouterMaintenance'
 import { cn } from '~/lib/utils'
 import { coreTransitionActive } from '~/utils/router-maintenance'
 import { routerMode } from '~/utils/router-mode'
+
+const TrafficHistoryChart = lazy(() => import('./TrafficHistoryChart').catch(() => ({ default: ChartLoadFailed })))
+
+function ChartLoadFailed() {
+  const { t } = useTranslation()
+  return (
+    <div role="status" className="traffic-chart text-xs text-muted-foreground">
+      {t('trafficOverview.chartLoadFailed')}
+    </div>
+  )
+}
 
 type TimeRangeKey = '1m' | '10m' | '30m' | '1h'
 
@@ -40,12 +48,6 @@ function formatBytes(value: number) {
 
 function formatRate(value: number) {
   return `${formatBytes(value)}/s`
-}
-
-function formatAxisRate(value: number) {
-  if (value < 1024) return `${value.toFixed(0)}B`
-  if (value < 1024 ** 2) return `${(value / 1024).toFixed(value < 10 * 1024 ? 1 : 0)}K`
-  return `${(value / 1024 ** 2).toFixed(value < 10 * 1024 ** 2 ? 1 : 0)}M`
 }
 
 function splitFormattedRate(value: number) {
@@ -172,17 +174,9 @@ export function TrafficOverview({ compact = false }: { compact?: boolean }) {
   const [selectedRange, setSelectedRange] = useState<TimeRangeKey>('1m')
   const [showTrends, setTrendsOpen] = useState(false)
   const maintenance = useRouterMaintenanceQuery(routerMode)
+  const activeCore = maintenance.data?.cores?.current
   const switchingCore = coreTransitionActive(maintenance.data)
   const trendsOpen = compact || showTrends
-
-  const chartConfig = useMemo(
-    () =>
-      ({
-        upload: { label: t('trafficOverview.uploadLegend'), color: 'var(--chart-1)' },
-        download: { label: t('trafficOverview.downloadLegend'), color: 'var(--chart-2)' },
-      }) satisfies ChartConfig,
-    [t],
-  )
 
   const selectedWindow = useMemo(
     () => TIME_RANGE_OPTIONS.find((option) => option.key === selectedRange) ?? TIME_RANGE_OPTIONS[0],
@@ -193,11 +187,13 @@ export function TrafficOverview({ compact = false }: { compact?: boolean }) {
     selectedWindow.seconds,
     trendsOpen ? selectedWindow.maxPoints : 2,
     !switchingCore,
+    activeCore === 'sing-box' || activeCore === 'mihomo',
+    trendsOpen,
   )
   const runtimeOverview = trafficOverviewQuery.data
   const chartWindowEnd = useMemo(
-    () => (runtimeOverview?.updatedAt ? dayjs(runtimeOverview.updatedAt).valueOf() : Date.now()),
-    [runtimeOverview?.updatedAt],
+    () => (runtimeOverview?.historyUpdatedAt ? dayjs(runtimeOverview.historyUpdatedAt).valueOf() : Date.now()),
+    [runtimeOverview?.historyUpdatedAt],
   )
   const chartWindowStart = useMemo(
     () => chartWindowEnd - selectedWindow.seconds * 1000,
@@ -356,60 +352,24 @@ export function TrafficOverview({ compact = false }: { compact?: boolean }) {
                 <span>{trafficOverviewQuery.isPending ? t('panel.loading') : t('panel.emptyStats')}</span>
               )}
             </div>
-            <ChartContainer config={chartConfig} className="traffic-chart aspect-auto w-full">
-              <AreaChart data={trafficChartData} margin={{ left: 0, right: 8, top: 6, bottom: 0 }}>
-                <defs>
-                  {(['upload', 'download'] as const).map((key) => (
-                    <linearGradient key={key} id={`traffic-${key}-fill`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={`var(--color-${key})`} stopOpacity={0.2} />
-                      <stop offset="100%" stopColor={`var(--color-${key})`} stopOpacity={0} />
-                    </linearGradient>
-                  ))}
-                </defs>
-                <CartesianGrid vertical={false} strokeDasharray="3 3" />
-                <XAxis
-                  type="number"
-                  scale="time"
-                  dataKey="timestamp"
-                  axisLine={false}
-                  tickLine={false}
-                  minTickGap={24}
-                  tickMargin={10}
-                  height={30}
-                  domain={[chartWindowStart, chartWindowEnd]}
-                  allowDataOverflow
-                  tickFormatter={(value) => dayjs(value).format('HH:mm')}
+            {trafficChartData.length > 0 ? (
+              <Suspense
+                fallback={
+                  <div className="traffic-chart" role="status">
+                    {t('panel.loading')}
+                  </div>
+                }
+              >
+                <TrafficHistoryChart
+                  data={trafficChartData}
+                  windowStart={chartWindowStart}
+                  windowEnd={chartWindowEnd}
+                  formatRate={formatRate}
                 />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tickMargin={6}
-                  width={48}
-                  tickFormatter={(value) => formatAxisRate(Number(value))}
-                  domain={[0, (dataMax: number) => Math.max(32 * 1024, dataMax * 1.15)]}
-                />
-                <ChartTooltip
-                  content={
-                    <ChartTooltipContent
-                      labelFormatter={(value) => dayjs(Number(value)).format('HH:mm:ss')}
-                      formatter={(value) => formatRate(Number(value))}
-                      indicator="line"
-                    />
-                  }
-                />
-                {(['upload', 'download'] as const).map((key) => (
-                  <Area
-                    key={key}
-                    dataKey={key}
-                    type="monotone"
-                    stroke={`var(--color-${key})`}
-                    strokeWidth={2}
-                    fill={`url(#traffic-${key}-fill)`}
-                    isAnimationActive={false}
-                  />
-                ))}
-              </AreaChart>
-            </ChartContainer>
+              </Suspense>
+            ) : (
+              <div className="traffic-chart" aria-hidden="true" />
+            )}
             <dl className="grid grid-cols-3 gap-2 border-t pt-3">
               {[
                 [

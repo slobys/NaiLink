@@ -577,6 +577,7 @@ func _fetchLinksContext(ctx context.Context, subscriptionLink string, transport 
         generated[name] = digest(data)
     # Keep latency fixes in the release source, without changing submodule pins.
     patches = {
+        "Makefile": ("2254205298ada7665179a0943f90db3b9067e76b66bbc41046f315d234aaab58", lambda value: value.replace(r' \< $$(stat -c %s "{}".gz)', ' -lt $$(stat -c %s "{}".gz)', 1)),
         "dae-core/control/kern/tproxy.c": ("bf167e21a8ee8105a7662657b0eb578197e5044bbed28cfccd34b705b2f0ac4c", router_kernel_dns_health),
         "graphql/service/config/global/schema.go": ("59e3eaee0ef6afd910b2d960c89f11b6d5fa7a4d5112de0f51cb08898cf7c5e1", lambda value: value.replace('structField := t.Field(i)', 'structField := t.Field(i)\n\t\tif structField.Name == "NailinkNodeDNS" {\n\t\t\tcontinue\n\t\t}')),
         "dae/flat_desc.go": ("ba276d448f769d1c537274cbed6f159549048cff6ebf5e59c4ac89639357c39f", lambda value: value.replace('mapping := section.Tag.Get("mapstructure")', 'mapping := section.Tag.Get("mapstructure")\n\t\tif mapping == "nailink_node_dns" { continue }')),
@@ -710,6 +711,8 @@ func routerSingleHopDialer(ctx context.Context, gOption *GlobalOption, iOption I
     schema_text = schema_file.read_text(encoding="utf-8")
     if 'connectivityStatus(' not in schema_text:
         schema_text = schema_text.replace('type Query {', 'type Query {\n    connectivityStatus(refresh: Boolean, force: Boolean): String! @hasRole(role: ADMIN)', 1)
+    if 'diagnoseWebsite(' not in schema_text:
+        schema_text = schema_text.replace('type Mutation {', 'type Mutation {\n    diagnoseWebsite(target: String!): String! @hasRole(role: ADMIN)', 1)
     if 'coreRuntimeGroups: String!' not in schema_text:
         schema_text = schema_text.replace('type Query {', 'type Query {\n    coreRuntimeGroups: String! @hasRole(role: ADMIN)', 1)
     if 'groupServices:' not in schema_text:
@@ -815,6 +818,8 @@ func routerSingleHopDialer(ctx context.Context, gOption *GlobalOption, iOption I
         ("graphql/service/config/router_apply.go", "config_apply.go"),
         ("graphql/service/config/router_apply_test.go", "config_apply_test.go"),
         ("cmd/router_config_restore_test.go", "config_restore_test.go"),
+        ("cmd/router_luci_prepare.go", "luci_prepare.go"),
+        ("cmd/router_luci_prepare_test.go", "luci_prepare_test.go"),
         ("graphql/router_geodata_mutation.go", "geodata_mutation.go"),
         ("graphql/router_geodata_mutation_test.go", "geodata_mutation_test.go"),
         ("dae/router_restart_state.go", "restart_state.go"),
@@ -825,6 +830,8 @@ func routerSingleHopDialer(ctx context.Context, gOption *GlobalOption, iOption I
         ("dae-core/control/router_restart_core_test.go", "restart_core_test.go"),
         ("dae/router_network_ready_test.go", "network_ready_test.go"),
         ("dae/router_httpclient_test.go", "httpclient_test.go"),
+        ("dae/router_website_diagnosis.go", "website_diagnosis.go"),
+        ("dae/router_website_diagnosis_test.go", "website_diagnosis_test.go"),
         ("graphql/service/node/router_latency_cache.go", "node_latency_cache.go"),
         ("graphql/service/node/router_latency_cache_test.go", "node_latency_cache_test.go"),
         ("graphql/service/node/router_latency_option_test.go", "node_latency_option_test.go"),
@@ -930,6 +937,7 @@ def prepare(root):
     # Validate/transform the small reviewed input set in isolation first. An
     # unknown edit in a late file must not leave earlier sources half updated.
     inputs = (
+        "Makefile",
         "go.mod",
         "webrender/webrender.go",
         "cmd/run.go", "dae/run.go", "dae/httpclient.go", "dae/runtime.go",
@@ -955,7 +963,7 @@ def prepare(root):
     manifest = root / ".daed-openwrt-prepare.json"
     previous = json.loads(manifest.read_text()) if manifest.exists() else {}
     def relative(key):
-        return key if "/" in key or key == "go.mod" else "graphql/service/subscription/" + key
+        return key if "/" in key or key in ("go.mod", "Makefile") else "graphql/service/subscription/" + key
     with tempfile.TemporaryDirectory(prefix=".nailink-prepare-", dir=root.parent) as temporary:
         stage = Path(temporary)
         staged = set(inputs) | {relative(key) for key in previous}

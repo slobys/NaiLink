@@ -77,6 +77,7 @@ func TestRouterOverviewSharesFailuresAndRecoversWithoutErasingSamples(t *testing
 	}
 	failed.Store(true)
 	s.statsNextAt = time.Time{}
+	started := time.Now()
 	for range 3 {
 		if _, _, err = routerCoreOverview(60, 30); err == nil || err.Error() != "core_api_invalid" {
 			t.Fatal("invalid statistics were hidden", err)
@@ -84,6 +85,9 @@ func TestRouterOverviewSharesFailuresAndRecoversWithoutErasingSamples(t *testing
 	}
 	if calls.Load() != 2 || !s.stats.UpdatedAt.Equal(first.UpdatedAt) || len(s.samples) != 1 {
 		t.Fatal("failed polling retried immediately or erased the last valid sample")
+	}
+	if s.statsNextAt.Before(started.Add(5 * time.Second)) {
+		t.Fatal("failed polling did not wait for the retry interval")
 	}
 	failed.Store(false)
 	s.statsNextAt = time.Time{}

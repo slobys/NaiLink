@@ -55,6 +55,9 @@ class ManifestTests(unittest.TestCase):
         manifest = (self.directory / "manifest.tsv").read_text()
         self.assertIn("support\tall\tcheck\tdaed-check", manifest)
         self.assertIn(hashlib.sha256((self.directory / "daed-check").read_bytes()).hexdigest(), manifest)
+        for row in self.rows:
+            name = row[3]
+            self.assertIn(f"# size\t{name}\t{(self.directory / name).stat().st_size}\n", manifest)
 
     def test_missing_architecture_is_not_silently_published(self):
         self.rows.pop()

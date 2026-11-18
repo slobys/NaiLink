@@ -57,7 +57,14 @@ def main():
     if replacements != 1:
         raise ValueError("Installer release tag cannot be set unambiguously")
     (args.directory / "install.sh").write_text(installer, encoding="utf-8", newline="\n")
-    (args.directory / "manifest.tsv").write_text("# daed-openwrt-manifest-v1\n" + "".join("\t".join(row) + "\n" for row in sorted(rows)))
+    # V1 readers skip comments, so older installers can still use the manifest.
+    records = sorted(rows)
+    sizes = sorted({row[3] for row in records})
+    (args.directory / "manifest.tsv").write_text(
+        "# daed-openwrt-manifest-v1\n"
+        + "".join(f"# size\t{name}\t{(args.directory / name).stat().st_size}\n" for name in sizes)
+        + "".join("\t".join(row) + "\n" for row in records)
+    )
     with open(args.directory / "SHA256SUMS", "w") as sums:
         for path in sorted(args.directory.iterdir()):
             if path.is_file() and path.name != "SHA256SUMS":

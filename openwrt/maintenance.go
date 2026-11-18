@@ -1032,6 +1032,19 @@ func maintenanceCLI(command, configDir, jobID string) {
 	}
 	manager := newMaintenance(configDir)
 	switch command {
+	case "first_install_singbox", "first_install_mihomo":
+		engine := "sing-box"
+		if command == "first_install_mihomo" {
+			engine = "mihomo"
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 12*time.Minute)
+		defer cancel()
+		err := manager.prepareFirstCore(ctx, engine, jobID)
+		result := maintenanceStatus{Success: err == nil}
+		if err != nil {
+			result.Code = maintenanceCode(err)
+		}
+		json.NewEncoder(os.Stdout).Encode(result)
 	case "geodata_check":
 		json.NewEncoder(os.Stdout).Encode(manager.checkGeodataLatest(context.Background()))
 	case "status":

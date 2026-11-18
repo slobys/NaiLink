@@ -10,6 +10,9 @@ import (
 )
 
 func (r *queryResolver) CoreStatus() string { return dae.RouterCoreStatus() }
+func (r *MutationResolver) DiagnoseWebsite(ctx context.Context, args struct{ Target string }) string {
+	return dae.RouterDiagnoseWebsite(ctx, args.Target)
+}
 func (r *queryResolver) ConnectivityStatus(ctx context.Context, args struct{ Refresh, Force *bool }) string {
 	return dae.RouterConnectivityStatus(ctx, args.Refresh != nil && *args.Refresh, args.Force != nil && *args.Force)
 }

@@ -33,7 +33,11 @@ var HttpTransport = &http.Transport{
 		if err != nil {
 			return nil, err
 		}
+		start := time.Now()
 		addresses, err := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
+		if probe, ok := ctx.Value(websiteObservationKey{}).(*websiteObservation); ok {
+			probe.record("dns", time.Since(start))
+		}
 		if err != nil {
 			return nil, err
 		}

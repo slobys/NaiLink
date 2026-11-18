@@ -218,6 +218,7 @@ esac''')
         self.assets("apk", architecture)
 
     def managed(self, running=True):
+        shutil.copytree(self.root / "assets", self.root / "assets/rollback", ignore=shutil.ignore_patterns("rollback"))
         self.run_router("/fixtures/install")
         self.run_router("/sbin/uci", "set", "daed.main.enabled=1")
         self.run_router("/sbin/uci", "commit", "daed")
@@ -231,6 +232,42 @@ esac''')
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
             self.assertEqual(json.loads(result.stdout)["firmware"], firmware)
 
+    def test_first_optional_core_on_firmware_without_btf(self):
+        for fmt, choice, engine in (("ipk", "4", "sing-box"), ("apk", "5", "mihomo")):
+            with self.subTest(engine=engine):
+                case = RouterTests()
+                case.setUp()
+                self.addCleanup(case.tearDown)
+                if fmt == "apk":
+                    case.use_apk()
+                (case.root / "sys/kernel/btf/vmlinux").unlink()
+                case.script("/bin/fw4", "exit 0")
+                case.script("/bin/nft", "exit 0")
+                case.script("/fixtures/bootstrap", f'''echo "$*" >> /tmp/bootstrap-calls
+[ "$4" = tproxy ] || exit 1
+if [ ! -e /tmp/allow-bootstrap ]; then echo '{{"success":false,"code":"download_failed"}}'; exit 0; fi
+mkdir -p /etc/daed/cores
+echo '{{"current":"{engine}","mode":"tproxy","phase":"stable"}}' > /etc/daed/cores/state.json
+echo '{{"success":true}}'
+''')
+                with (case.root / "fixtures/install").open("a") as stream:
+                    stream.write("\ncp /fixtures/bootstrap /usr/libexec/daed/luci-proxy\n")
+                failed = case.run_router("/bin/sh", "/installer/install.sh", "--menu", "--asset-dir", "/assets", input=choice + "\n")
+                self.assertIn("download_failed", failed.stderr)
+                self.assertNotEqual(failed.returncode, 0)
+                self.assertFalse((case.root / "tmp/daemon-running").exists())
+                installs = (case.root / "tmp/pm-calls").read_text().count("runtime." + fmt)
+                case.write("/tmp/allow-bootstrap", "")
+                result = case.install("--install", "--core", engine)
+                self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+                self.assertEqual(json.loads((case.root / "etc/daed/cores/state.json").read_text())["current"], engine)
+                self.assertFalse((case.root / "etc/daed/.pending-first-core").exists())
+                self.assertTrue((case.root / "tmp/daemon-running").exists())
+                final_calls = (case.root / "tmp/pm-calls").read_text()
+                if fmt == "ipk":
+                    self.assertEqual(final_calls.count("runtime." + fmt), installs)
+                self.assertNotIn("vmlinux-btf", final_calls)
+
     def test_old_kernel_and_missing_btf_are_rejected(self):
         self.write("/tmp/kernel", "5.15.100\n")
         self.assertNotEqual(self.install().returncode, 0)
@@ -243,13 +280,16 @@ esac''')
     def test_missing_btf_can_be_repaired_only_from_matching_firmware_package(self):
         for fmt in ("ipk", "apk"):
             with self.subTest(format=fmt):
-                if fmt == "apk": self.use_apk()
-                (self.root / "sys/kernel/btf/vmlinux").unlink(missing_ok=True)
+                case = RouterTests()
+                case.setUp()
+                self.addCleanup(case.tearDown)
+                if fmt == "apk": case.use_apk()
+                (case.root / "sys/kernel/btf/vmlinux").unlink()
                 pm = "/bin/apk" if fmt == "apk" else "/bin/opkg"
-                original = (self.root / pm.lstrip("/")).read_text()
+                original = (case.root / pm.lstrip("/")).read_text()
                 # Native manager stand-in: real ash/jshn/installer exercise the
                 # exact-version selection; it is not a real kernel package.
-                self.write(pm, original.replace("#!/bin/sh\n", """#!/bin/sh
+                case.write(pm, original.replace("#!/bin/sh\n", """#!/bin/sh
 case "$*" in
 "search -x vmlinux-btf") echo "vmlinux-btf-6.6.73-r6 x86_64"; exit 0 ;;
 "info vmlinux-btf") echo "Version: 6.6.73-6"; exit 0 ;;
@@ -260,13 +300,10 @@ case "$*" in
  exit 0 ;;
 esac
 """, 1), True)
-                result = self.install()
+                result = case.install()
                 self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-                self.assertIn("BTF repaired", (self.root / "tmp/pm-calls").read_text())
-                self.assertTrue(json.loads(self.check("--check").stdout)["compatible"])
-                # Restore only fixture-owned state between managers.
-                self.write(pm, original, True)
-                (self.root / "usr/lib/debug/boot/vmlinux-6.6.73").unlink()
+                self.assertIn("BTF repaired", (case.root / "tmp/pm-calls").read_text())
+                self.assertTrue(json.loads(case.check("--check").stdout)["compatible"])
 
     def test_missing_btf_mismatch_and_readonly_modes_preserve_service(self):
         (self.root / "sys/kernel/btf/vmlinux").unlink()

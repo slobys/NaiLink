@@ -171,7 +171,7 @@ export function SortableGroupContent({
   nodes: GroupNode[]
   subscriptions: GroupSubscription[]
   nodeLatencies?: Record<string, NodeLatencyProbeResult>
-  allSubscriptions?: Subscription[]
+  allSubscriptions?: Pick<Subscription, 'id' | 'tag'>[]
   autoExpandValue?: string
   collapsed?: boolean
   onExpand: () => void

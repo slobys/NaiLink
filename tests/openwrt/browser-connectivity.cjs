@@ -61,6 +61,8 @@ function sample() {
       assert.ok(body.data, 'Authenticated GraphQL endpoint must return data')
       return body.data
     }
+    const rejected = await gql('mutation{diagnoseWebsite(target:"https://127.0.0.1/")}')
+    assert.equal(JSON.parse(rejected.diagnoseWebsite).code, 'invalid_target')
     const config = (
       await gql(
         'mutation{createConfig(name:"Connectivity fixture",global:{checkInterval:"30s",tcpCheckUrl:["http://127.0.0.1:18081/"]}){id}}',
@@ -108,8 +110,25 @@ function sample() {
         force = 0,
         automatic = 0,
         release
+      const diagnosisRequests = []
       await page.route('**/cgi-bin/daed-router/graphql', async (route) => {
         const body = route.request().postDataJSON()
+        if (/mutation DiagnoseWebsite\b/.test(body?.query || '')) {
+          const target = body.variables.target
+          diagnosisRequests.push(target)
+          const value =
+            target === 'chatgpt'
+              ? {
+                  core: 'dae',
+                  group: 'AI',
+                  node: 'fixture-us',
+                  status: 'ok',
+                  httpStatus: 200,
+                  ms: { dns: 12, connect: 30, tls: 42, ttfb: 99 },
+                }
+              : { core: 'mihomo', status: 'error', code: 'timeout', ms: { nativeDns: 58, connect: 752 } }
+          return route.fulfill({ json: { data: { diagnoseWebsite: JSON.stringify(value) } } })
+        }
         if (!/query ConnectivityStatus\b/.test(body?.query || '')) return route.continue()
         if (body.variables.force) {
           force++
@@ -128,6 +147,21 @@ function sample() {
       const frame = page.frameLocator('iframe'),
         section = frame.locator('[data-connectivity]')
       await section.getByText('HTTP 403', { exact: true }).waitFor({ timeout: 45000 })
+      assert.deepEqual(diagnosisRequests, [], 'Website diagnosis is manual')
+      if (width === 1600) {
+        await section.getByRole('button', { name: '网页诊断', exact: true }).click()
+        const dialog = frame.getByRole('dialog', { name: '网页诊断' })
+        await dialog.getByRole('button', { name: '测试 ChatGPT', exact: true }).click()
+        await dialog.getByText('fixture-us', { exact: true }).waitFor()
+        assert.ok(await dialog.getByText('99 ms', { exact: true }).isVisible())
+        await dialog.getByRole('button', { name: '测试 Gemini', exact: true }).click()
+        await dialog.getByText(/Gemini.*请求超时/).waitFor()
+        assert.ok(await dialog.getByText('58 ms', { exact: true }).isVisible())
+        assert.ok(await dialog.getByText('未观测到', { exact: true }).count())
+        assert.deepEqual(diagnosisRequests, ['chatgpt', 'gemini'])
+        await page.keyboard.press('Escape')
+        await dialog.waitFor({ state: 'hidden' })
+      }
       assert.equal(await section.locator('[data-connectivity-target]').count(), 4)
       assert.equal(
         await section.locator('[data-connectivity-target="github"]').getByText('超时', { exact: true }).count(),

@@ -21,6 +21,7 @@ import {
   useNodesQuery,
   useRemoveGroupMutation,
   useRenameGroupMutation,
+  useSubscriptionNamesQuery,
   useSubscriptionsQuery,
 } from '~/apis'
 import { DroppableGroupCard } from '~/components/DroppableGroupCard'
@@ -74,7 +75,6 @@ export function GroupResource({
   const purposes = useGroupServices()
   const presets = useServicePresets()
   const groupsQuery = groupsRequest.data
-  const { data: nodesQuery } = useNodesQuery()
   const appState = useStore(appStateAtom)
   const { defaultGroupID } = useStore(defaultResourcesAtom)
   const [openedCreateGroupFormModal, { open: openCreateGroupFormModal, close: closeCreateGroupFormModal }] =
@@ -88,9 +88,15 @@ export function GroupResource({
   const groupDelNodesMutation = useGroupDelNodesMutation()
   const groupDelSubscriptionsMutation = useGroupDelSubscriptionsMutation()
   const updateGroupFormModalRef = useRef<GroupFormModalRef>(null)
-  const { data: subscriptionsQuery } = useSubscriptionsQuery()
   const [addingNodesGroupId, setAddingNodesGroupId] = useState<string | null>(null)
   const [addingSubscriptionsGroupId, setAddingSubscriptionsGroupId] = useState<string | null>(null)
+  const nodesRequest = useNodesQuery(!!addingNodesGroupId)
+  const subscriptionsRequest = useSubscriptionsQuery(!!addingNodesGroupId || !!addingSubscriptionsGroupId)
+  const subscriptionNames = useSubscriptionNamesQuery(
+    quickAdd &&
+      !subscriptionsRequest.data &&
+      !!groupsQuery?.groups.some((group) => group.nodes.some((node) => !!node.subscriptionID)),
+  )
   const [expandedGroupIds, setExpandedGroupIds] = useState<Set<string>>(() => new Set())
 
   // Determine which accordion sections should be auto-expanded based on drag type
@@ -112,8 +118,8 @@ export function GroupResource({
   }, [draggingResource])
 
   const groups: GroupsQuery['groups'] = groupsQuery?.groups || []
-  const nodes: NodesQuery['nodes']['edges'] = nodesQuery?.nodes.edges || []
-  const subscriptions: SubscriptionsQuery['subscriptions'] = subscriptionsQuery?.subscriptions || []
+  const nodes: NodesQuery['nodes']['edges'] = nodesRequest.data?.nodes.edges || []
+  const subscriptions: SubscriptionsQuery['subscriptions'] = subscriptionsRequest.data?.subscriptions || []
   const groupSortOrder = appState.groupSortableKeys as string[]
 
   const setGroupExpanded = useCallback((groupId: string, expanded: boolean) => {
@@ -375,7 +381,7 @@ export function GroupResource({
           nodes={groupNodes}
           subscriptions={groupSubscriptions}
           nodeLatencies={nodeLatencies}
-          allSubscriptions={subscriptionsQuery?.subscriptions}
+          allSubscriptions={subscriptionsRequest.data?.subscriptions ?? subscriptionNames.data?.subscriptions}
           autoExpandValue={autoExpandValue}
           collapsed={!expandedGroupIds.has(groupId)}
           onExpand={() => setGroupExpanded(groupId, true)}
@@ -507,6 +513,14 @@ export function GroupResource({
         onClose={() => setAddingNodesGroupId(null)}
         groupName={addingNodesGroup?.name || t('group')}
         items={addableNodeItems}
+        catalog={{
+          pending: nodesRequest.isPending || subscriptionsRequest.isPending,
+          error: nodesRequest.isError || subscriptionsRequest.isError,
+          retry: () => {
+            if (nodesRequest.isError) nodesRequest.refetch()
+            if (subscriptionsRequest.isError) subscriptionsRequest.refetch()
+          },
+        }}
         loading={groupAddNodesMutation.isPending}
         resetKey={addingNodesGroupId || ''}
         onSubmit={async (nodeIDs) => {
@@ -527,6 +541,11 @@ export function GroupResource({
         onClose={() => setAddingSubscriptionsGroupId(null)}
         groupName={addingSubscriptionsGroup?.name || t('group')}
         items={addableSubscriptionItems}
+        catalog={{
+          pending: subscriptionsRequest.isPending,
+          error: subscriptionsRequest.isError,
+          retry: () => subscriptionsRequest.refetch(),
+        }}
         loading={groupAddSubscriptionsMutation.isPending || groupAddNodesMutation.isPending}
         resetKey={addingSubscriptionsGroupId || ''}
         onAddPassedNodes={async (nodeIDs) => {

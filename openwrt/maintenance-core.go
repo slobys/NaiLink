@@ -5,6 +5,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"debug/elf"
 	"encoding/hex"
@@ -303,6 +304,62 @@ func (m *maintenanceManager) mihomoPath() string {
 func (m *maintenanceManager) installSingBox(ctx context.Context, job *maintenanceJob) error {
 	return m.installOptionalCore(ctx, job, "sing-box")
 }
+
+// Only the first-install script creates this marker, while holding installLock
+// and before starting the management process. Existing databases are excluded.
+func (m *maintenanceManager) prepareFirstCore(ctx context.Context, engine, mode string) error {
+	if (engine != "sing-box" && engine != "mihomo") || (mode != "tun" && mode != "tproxy") {
+		return errors.New("invalid_action")
+	}
+	marker := filepath.Join(m.configDir, ".pending-first-core")
+	info, err := os.Lstat(marker)
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 || info.Size() > 16 {
+		return errors.New("unsafe_state")
+	}
+	value, err := os.ReadFile(marker)
+	if err != nil || string(value) != engine+"\n" {
+		return errors.New("unsafe_state")
+	}
+	for _, name := range []string{"wing.db", "wing.db-wal", "wing.db-shm"} {
+		if _, err := os.Lstat(filepath.Join(m.configDir, name)); !os.IsNotExist(err) {
+			return errors.New("unsafe_state")
+		}
+	}
+	lock, err := maintenanceLock(m.lockFile, false)
+	if err != nil {
+		return errors.New("busy")
+	}
+	defer lock.Close()
+	if err = privateDirectory(m.stateDir); err != nil {
+		return errors.New("unsafe_state")
+	}
+	stateFile := filepath.Join(routercore.Root(m.configDir), "state.json")
+	if _, err = os.Lstat(stateFile); os.IsNotExist(err) {
+		// Keep the package-installed service disabled until the reviewed binary,
+		// its receipt and the selected datapath have passed the checks.
+		var random [12]byte
+		if _, err := rand.Read(random[:]); err != nil {
+			return errors.New("state_failed")
+		}
+		job := &maintenanceJob{ID: hex.EncodeToString(random[:]), Action: "first_install_core"}
+		if err := m.installOptionalCore(ctx, job, engine); err != nil {
+			return err
+		}
+	} else {
+		state, err := routercore.ReadState(m.configDir)
+		if err != nil || state.Current != engine || state.Phase != "stable" || state.Running {
+			return errors.New("unsafe_state")
+		}
+	}
+	if _, err := m.run(ctx, "/usr/libexec/daed/check", "--check", "--core", engine, "--mode", mode); err != nil {
+		return errors.New("core_environment_unsupported")
+	}
+	if err := routercore.SaveState(m.configDir, routercore.State{Current: engine, Mode: mode, Phase: "stable"}); err != nil {
+		return errors.New("core_state_failed")
+	}
+	return nil
+}
+
 func (m *maintenanceManager) installOptionalCore(ctx context.Context, job *maintenanceJob, engine string) error {
 	binary, version, releaseTag := m.corePath(), routercore.SingBoxVersion, routercore.SingBoxRelease
 	releases := routercore.Releases
@@ -341,15 +398,19 @@ func (m *maintenanceManager) installOptionalCore(ctx context.Context, job *maint
 	}
 	defer os.RemoveAll(directory)
 	archive := filepath.Join(directory, engine+".tar.gz")
-	if err = m.save(job, "downloading"); err != nil {
-		return err
+	if job.Action != "first_install_core" {
+		if err = m.save(job, "downloading"); err != nil {
+			return err
+		}
 	}
 	address := "https://github.com/slobys/NaiLink/releases/download/" + releaseTag + "/" + release.Archive
 	if err = m.fetch(ctx, address, archive, 128<<20); err != nil {
 		return errors.New(downloadFailureCode(err))
 	}
-	if err = m.save(job, "verifying"); err != nil {
-		return err
+	if job.Action != "first_install_core" {
+		if err = m.save(job, "verifying"); err != nil {
+			return err
+		}
 	}
 	f, err := os.Open(archive)
 	if err != nil {

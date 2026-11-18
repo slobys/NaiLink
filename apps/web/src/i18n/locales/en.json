@@ -335,6 +335,7 @@
   "node": "Node",
   "node connectivity check": "Node Connectivity Check",
   "trafficOverview": {
+    "chartLoadFailed": "Could not load the traffic chart. Refresh the page to retry.",
     "title": "Traffic Statistics",
     "description": "Rolling uplink and downlink overview with a switchable time window.",
     "uploadChart": "Uplink Traffic",

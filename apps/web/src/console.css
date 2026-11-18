@@ -921,8 +921,11 @@
   :is(.picker-node-row, .subscription-node-tile, .router-panel .panel-node-row, .router-panel .group-member-card):not(
       [data-dragging='true']
     ):hover {
-    translate: 0 -2px;
     box-shadow: 0 3px 6px -3px color-mix(in oklab, var(--foreground) 18%, transparent);
+  }
+  /* Column navigation measures draggable cards before lifting them. */
+  :is(.picker-node-row, .subscription-node-tile):not([data-dragging='true']):hover {
+    translate: 0 -2px;
   }
 }
 :is(

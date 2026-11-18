@@ -7,12 +7,18 @@ set -eu
 umask 077
 
 REPOSITORY=slobys/NaiLink
-release=openwrt-v0.6.89
+release=openwrt-v0.6.90
 asset_dir=''
 mode=install
 action=install
 stage=''
+stage_parent=/tmp
+custom_stage=0
 backup=''
+backup_dir=/root/daed-backups
+backup_tmp=''
+rules_digest=''
+rules_archive=''
 stopped=0
 menu=auto
 explicit_action=0
@@ -20,6 +26,10 @@ explicit_release=0
 latest_install=0
 latest_release=0
 update_only=0
+first_core=''
+first_core_mode=tproxy
+resume_first_core=0
+first_core_marker=/etc/daed/.pending-first-core
 recoverable=0
 packages_changed=0
 rollback_ready=0
@@ -37,12 +47,15 @@ Usage: sh install.sh [--install | --uninstall | --reinstall] [--latest | --relea
   --install     Install or upgrade this script's release without the menu.
   --latest      Resolve and verify the newest published OpenWrt release, including pre-releases.
   --update-only Require an existing managed install; never install fresh.
-  --prepare-timeout SECONDS  Online preparation budget, from 1 to 900 seconds.
+  --core NAME   First install with sing-box or mihomo. Use --check to preview.
+  --prepare-timeout SECONDS  Upgrade preparation budget, from 1 to 900 seconds.
   --uninstall   Back up data, remove NaiLink packages and clear its config/data.
   --reinstall   Verify new assets, then back up/uninstall and install fresh.
   --check       Read-only compatibility check; no package/repository changes.
   --dry-run     Verify assets; APK also simulates dependencies using cached feeds.
   --asset-dir   Use downloaded release assets (dependencies still use firmware feeds).
+                For upgrades place the installed release assets in DIRECTORY/rollback.
+  --staging-dir DIRECTORY  Stage downloads on an existing writable filesystem.
 With no action flag, a terminal opens the menu; non-interactive callers retain
 the direct install behavior. Menu install/update fetches the latest installer
 unless --release or --asset-dir is supplied. Uninstall works offline.
@@ -61,11 +74,12 @@ show_menu() {
 		else
 			printf '安装/更新时联网获取最新发布版；卸载可离线执行。\n'
 		fi
-		printf '\n  1) 安装 / 更新（保留节点和配置）\n  2) 卸载（先备份，再清理插件和配置）\n  3) 检查环境（不修改系统）\n  0) 退出\n\n请选择 [0-3]：'
+		printf '\n  1) 安装 / 更新（保留节点和配置）\n  2) 卸载（先备份，再清理插件和配置）\n  3) 检查环境（不修改系统）\n  4) 首次安装 · sing-box\n  5) 首次安装 · mihomo\n  0) 退出\n\n请选择 [0-5]：'
 		if ! IFS= read -r choice; then printf '\n已退出，未执行操作。\n'; exit 0; fi
 		case "$choice" in
-		1)
+		1|4|5)
 			action=install; mode=install
+			case "$choice" in 4) first_core=sing-box ;; 5) first_core=mihomo ;; esac
 			if [ "$explicit_release" = 0 ] && [ -z "$asset_dir" ]; then latest_install=1; fi
 			return ;;
 		2)
@@ -76,7 +90,7 @@ show_menu() {
 			*) printf '已取消卸载。\n' ;; esac ;;
 		3) action=install; mode=check; return ;;
 		0|'') printf '已退出，未执行操作。\n'; exit 0 ;;
-		*) printf '输入无效，请选择 0、1、2 或 3。\n' ;;
+		*) printf '输入无效，请选择 0 到 5。\n' ;;
 		esac
 	done
 }
@@ -202,7 +216,7 @@ install_latest_release() {
 	for tool in sha256sum awk mktemp; do
 		command -v "$tool" >/dev/null 2>&1 || fail "Missing tool: $tool"
 	done
-	stage=$(mktemp -d /tmp/daed-install.XXXXXX) || fail 'Cannot create staging directory.'
+	stage=$(mktemp -d "$stage_parent/daed-install.XXXXXX") || fail 'Cannot create staging directory.'
 	printf '\n正在查找最新发布的 NaiLink OpenWrt 版本…\n'
 	# The public feed includes pre-releases and excludes drafts. Extract only
 	# canonical release links; never interpret release descriptions as tags.
@@ -253,10 +267,13 @@ install_latest_release() {
 			fail '发布版低于已安装版本，已取消安装。'
 		fi
 	fi
-	sh "$stage/install.sh" "--$mode" --release "$release"
+	set -- "--$mode" --release "$release"
+	[ -z "$first_core" ] || set -- "$@" --core "$first_core"
+	[ "$custom_stage" = 0 ] || set -- "$@" --staging-dir "$stage_parent"
+	sh "$stage/install.sh" "$@"
 }
 install_latest() {
-	stage=$(mktemp -d /tmp/daed-install.XXXXXX) || fail 'Cannot create staging directory.'
+	stage=$(mktemp -d "$stage_parent/daed-install.XXXXXX") || fail 'Cannot create staging directory.'
 	url="https://raw.githubusercontent.com/$REPOSITORY/main/openwrt/install.sh"
 	printf '\n正在获取最新安装脚本，现有服务和数据尚未改动…\n'
 	if ! command -v curl >/dev/null 2>&1 && ! command -v uclient-fetch >/dev/null 2>&1; then
@@ -283,7 +300,10 @@ install_latest() {
 		fi
 	done
 	printf '目标版本：%s，开始安装/更新。\n' "$target"
-	sh "$stage/install.sh" --install
+	set -- --install
+	[ -z "$first_core" ] || set -- "$@" --core "$first_core"
+	[ "$custom_stage" = 0 ] || set -- "$@" --staging-dir "$stage_parent"
+	sh "$stage/install.sh" "$@"
 }
 cleanup() {
 	result=$?
@@ -298,6 +318,7 @@ cleanup() {
 			printf 'NaiLink: Operation did not complete. Service was stopped. Backup: %s\n' "${backup:-not created}" >&2
 		fi
 	fi
+	[ -z "$backup_tmp" ] || rm -f "$backup_tmp"
 	[ -z "$stage" ] || rm -rf "$stage"
 	exit "$result"
 }
@@ -308,9 +329,14 @@ while [ "$#" -gt 0 ]; do
 	case "$1" in
 	--release) [ "$#" -ge 2 ] || fail 'Missing release tag.'; release=$2; explicit_release=1; shift 2 ;;
 	--asset-dir) [ "$#" -ge 2 ] || fail 'Missing asset directory.'; asset_dir=$2; shift 2 ;;
+	--staging-dir)
+		[ "$#" -ge 2 ] || fail 'Missing staging directory.'
+		case "$2" in /*) stage_parent=$2 ;; *) fail 'Staging directory must be an absolute path.' ;; esac
+		custom_stage=1; shift 2 ;;
 	--menu) menu=1; shift ;;
 	--latest) latest_release=1; shift ;;
 	--update-only) update_only=1; explicit_action=1; shift ;;
+	--core) [ "$#" -ge 2 ] || fail 'Missing first-install core.'; first_core=$2; shift 2 ;;
 	--prepare-timeout)
 		[ "$#" -ge 2 ] || fail 'Missing preparation timeout.'
 		if ! printf '%s\n' "$2" | grep -Eq '^[1-9][0-9]{0,2}$' || [ "$2" -gt 900 ]; then fail 'Invalid preparation timeout.'; fi
@@ -338,6 +364,15 @@ if [ ! -r /etc/openwrt_release ] || ! command -v uci >/dev/null 2>&1; then
 	fail 'Requires OpenWrt / ImmortalWrt / iStoreOS.'
 fi
 [ "$menu" != 1 ] || show_menu
+if [ "$custom_stage" = 1 ] && [ "$action" != uninstall ]; then
+	stage_parent=$(CDPATH='' cd -- "$stage_parent" && pwd -P) || fail 'Staging directory does not exist.'
+fi
+case "$first_core" in
+	'') ;;
+	sing-box|mihomo)
+		if [ "$action" != install ] || [ "$update_only" = 1 ]; then fail '--core is for a first installation.'; fi ;;
+	*) fail 'Invalid first-install core. Select sing-box or mihomo.' ;;
+esac
 if [ "$latest_release" = 1 ] && [ "$action" = install ]; then install_latest_release; exit 0; fi
 if [ "$latest_install" = 1 ]; then install_latest; exit 0; fi
 # Kernel-held lock: it also releases on interruption/SIGKILL. Never unlink the
@@ -388,9 +423,147 @@ installed() {
 	else opkg status "$1" 2>/dev/null | grep -q '^Status:.* installed'; fi
 }
 
+rules_tree_digest() (
+	# OpenWrt's BusyBox ash supports pipefail. A failed producer must not hash as success.
+	# shellcheck disable=SC3040
+	set -o pipefail
+	tar -cf - -C / etc/daed/geodata | sha256sum | cut -d ' ' -f1
+)
+
+rules_archive_digest() (
+	# shellcheck disable=SC3040
+	set -o pipefail
+	gzip -dc "$1" | sha256sum | cut -d ' ' -f1
+)
+
+prepare_backup() {
+	[ ! -L "$backup_dir" ] || fail 'Unsafe configuration backup directory.'
+	mkdir -p "$backup_dir"
+	chmod 700 "$backup_dir"
+
+	# Only split a recognizable managed rules tree. Custom root-level DATs and
+	# unrecognized geodata layouts stay in the configuration archive.
+	if [ -d /etc/daed/geodata ] && [ ! -L /etc/daed/geodata ] && [ -L /etc/daed/geodata/current ]; then
+		active_batch=$(readlink /etc/daed/geodata/current)
+		if printf '%s\n' "$active_batch" | grep -Eq '^data-[0-9]+$' && \
+			[ ! -L "/etc/daed/geodata/$active_batch" ] && \
+			[ -f /etc/daed/geodata/current/geoip.dat ] && \
+			[ -f /etc/daed/geodata/current/geosite.dat ] && \
+			[ -s /etc/daed/geodata/current/geoip.dat ] && [ -s /etc/daed/geodata/current/geosite.dat ]; then
+			rules_digest=$(rules_tree_digest) || fail 'Cannot back up managed rule data: cannot read the current tree.'
+			[ ! -L "$backup_dir/geodata" ] || fail 'Unsafe rule data backup directory.'
+			mkdir -p "$backup_dir/geodata"
+			chmod 700 "$backup_dir/geodata"
+			rules_archive="$backup_dir/geodata/$rules_digest.tar.gz"
+			[ ! -L "$rules_archive" ] || fail 'Unsafe rule data backup file.'
+			if [ ! -f "$rules_archive" ] || [ "$(rules_archive_digest "$rules_archive")" != "$rules_digest" ]; then
+				# Finish the potentially large write before stopping the service.
+				backup_tmp=$(mktemp "$backup_dir/geodata/.backup.XXXXXX")
+				tar -czf "$backup_tmp" -C / etc/daed/geodata || fail 'Cannot back up managed rule data.'
+				[ "$(rules_archive_digest "$backup_tmp")" = "$rules_digest" ] || fail 'Cannot back up managed rule data: the archived tree could not be verified.'
+				mv -f "$backup_tmp" "$rules_archive"
+				backup_tmp=''
+			fi
+			printf '%s\n' 'etc/daed/geodata' > "$stage/backup-exclude"
+		fi
+	fi
+
+}
+
+filesystem_space() {
+	df -Pk "$1" 2>/dev/null | awk 'NR == 2 && $4 ~ /^[0-9]+$/ && NF >= 6 {print $4, $1, $6; found=1} END {exit !found}'
+}
+
+package_payload_kib() (
+	# Native size metadata is measured after the release checksum has passed.
+	# Read the local archives only, with no package-manager state change.
+	# shellcheck disable=SC3040
+	set -o pipefail
+	if [ "$format" = apk ]; then
+		apk adbdump "$1" | awk '/^  installed-size: [0-9]+$/ {size=$2; count++} END {if (count!=1) exit 1; print int((size+1023)/1024)}'
+	else
+		(tar -xzOf "$1" ./control.tar.gz 2>/dev/null || tar -xzOf "$1" control.tar.gz 2>/dev/null) |
+			tar -xzO -f - ./control | awk '/^Installed-Size: [0-9]+$/ {size=$2; count++} END {if (count!=1) exit 1; print int((size+1023)/1024)}'
+	fi
+)
+
+check_upgrade_space() {
+	if ! root_space=$(filesystem_space /usr/bin) || ! backup_space=$(filesystem_space "$backup_dir"); then
+		printf 'NaiLink: Cannot report filesystem capacity; validated downloads and backup writes remain required.\n' >&2
+		return 0
+	fi
+	set -- /etc/config/daed
+	[ ! -d /etc/daed ] || set -- "$@" /etc/daed
+	config_kib=$(du -sk "$@" | awk '{total += $1} END {print total+0}')
+	if [ -n "$rules_archive" ]; then
+		rules_kib=$(du -sk /etc/daed/geodata | awk 'NR == 1 {print $1+0}')
+		config_kib=$((config_kib - rules_kib))
+	fi
+	# Allow both the stopped-service snapshot and the failed-attempt snapshot.
+	backup_kib=$((config_kib * 2 + 256))
+	if [ "${backup_space%% *}" -lt "$backup_kib" ]; then
+		fail 'Not enough space for the configuration backup. Existing service/data were not changed.'
+	fi
+	if ! { new_kib=$(package_payload_kib "$stage/$runtime_file") &&
+		new_luci_kib=$(package_payload_kib "$stage/$plugin_file") &&
+		old_kib=$(package_payload_kib "$rollback_runtime") &&
+		old_luci_kib=$(package_payload_kib "$rollback_plugin"); }; then
+		fail 'Cannot read native package sizes for safe upgrade preparation. Existing service/data were not changed.'
+	fi
+	new_kib=$((new_kib + new_luci_kib))
+	old_kib=$((old_kib + old_luci_kib))
+	# The verified archives already occupy their staging filesystems. Future
+	# package writes are serial, so reserve the larger payload plus metadata.
+	install_kib=$new_kib
+	[ "$old_kib" -le "$install_kib" ] || install_kib=$old_kib
+	install_kib=$((install_kib + 1024))
+	if [ "${root_space#* }" = "${backup_space#* }" ]; then
+		install_kib=$((install_kib + backup_kib))
+	fi
+	if [ "${root_space%% *}" -lt "$install_kib" ]; then
+		fail 'Not enough space for new and rollback packages. Existing service/data were not changed.'
+	fi
+}
+
+write_configuration_backup() {
+	archive_path=$1
+	rules_ref=$2
+	shift 2
+	[ ! -d /etc/daed ] || set -- "$@" etc/daed
+	backup_tmp=$(mktemp "$backup_dir/.backup.XXXXXX") || return 1
+	if [ -z "$rules_ref" ]; then
+		tar -czf "$backup_tmp" -C / "$@" || return 1
+	else
+		tar -czf "$backup_tmp" -C / -X "$stage/backup-exclude" "$@" || return 1
+	fi
+	tar -tzf "$backup_tmp" >/dev/null || return 1
+	[ -z "$rules_ref" ] || printf 'geodata/%s\n' "${rules_ref##*/}" > "$archive_path.rules" || return 1
+	mv "$backup_tmp" "$archive_path" || return 1
+	backup_tmp=''
+}
+
+restore_rules_snapshot() {
+	[ -n "$rules_archive" ] || return 0
+	[ "$(rules_tree_digest 2>/dev/null)" != "$rules_digest" ] || return 0
+	[ "$(rules_archive_digest "$rules_archive")" = "$rules_digest" ] || return 1
+	[ ! -L /etc/daed ] || return 1
+	mkdir -p /etc/daed || return 1
+	rules_restore=$(mktemp -d /etc/daed/.rules-restore.XXXXXX) || return 1
+	tar -xzf "$rules_archive" -C "$rules_restore" || return 1
+	if [ -e /etc/daed/geodata ] || [ -L /etc/daed/geodata ]; then
+		mv /etc/daed/geodata "$rules_restore/previous" || return 1
+	fi
+	if ! mv "$rules_restore/etc/daed/geodata" /etc/daed/geodata; then
+		if [ -e "$rules_restore/previous" ] || [ -L "$rules_restore/previous" ]; then
+			mv "$rules_restore/previous" /etc/daed/geodata || :
+		fi
+		return 1
+	fi
+	rm -rf "$rules_restore"
+}
+
 restore_previous_install() {
-	# Never restart a partially replaced installation. Online updates stage the
-	# old native packages before stopping; manual installs retain their backup.
+	# Never restart a partially replaced installation.
 	if [ "$packages_changed" = 1 ]; then
 		[ "$rollback_ready" = 1 ] && [ "$backup_verified" = 1 ] || return 1
 		printf 'NaiLink: Restoring verified previous native packages…\n' >&2
@@ -410,16 +583,19 @@ restore_previous_install() {
 		[ "$(cat /usr/share/daed-router/version)" = "$previous_version" ] || return 1
 		# Preserve the failed attempt too, including any database/WAL written by
 		# package scripts. Refuse to overwrite it if this extra backup fails.
-		failed_backup="/root/daed-backups/failed-update-$(date -u +%Y%m%dT%H%M%SZ)-$$.tar.gz"
-		set -- etc/config/daed
-		[ ! -d /etc/daed ] || set -- "$@" etc/daed
-		tar -czf "$failed_backup" -C / "$@" && tar -tzf "$failed_backup" >/dev/null || return 1
-		chmod 600 "$failed_backup" || return 1
+		failed_backup="$backup_dir/failed-update-$(date -u +%Y%m%dT%H%M%SZ)-$$.tar.gz"
+		failed_rules=''
+		if [ -n "$rules_archive" ] && [ "$(rules_tree_digest 2>/dev/null)" = "$rules_digest" ] &&
+			[ "$(rules_archive_digest "$rules_archive")" = "$rules_digest" ]; then
+			failed_rules=$rules_archive
+		fi
+		write_configuration_backup "$failed_backup" "$failed_rules" etc/config/daed || return 1
 		# Do not replay a WAL produced by the failed/new process over the old DB.
 		if tar -tzf "$backup" | grep -q '^etc/daed/wing.db$'; then
 			rm -f /etc/daed/wing.db-wal /etc/daed/wing.db-shm
 		fi
 		tar -xzf "$backup" -C / || return 1
+		restore_rules_snapshot || return 1
 		/etc/init.d/rpcd reload >/dev/null 2>&1 || :
 	fi
 	if [ "$was_autostart" = 1 ]; then /etc/init.d/daed enable || return 1
@@ -517,7 +693,7 @@ uninstall_daed() {
 }
 
 if [ "$action" = uninstall ]; then uninstall_daed; exit 0; fi
-stage=$(mktemp -d /tmp/daed-install.XXXXXX) || fail 'Cannot create staging directory.'
+stage=$(mktemp -d "$stage_parent/daed-install.XXXXXX") || fail 'Cannot create staging directory.'
 [ "$update_only" != 1 ] || prepare_deadline=$(($(download_clock) + prepare_timeout))
 if [ -n "$asset_dir" ]; then
 	[ -d "$asset_dir" ] || fail 'Asset directory does not exist.'
@@ -539,18 +715,56 @@ fetch() {
 	fi
 }
 
+check_environment() {
+	if [ -z "$first_core" ]; then
+		sh "$1" --check > "$stage/compatibility.json"
+	else
+		if sh "$1" --check --core "$first_core" --mode tproxy --first-core-preflight > "$stage/compatibility.json"; then
+			first_core_mode=tproxy
+		else
+			first_core_mode=tun
+			sh "$1" --check --core "$first_core" --mode tun --first-core-preflight > "$stage/compatibility.json"
+		fi
+	fi
+}
+
 # A source checkout can run --check before the first release is published.
 source_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
 if [ "$mode" = check ] && [ -r "$source_dir/files/daed-check" ]; then
-	sh "$source_dir/files/daed-check" --check
-	exit $?
+	check_result=0
+	check_environment "$source_dir/files/daed-check" || check_result=$?
+	cat "$stage/compatibility.json"
+	exit "$check_result"
 fi
 fetch manifest.tsv
 [ "$(head -n 1 "$stage/manifest.tsv")" = '# daed-openwrt-manifest-v1' ] || fail 'Unknown manifest format.'
 awk -F '\t' '!/^#/ && NF && (NF!=6 || $1!~/^(ipk|apk|support)$/ || $3!~/^(daed-router|luci-app-daed-router|check|btf-probe)$/) {bad=1} END {exit bad}' "$stage/manifest.tsv" || fail 'Malformed manifest.'
 
 record() {
-	awk -F '\t' -v fmt="$1" -v arch="$2" -v pkg="$3" '$1==fmt && $2==arch && $3==pkg {line=$0; count++} END {if(count!=1) exit 1; print line}' "$stage/manifest.tsv"
+	awk -F '\t' -v fmt="$1" -v arch="$2" -v pkg="$3" '$1==fmt && $2==arch && $3==pkg {line=$0; count++} END {if(count!=1) exit 1; print line}' "${4:-$stage}/manifest.tsv"
+}
+record_size() (
+	file=$(printf '%s\n' "$1" | cut -f4)
+	case "$file" in ''|.*|*[!a-zA-Z0-9._-]*) exit 1 ;; esac
+	bytes=$(awk -F '\t' -v file="$file" '
+		$1 == "# size" && $2 == file {
+			if (++count != 1 || NF != 3 || $3 !~ /^[1-9][0-9]*$/ || length($3)>10) invalid=1
+			size=$3
+		}
+		END {if (invalid) exit 1; print (count ? size : 0)}
+	' "$2/manifest.tsv") || exit 1
+	if [ "$bytes" = 0 ] && [ -n "$3" ] && [ -f "$3/$file" ] && command -v wc >/dev/null 2>&1; then
+		bytes=$(wc -c < "$3/$file") || exit 1
+	fi
+	printf '%s\n' "$bytes"
+)
+check_staging_space() {
+	[ "$1" -gt 0 ] || return 0
+	if ! staging_space=$(filesystem_space "$stage"); then return 0; fi
+	staging_kib=$(( ($1 + 1023) / 1024 + 256 ))
+	if [ "${staging_space%% *}" -lt "$staging_kib" ]; then
+		fail "Not enough staging space in $stage_parent (need at least ${staging_kib} KiB for downloads with known sizes). Use --staging-dir with a larger filesystem. Existing service/data were not changed."
+	fi
 }
 verify_record() {
 	row=$1
@@ -560,33 +774,40 @@ verify_record() {
 	fetch "$file"
 	printf '%s  %s\n' "$hash" "$stage/$file" | sha256sum -c - >/dev/null || fail "Checksum mismatch: $file"
 }
-prepare_rollback() {
+prepare_rollback_manifest() {
 	for original in /etc/daed /etc/config/daed /etc/daed/wing.db /etc/daed/wing.db-wal /etc/daed/wing.db-shm; do
 		[ ! -L "$original" ] || fail 'Cannot prepare rollback for symlinked configuration/database. Existing service/data were not changed; back up the external data before a manual upgrade.'
 	done
 	previous_version=$(cat /usr/share/daed-router/version)
 	printf '%s\n' "$previous_version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-[0-9]+$' || fail 'Cannot prepare rollback: installed version is unknown.'
+	rollback_release="openwrt-v${previous_version%-*}"
 	rollback_dir="$stage/rollback"
 	mkdir "$rollback_dir"
 	# Fetch in a subshell so the current manifest/release/filenames do not change.
 	(
 		stage=$rollback_dir
-		release="openwrt-v${previous_version%-*}"
+		release=$rollback_release
 		if [ -n "$asset_dir" ]; then asset_dir="$asset_dir/rollback"; fi
 		fetch manifest.tsv
 		[ "$(head -n 1 "$stage/manifest.tsv")" = '# daed-openwrt-manifest-v1' ] || fail 'Invalid rollback manifest.'
-		for role in daed-router luci-app-daed-router; do
-			arch=$selected_arch
-			[ "$role" != luci-app-daed-router ] || arch=all
-			old=$(record "$format" "$arch" "$role") || fail 'Rollback package is unavailable for this firmware architecture.'
-			[ "$(printf '%s\n' "$old" | cut -f6)" = "${previous_version%-*}" ] || fail 'Rollback version mismatch.'
-			case "$(printf '%s\n' "$old" | cut -f4)" in *."$format") ;; *) fail 'Rollback package format mismatch.' ;; esac
-			verify_record "$old"
-			printf '%s\n' "$(printf '%s\n' "$old" | cut -f4)" > "$stage/$role.name"
-		done
 	) || fail 'Cannot prepare verified rollback packages. Existing service/data were not changed.'
-	rollback_runtime="$rollback_dir/$(cat "$rollback_dir/daed-router.name")"
-	rollback_plugin="$rollback_dir/$(cat "$rollback_dir/luci-app-daed-router.name")"
+	rollback_runtime_row=$(record "$format" "$selected_arch" daed-router "$rollback_dir") || fail 'Rollback package is unavailable for this firmware architecture.'
+	rollback_plugin_row=$(record "$format" all luci-app-daed-router "$rollback_dir") || fail 'Rollback LuCI package is unavailable.'
+	for old in "$rollback_runtime_row" "$rollback_plugin_row"; do
+		[ "$(printf '%s\n' "$old" | cut -f6)" = "${previous_version%-*}" ] || fail 'Rollback version mismatch.'
+		case "$(printf '%s\n' "$old" | cut -f4)" in *."$format") ;; *) fail 'Rollback package format mismatch.' ;; esac
+	done
+}
+prepare_rollback() {
+	(
+		stage=$rollback_dir
+		release=$rollback_release
+		if [ -n "$asset_dir" ]; then asset_dir="$asset_dir/rollback"; fi
+		verify_record "$rollback_runtime_row"
+		verify_record "$rollback_plugin_row"
+	) || fail 'Cannot prepare verified rollback packages. Existing service/data were not changed.'
+	rollback_runtime="$rollback_dir/$(printf '%s\n' "$rollback_runtime_row" | cut -f4)"
+	rollback_plugin="$rollback_dir/$(printf '%s\n' "$rollback_plugin_row" | cut -f4)"
 	rollback_ready=1
 }
 support=$(record support all check) || fail 'Manifest has no unique compatibility checker.'
@@ -617,7 +838,7 @@ probe_record=$(record support "$probe_cpu" btf-probe) || fail 'Manifest has no u
 verify_record "$probe_record"
 chmod 700 "$stage/btf-probe-$probe_cpu"
 run_compatibility_check() {
-	DAED_BTF_PROBE="$stage/btf-probe-$probe_cpu" sh "$stage/daed-check" --check > "$stage/compatibility.json"
+	DAED_BTF_PROBE="$stage/btf-probe-$probe_cpu" check_environment "$stage/daed-check"
 }
 btf_package() {
 	if command -v timeout >/dev/null 2>&1; then timeout 90 "$@"; else "$@"; fi
@@ -657,7 +878,7 @@ if ! run_compatibility_check; then
 	if ! repair_missing_btf; then
 		cat "$stage/compatibility.json"
 		if jsonfilter -i "$stage/compatibility.json" -e '@.checks[*].code' | grep -qx btf_missing; then
-			fail "内核 $(uname -r) 缺少可用 BTF。请安装本固件、当前内核对应的 vmlinux-btf，或使用带 BTF 的固件。未安装/替换 NaiLink，也未改动节点和代理配置。"
+			fail "内核 $(uname -r) 缺少可用 BTF。请安装本固件、当前内核对应的 vmlinux-btf。x86_64 和 ARM64 首装也可在菜单选择 sing-box 或 mihomo。未安装/替换 NaiLink，也未改动节点和代理配置。"
 		fi
 		fail 'Compatibility check failed. No NaiLink packages or network settings were changed.'
 	fi
@@ -669,9 +890,7 @@ plugin=$(record "$format" all luci-app-daed-router) || fail 'Manifest has no uni
 version=$(printf '%s\n' "$runtime" | cut -f6)
 if [ "$version" != "$(printf '%s\n' "$plugin" | cut -f6)" ] || \
 	[ "$version" != "$(printf '%s\n' "$support" | cut -f6)" ]; then fail 'Runtime, LuCI and checker versions do not match.'; fi
-verify_record "$runtime"
 runtime_file=$(printf '%s\n' "$runtime" | cut -f4)
-verify_record "$plugin"
 plugin_file=$(printf '%s\n' "$plugin" | cut -f4)
 case "$runtime_file:$plugin_file" in *.$format:*.$format) ;; *) fail 'Package extensions do not match the package manager.' ;; esac
 
@@ -684,6 +903,20 @@ elif installed daed-router; then
 elif [ -e /usr/bin/daed ] || [ -e /etc/config/daed ] || [ -e /etc/init.d/daed ] || [ -d /etc/daed ]; then
 	fail 'An existing unmanaged NaiLink installation was found. Back it up and migrate explicitly; it will not be overwritten.'
 fi
+if [ -n "$first_core" ] && [ "$managed" = 1 ]; then
+	if [ -f "$first_core_marker" ] && [ ! -L "$first_core_marker" ] &&
+	   [ "$(cat "$first_core_marker")" = "$first_core" ] &&
+	   [ "$(cat /usr/share/daed-router/version)" = "$version-1" ] &&
+	   [ ! -e /etc/daed/wing.db ] &&
+	   ! pidof daed >/dev/null 2>&1; then
+		resume_first_core=1
+		managed=0
+	else
+		fail 'The first-install core choice cannot replace an existing configuration. Use the core selector in LuCI.'
+	fi
+elif [ -z "$first_core" ] && [ "$managed" = 1 ] && [ -e "$first_core_marker" ]; then
+	fail 'A first-install core is pending. Repeat the original core choice to finish installation.'
+fi
 if [ "$update_only" = 1 ]; then
 	[ "$managed" = 1 ] || fail 'Existing managed install required for online update; no fresh installation was performed.'
 	online_current=$(cat /usr/share/daed-router/version)
@@ -695,6 +928,20 @@ if [ "$update_only" = 1 ]; then
 	}' || fail 'Online update refused: installed version changed or downgrade requested. Check again.'
 fi
 if [ "$action" != reinstall ] && { installed daed || installed luci-app-daed; }; then fail 'Another NaiLink package is installed; use --reinstall for a backed-up fresh installation.'; fi
+new_runtime_bytes=$(record_size "$runtime" "$stage" "$asset_dir") || fail 'Invalid runtime download size.'
+new_plugin_bytes=$(record_size "$plugin" "$stage" "$asset_dir") || fail 'Invalid LuCI download size.'
+old_runtime_bytes=0
+old_plugin_bytes=0
+if [ "$managed" = 1 ] && [ "$mode" != dry-run ]; then
+	prepare_rollback_manifest
+	rollback_assets=''
+	[ -z "$asset_dir" ] || rollback_assets="$asset_dir/rollback"
+	old_runtime_bytes=$(record_size "$rollback_runtime_row" "$rollback_dir" "$rollback_assets") || fail 'Invalid rollback runtime download size.'
+	old_plugin_bytes=$(record_size "$rollback_plugin_row" "$rollback_dir" "$rollback_assets") || fail 'Invalid rollback LuCI download size.'
+fi
+check_staging_space "$((new_runtime_bytes + new_plugin_bytes + old_runtime_bytes + old_plugin_bytes))"
+verify_record "$runtime"
+verify_record "$plugin"
 printf 'NaiLink: %s / %s / %s, release %s\n' "$machine" "$format" "$selected_arch" "$version"
 case "$probe_cpu" in armv7|mips|mipsle)
 	printf 'NaiLink: 32 位版本仅为实验构建；已测常见内核无法加载必需的 BPF 回调。最小内核探针通过后，仍需完整透明代理和长期运行验证。\n' ;;
@@ -723,7 +970,17 @@ if [ "$format" = apk ] && [ "$apk_offline" = 0 ]; then
 	apk add --simulate --allow-untrusted "$stage/$runtime_file" "$stage/$plugin_file" || fail 'Package preflight failed. NaiLink was not stopped or uninstalled. Check firmware feeds/dependencies; dry runs require cached indexes.'
 fi
 [ "$mode" != dry-run ] || { printf 'NaiLink: Dry run passed; no packages, configuration or services changed.\n'; exit 0; }
-[ "$update_only" != 1 ] || prepare_rollback
+if [ "$managed" = 1 ]; then
+	[ -n "$prepare_deadline" ] || prepare_deadline=$(($(download_clock) + prepare_timeout))
+	prepare_rollback
+fi
+if [ -n "$prepare_deadline" ] && [ "$(download_clock)" -ge "$prepare_deadline" ]; then
+	fail 'Update preparation timed out. Existing service/data were not changed.'
+fi
+if [ "$managed" = 1 ]; then
+	prepare_backup
+	check_upgrade_space
+fi
 if [ -n "$prepare_deadline" ] && [ "$(download_clock)" -ge "$prepare_deadline" ]; then
 	fail 'Update preparation timed out. Existing service/data were not changed.'
 fi
@@ -741,26 +998,22 @@ if [ "$managed" = 1 ]; then
 		[ "$waited" -lt 35 ] || fail 'NaiLink is still running; database backup was not attempted.'
 		sleep 1; waited=$((waited + 1))
 	done
-	mkdir -p /root/daed-backups
-	chmod 700 /root/daed-backups
-	backup="/root/daed-backups/$(date -u +%Y%m%dT%H%M%SZ)-$$.tar.gz"
-	set -- etc/config/daed usr/share/daed-router/version
-	[ ! -d /etc/daed ] || set -- "$@" etc/daed
-	tar -czf "$backup" -C / "$@" || fail 'Cannot back up existing data.'
-	chmod 600 "$backup"
-	tar -tzf "$backup" >/dev/null || fail 'Cannot verify existing data backup.'
+	backup="$backup_dir/$(date -u +%Y%m%dT%H%M%SZ)-$$.tar.gz"
+	write_configuration_backup "$backup" "$rules_archive" etc/config/daed usr/share/daed-router/version || fail 'Cannot back up existing data: configuration archive could not be verified.'
 	backup_verified=1
 fi
-packages_changed=1
-if [ "$format" = apk ]; then
-	# Local release packages are unsigned; this flag is scoped to this transaction.
-	if [ "$apk_offline" = 1 ]; then
-		apk add --no-network --allow-untrusted "$stage/$runtime_file" "$stage/$plugin_file"
+if [ "$resume_first_core" = 0 ]; then
+	packages_changed=1
+	if [ "$format" = apk ]; then
+		# Local release packages are unsigned; this flag is scoped to this transaction.
+		if [ "$apk_offline" = 1 ]; then
+			apk add --no-network --allow-untrusted "$stage/$runtime_file" "$stage/$plugin_file"
+		else
+			apk add --allow-untrusted "$stage/$runtime_file" "$stage/$plugin_file"
+		fi
 	else
-		apk add --allow-untrusted "$stage/$runtime_file" "$stage/$plugin_file"
+		opkg install "$stage/$runtime_file" "$stage/$plugin_file"
 	fi
-else
-	opkg install "$stage/$runtime_file" "$stage/$plugin_file"
 fi
 if ! installed daed-router || ! installed luci-app-daed-router; then fail 'Native packages were not both installed.'; fi
 if [ ! -x /usr/bin/daed ] || [ ! -x /usr/libexec/daed/check ] || \
@@ -770,6 +1023,20 @@ for asset in geosite.dat geoip.dat; do
 		fail "Installed rule data is unavailable: $asset. Repair the firmware's v2ray-geosite/v2ray-geoip packages and daed-router search-path links."
 	fi
 done
+if [ -n "$first_core" ]; then
+	if [ "$resume_first_core" = 0 ]; then
+		mkdir -p /etc/daed
+		printf '%s\n' "$first_core" > "$first_core_marker"
+	fi
+	case "$first_core" in sing-box) first_core_action=first_install_singbox ;; mihomo) first_core_action=first_install_mihomo ;; esac
+	result=$(/usr/libexec/daed/luci-proxy --maintenance "$first_core_action" --maintenance-job "$first_core_mode") ||
+		fail 'Cannot start first-install core preparation.'
+	if [ "$(printf '%s' "$result" | jsonfilter -e '@.success')" != true ]; then
+		code=$(printf '%s' "$result" | jsonfilter -e '@.code') || code=unknown
+		fail "Cannot prepare $first_core ($code). Packages are installed with the service disabled. Repeat the same core choice to retry."
+	fi
+	rm -f "$first_core_marker"
+fi
 if [ "$managed" = 0 ]; then
 	uci set daed.main.enabled=1
 	uci commit daed
@@ -812,3 +1079,4 @@ fi
 stopped=0
 printf 'NaiLink: Installed. Refresh LuCI and open Services > NaiLink. Management readiness does not prove LAN proxy traffic.\n'
 [ -z "$backup" ] || printf 'NaiLink: Configuration backup (contains secrets): %s\n' "$backup"
+[ -z "$rules_archive" ] || printf 'NaiLink: Managed rule backup: %s (reference: %s.rules)\n' "$rules_archive" "$backup"

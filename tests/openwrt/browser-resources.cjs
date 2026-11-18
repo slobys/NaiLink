@@ -17,6 +17,12 @@ fs.mkdirSync(output, { recursive: true })
     const context = await browser.newContext({ viewport: { width: 1800, height: 1100 }, locale: 'zh-CN' })
     page = await context.newPage()
     const errors = []
+    const directoryRequests = []
+    page.on('request', (request) => {
+      if (request.method() !== 'POST' || !request.url().endsWith('/graphql')) return
+      const query = request.postDataJSON()?.query
+      if (/\bquery (Nodes|Subscriptions)\b/.test(query || '')) directoryRequests.push(query)
+    })
     page.on('pageerror', (e) => errors.push(e.message))
     page.on('console', (m) => {
       if (m.type() === 'error' && /@hello-pangea|Invariant|nested scroll/.test(m.text())) errors.push(m.text())
@@ -69,11 +75,17 @@ fs.mkdirSync(output, { recursive: true })
       await page.addStyleTag({ content: '.container{width:1500px!important;max-width:calc(100vw - 40px)!important}' })
     }
     await navigate('dashboard')
-    await f.locator(`[data-group-card-id="${group}"]`).getByRole('button', { name: '添加节点', exact: true }).click()
+    const addNode = f.locator(`[data-group-card-id="${group}"]`).getByRole('button', { name: '添加节点', exact: true })
+    await addNode.waitFor()
+    assert.equal(directoryRequests.length, 0, 'Overview must not load the full node directory before opening a picker')
+    await addNode.click()
     const picker = f.locator('[data-node-picker]')
     const list = picker.locator('[data-picker-list]')
     await picker.getByRole('searchbox').fill(prefix)
     const first = picker.locator(`[data-picker-node="${ids[0]}"]`)
+    await first.waitFor()
+    assert.ok(directoryRequests.some((query) => /\bquery Nodes\b/.test(query)))
+    assert.ok(directoryRequests.some((query) => /\bquery Subscriptions\b/.test(query)))
     const name = first.locator('.picker-node-select')
     for (const [width, columns] of [
       [1800, 7],
@@ -210,6 +222,7 @@ fs.mkdirSync(output, { recursive: true })
     assert.equal(after[20], before[0], 'Keyboard drag into right column must map to full-library index')
     const hiddenBefore = (await persisted()).filter((id) => !ids.includes(id))
     before = after
+    await left.locator('[data-node-id]').first().hover({ position: { x: 5, y: 5 } })
     await keyDrag(right.locator('[data-rfd-drag-handle-draggable-id]').first(), 'ArrowLeft')
     after = await selected()
     assert.equal(after[0], before[20])

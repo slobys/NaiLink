@@ -49,6 +49,7 @@ function arrayMove<T>(array: T[], from: number, to: number): T[] {
 
 export function OrchestratePage({ area = 'all' }: { area?: 'all' | 'dashboard' | 'resources' | 'advanced' | 'logs' }) {
   const commonVisible = area !== 'advanced' && area !== 'logs'
+  const resourcesVisible = commonVisible && area !== 'dashboard'
   const { t } = useTranslation()
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [activeArea, setActiveArea] = useState('panel-common')
@@ -93,10 +94,10 @@ export function OrchestratePage({ area = 'all' }: { area?: 'all' | 'dashboard' |
     })
   }
   const { data: configsQuery } = useConfigsQuery()
-  const nodesRequest = useNodesQuery(commonVisible)
+  const nodesRequest = useNodesQuery(resourcesVisible)
   const nodesQuery = nodesRequest.data
   const { data: groupsQuery } = useGroupsQuery(commonVisible)
-  const subscriptionsRequest = useSubscriptionsQuery(commonVisible)
+  const subscriptionsRequest = useSubscriptionsQuery(resourcesVisible)
   const subscriptionsQuery = subscriptionsRequest.data
 
   const groupAddNodesMutation = useGroupAddNodesMutation()

@@ -17,6 +17,14 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+type routerRouteObserverKey struct{}
+
+// WithRouterRouteObserver observes the outlet which actually connected,
+// including a successful retry within the selected group.
+func WithRouterRouteObserver(ctx context.Context, observe func(group, node string)) context.Context {
+	return context.WithValue(ctx, routerRouteObserverKey{}, observe)
+}
+
 // A hybrid upstream has an explicitly configured TCP recovery path. Reserve
 // time for it in this request instead of spending all eight seconds on UDP.
 // UDP-only upstreams retain their existing timeout and transport semantics.
@@ -135,6 +143,13 @@ func (c *ControlPlane) routerRouteDial(ctx context.Context, p *proxyDialParam) (
 			return nil, res, parentErr
 		}
 		if err == nil {
+			if observe, ok := caller.Value(routerRouteObserverKey{}).(func(string, string)); ok && res.Outbound != nil {
+				node := ""
+				if res.Dialer != nil && res.Dialer.Property() != nil {
+					node = res.Dialer.Property().Name
+				}
+				observe(routerDiagnosticLabel(res.Outbound.Name), routerDiagnosticLabel(node))
+			}
 			return conn, res, nil
 		}
 		if conn != nil {

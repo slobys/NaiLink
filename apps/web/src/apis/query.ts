@@ -1,7 +1,7 @@
 import type { NodeLatencyProbeResult } from './mutation'
 import type { GQLClientInterface } from '~/contexts'
 
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   QUERY_KEY_CONFIG,
   QUERY_KEY_DNS,
@@ -19,6 +19,7 @@ import { useGQLQueryClient } from '~/contexts'
 import { graphql } from '~/schemas/gql'
 import { latencyResultFields } from '~/utils/latency'
 import { routerMode } from '~/utils/router-mode'
+import { trafficHistoryDue, trafficOverviewInterval } from '~/utils/traffic-overview'
 
 export function getModeRequest(gqlClient: GQLClientInterface) {
   return async () => {
@@ -162,6 +163,8 @@ export interface TrafficOverviewQueryData {
   downloadTotal: string
   activeConnections: number
   udpSessions: number
+  historyFetchedAt?: number
+  historyUpdatedAt?: string
   samples: Array<{
     timestamp: string
     uploadRate: number
@@ -169,20 +172,35 @@ export interface TrafficOverviewQueryData {
   }>
 }
 
-export function useTrafficOverviewQuery(windowSec: number, maxPoints: number, enabled = true) {
+export function useTrafficOverviewQuery(
+  windowSec: number,
+  maxPoints: number,
+  enabled = true,
+  native = false,
+  showHistory = true,
+) {
   const gqlClient = useGQLQueryClient()
-  const refetchInterval = Math.max(500, Math.min(5_000, Math.round(windowSec / 60) * 500))
+  const queryClient = useQueryClient()
+  const queryKey = [...QUERY_KEY_TRAFFIC, windowSec, maxPoints, showHistory]
 
   return useQuery({
-    queryKey: [...QUERY_KEY_TRAFFIC, windowSec, maxPoints],
+    queryKey,
     enabled,
     queryFn: async ({ signal }) => {
+      const previous = queryClient.getQueryData<TrafficOverviewQueryData>(queryKey)
+      const history = showHistory && trafficHistoryDue(windowSec, previous?.historyFetchedAt, Date.now())
       const data = await gqlClient.request<
-        { general: { runtimeOverview: TrafficOverviewQueryData } },
-        { windowSec: number; maxPoints: number }
+        {
+          general: {
+            runtimeOverview: Omit<TrafficOverviewQueryData, 'samples'> & {
+              samples?: TrafficOverviewQueryData['samples']
+            }
+          }
+        },
+        { windowSec: number; maxPoints: number; includeHistory: boolean }
       >(
         `
-          query TrafficOverview($windowSec: Int!, $maxPoints: Int!) {
+          query TrafficOverview($windowSec: Int!, $maxPoints: Int!, $includeHistory: Boolean!) {
             general {
               runtimeOverview(windowSec: $windowSec, maxPoints: $maxPoints) {
                 updatedAt
@@ -192,7 +210,7 @@ export function useTrafficOverviewQuery(windowSec: number, maxPoints: number, en
                 downloadTotal
                 activeConnections
                 udpSessions
-                samples {
+                samples @include(if: $includeHistory) {
                   timestamp
                   uploadRate
                   downloadRate
@@ -202,16 +220,25 @@ export function useTrafficOverviewQuery(windowSec: number, maxPoints: number, en
           }
         `,
         {
-          windowSec,
-          maxPoints,
+          windowSec: history ? windowSec : 1,
+          maxPoints: history ? maxPoints : 2,
+          includeHistory: history,
         },
         signal,
       )
 
-      return data.general.runtimeOverview
+      const snapshot = data.general.runtimeOverview
+      return {
+        ...snapshot,
+        samples: history ? (snapshot.samples ?? []) : (previous?.samples ?? []),
+        historyFetchedAt: history ? Date.now() : previous?.historyFetchedAt,
+        historyUpdatedAt: history ? snapshot.updatedAt : previous?.historyUpdatedAt,
+      }
     },
     placeholderData: (previousData) => previousData,
-    refetchInterval: enabled ? refetchInterval : false,
+    retry: false,
+    refetchInterval: (query) =>
+      enabled ? trafficOverviewInterval(native, query.state.data?.activeConnections ?? 0, !!query.state.error) : false,
   })
 }
 
@@ -250,7 +277,7 @@ export function useNodesQuery(enabled = true) {
     queryKey: QUERY_KEY_NODE,
     enabled,
     staleTime: 15_000,
-    queryFn: async () =>
+    queryFn: async ({ signal }) =>
       gqlClient.request(
         graphql(`
           query Nodes {
@@ -266,6 +293,8 @@ export function useNodesQuery(enabled = true) {
             }
           }
         `),
+        undefined,
+        signal,
       ),
   })
 }
@@ -277,7 +306,7 @@ export function useSubscriptionsQuery(enabled = true) {
     queryKey: QUERY_KEY_SUBSCRIPTION,
     enabled,
     staleTime: 15_000,
-    queryFn: async () =>
+    queryFn: async ({ signal }) =>
       gqlClient.request(
         graphql(`
           query Subscriptions {
@@ -301,6 +330,23 @@ export function useSubscriptionsQuery(enabled = true) {
             }
           }
         `),
+        undefined,
+        signal,
+      ),
+  })
+}
+
+export function useSubscriptionNamesQuery(enabled: boolean) {
+  const gqlClient = useGQLQueryClient()
+  return useQuery({
+    queryKey: [...QUERY_KEY_SUBSCRIPTION, 'names'],
+    enabled,
+    staleTime: 15_000,
+    queryFn: ({ signal }) =>
+      gqlClient.request<{ subscriptions: Array<{ id: string; tag: string }> }>(
+        'query SubscriptionNames { subscriptions { id tag } }',
+        undefined,
+        signal,
       ),
   })
 }

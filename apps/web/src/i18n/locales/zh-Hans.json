@@ -335,6 +335,7 @@
   "node": "节点",
   "node connectivity check": "节点连通性检测",
   "trafficOverview": {
+    "chartLoadFailed": "无法加载流量趋势图，请刷新页面。",
     "title": "流量统计",
     "description": "实时滚动展示上下行流量，并支持切换时间窗口。",
     "uploadChart": "上行流量",

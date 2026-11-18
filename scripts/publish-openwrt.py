@@ -56,8 +56,16 @@ def validate_assets(directory, version, sha):
         raise ValueError("Invalid installer manifest")
     seen = set()
     listed = set()
+    sizes = set()
     for line in lines[1:]:
         row = line.split("\t")
+        if row[0] == "# size":
+            if len(row) != 3 or row[1] not in assets or row[1] in sizes:
+                raise ValueError("Invalid or duplicate manifest size record")
+            if row[2] != str((directory / row[1]).stat().st_size):
+                raise ValueError("Manifest size differs from release asset: " + row[1])
+            sizes.add(row[1])
+            continue
         if len(row) != 6 or row[5] != version or assets.get(row[3]) != row[4]:
             raise ValueError("Manifest differs from release assets")
         key = tuple(row[:3])
@@ -65,6 +73,8 @@ def validate_assets(directory, version, sha):
             raise ValueError("Duplicate manifest target")
         seen.add(key)
         listed.add(row[3])
+    if sizes - listed:
+        raise ValueError("Manifest size refers to an unlisted package")
     targets = json.loads((ROOT / "openwrt/sdk-matrix.json").read_text())
     allowed = listed | required | {"README.md", "VALIDATION.md"} | {target["name"] + ".tsv" for target in targets}
     if assets.keys() - allowed:
