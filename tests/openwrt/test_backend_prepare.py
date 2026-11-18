@@ -78,6 +78,7 @@ class BackendPrepareTests(unittest.TestCase):
     def test_runtime_patch_is_reproducible_and_idempotent(self):
         PREPARE.prepare(self.root)
         self.assertIn(' -lt $$(stat -c %s "{}".gz)', (self.root / "Makefile").read_text(encoding="utf-8"))
+        self.assertIn('gzip -n -9 -k', (self.root / "Makefile").read_text(encoding="utf-8"))
         self.assertIn('routerFileServer(webFS.', (self.root / "webrender/webrender.go").read_text(encoding="utf-8"))
         cache = (self.root / "graphql/service/node/latency_cache.go").read_text(encoding="utf-8")
         self.assertIn('mergeRuntimeLatencyResults(merged, runtimeResults)', cache)

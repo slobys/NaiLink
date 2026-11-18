@@ -17,6 +17,12 @@ HERE = Path(__file__).resolve().parent
 ORIGINAL = "ae8c0126a163fce0d7c1abea226579c69c9784f65e1e7f95bd1a8e903d450779"
 
 
+def router_bundle(text):
+    return text.replace('gzip -9 -k', 'gzip -n -9 -k', 1).replace(
+        r' \< $$(stat -c %s "{}".gz)', ' -lt $$(stat -c %s "{}".gz)', 1
+    )
+
+
 def router_kernel_dns_health(text):
     # TCP DNS is routed through the control plane just like UDP DNS. Its
     # synthetic outbound has no node health probe; gating it drops the SYN
@@ -577,7 +583,7 @@ func _fetchLinksContext(ctx context.Context, subscriptionLink string, transport 
         generated[name] = digest(data)
     # Keep latency fixes in the release source, without changing submodule pins.
     patches = {
-        "Makefile": ("2254205298ada7665179a0943f90db3b9067e76b66bbc41046f315d234aaab58", lambda value: value.replace(r' \< $$(stat -c %s "{}".gz)', ' -lt $$(stat -c %s "{}".gz)', 1)),
+        "Makefile": ("2254205298ada7665179a0943f90db3b9067e76b66bbc41046f315d234aaab58", router_bundle),
         "dae-core/control/kern/tproxy.c": ("bf167e21a8ee8105a7662657b0eb578197e5044bbed28cfccd34b705b2f0ac4c", router_kernel_dns_health),
         "graphql/service/config/global/schema.go": ("59e3eaee0ef6afd910b2d960c89f11b6d5fa7a4d5112de0f51cb08898cf7c5e1", lambda value: value.replace('structField := t.Field(i)', 'structField := t.Field(i)\n\t\tif structField.Name == "NailinkNodeDNS" {\n\t\t\tcontinue\n\t\t}')),
         "dae/flat_desc.go": ("ba276d448f769d1c537274cbed6f159549048cff6ebf5e59c4ac89639357c39f", lambda value: value.replace('mapping := section.Tag.Get("mapstructure")', 'mapping := section.Tag.Get("mapstructure")\n\t\tif mapping == "nailink_node_dns" { continue }')),
@@ -635,7 +641,7 @@ type Mutation {
         elif relative in ("graphql/service/node/latency_mutation_utils.go", "graphql/service/node/latency_resolver.go", "dae/runtime.go", "dae/httpclient.go", "dae-core/component/interface_manager.go"):
             replacement = {"latency_mutation_utils.go": "node_latency.go", "latency_resolver.go": "node_latency_resolver.go"}.get(relative.split("/")[-1], relative.split("/")[-1])
             data = (HERE / "wing" / replacement).read_bytes()
-        elif relative in ("cmd/run.go", "dae/run.go") or transform in (router_node_model, router_transactions, router_control_dial, router_dns_recovery, router_dns_transport, router_bootstrap, router_udp_pool_test, router_dns_expiry_test, router_health_http, router_health_dialer):
+        elif relative in ("cmd/run.go", "dae/run.go") or transform in (router_bundle, router_node_model, router_transactions, router_control_dial, router_dns_recovery, router_dns_transport, router_bootstrap, router_udp_pool_test, router_dns_expiry_test, router_health_http, router_health_dialer):
             data = transform(data.decode()).encode()
         destination.write_bytes(data)
         generated[relative] = digest(data)

@@ -251,6 +251,9 @@
   .community-link {
     min-width: 44px;
   }
+  .router-panel .group-member-card[data-member-kind='node'] {
+    grid-template-columns: 28px minmax(0, 1fr) 44px;
+  }
   .group-member-name-control,
   .group-member-card[data-member-kind='node'] :is(.group-member-handle, .group-member-remove) {
     min-height: 44px;
