@@ -1,5 +1,12 @@
 # NaiLink 发布验证记录
 
+## 0.6.90 面板轻量化与升级预检
+
+- 正式包来自 `fa50656b7fec2ea023b76d2aff14332f3c2c9948`。[GitHub Actions](https://github.com/slobys/NaiLink/actions/runs/44226226162) 的 34 项任务全部成功。全部 79 个附件核对服务端摘要，其中 9 个附件重新下载后校验。
+- R4S / iStoreOS 25.12.6 先由 0.6.89 原生升级，再安装正式 ARM64 APK 复测。正式包运行程序 SHA-256 为 `b0c6421ea71b5dc1a3878f79d2f5c57182d8db95ab003f9d441156a6fef36509`。验收前后数据库、配置、自启设置和可选内核文件一致，测试后恢复原来的 dae 状态。
+- dae、sing-box TPROXY / TUN、mihomo TPROXY / TUN 共通过 250 次 IPv4 / IPv6 UDP / TCP DNS 检查和 25 次公开网页连接检查。
+- 隔离 LuCI 的节点列表与群组通过双向键盘跨列、鼠标拖拽、顺序持久化和窄屏布局测试。
+
 ## 0.6.89 IPv6 服务与兼容内核
 
 最终 ARM64 APK 已在 R4S 原生升级并验证五接管方式及三个普通 Chrome IPv6 检测。500/500 DNS；125 节点、3 订阅、3 群组与全部用户字段保留。首轮公网检查的失败、复测、工具 DNS 差异与验证边界均见 [完整实机记录](../docs/performance-validation-2026-11-17.md)。
