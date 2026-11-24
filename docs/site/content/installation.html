@@ -2,14 +2,14 @@
 <ul>
   <li><strong>系统：</strong>OpenWrt、ImmortalWrt、iStoreOS，具备现代 JavaScript LuCI。</li>
   <li>
-    <strong>内核：</strong>Linux 5.17+，具备核心需要的 eBPF/JIT 功能和可用 BTF。版本号达到要求，不等于功能全部具备。
+    <strong>内核：</strong>dae 需要 Linux 5.17+、所需的 eBPF/JIT 功能和可用 BTF。sing-box、mihomo 的要求随接管方式而定，请在安装时检查。
   </li>
   <li><strong>软件源：</strong>能提供与当前内核 ABI 匹配的模块、证书和规则库。不要混用其他固件的软件源。</li>
   <li>
     <strong>空间：</strong>v$version 的运行程序本体约 52–57 MiB，另需规则库、依赖、下载、解压和备份空间。16/32 MiB
     闪存设备通常不适合直接安装；脚本不会扩容。
   </li>
-  <li><strong>权限与网络：</strong>能够以 root 登录路由器 SSH，路由器自身可以解析并访问 GitHub。</li>
+  <li><strong>权限与网络：</strong>能够以 root 登录路由器 SSH。在线安装需要访问 GitHub，也可以先在电脑上下载通用安装包。</li>
 </ul>
 <p>
   本项目尚未给出覆盖所有设备的最低内存或吞吐保证。节点规模、规则数量、并发连接和协议都会影响资源占用，不宜只按 CPU
@@ -85,8 +85,8 @@
 </p>
 <h2 id="portable">用通用安装包安装</h2>
 <p>
-  从<a href="https://github.com/slobys/NaiLink/releases">发布页</a>下载名称以 <code>-universal.tar.gz</code>
-  结尾的安装包，上传到软路由并解压。在解压后的目录以 root 运行 <code>sh install.sh</code> 打开中文菜单。
+  <a href="https://github.com/slobys/NaiLink/releases/download/$release/NaiLink-$version-universal.tar.gz">下载通用安装包</a>，
+  上传并解压到空间充足的目录。在解压后的目录以 root 运行 <code>sh install.sh</code> 打开中文菜单。
 </p>
 <p>
   安装包适用于通过兼容性检查的 x86_64 和 ARM64 OpenWrt、iStoreOS、ImmortalWrt。安装器自动选择

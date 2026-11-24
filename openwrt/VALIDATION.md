@@ -1,5 +1,12 @@
 # NaiLink 发布验证记录
 
+## 0.6.91 通用安装包
+
+- [GitHub Actions](https://github.com/slobys/NaiLink/actions/runs/45324360828) 在 `c4b5028d81efe7e1778bacc28d379bac30bbfef1` 上完成 33 项构建和回归。同一构建产生的合集包含 x86_64、ARM64、IPK、APK 和校验过的可选内核。隔离测试覆盖三个固件标识的 IPK/APK 自动选择。
+- R4S / iStoreOS 25.12.6 使用从同一合集中提取的安装器和 ARM64 APK，通过中文菜单从 0.6.90 升级到 0.6.91。安装过程中阻断了 GitHub 下载入口，未检出 GitHub 下载尝试。
+- 升级前后核对 123 节点、3 订阅、3 群组、数据库和 UCI、自启状态及可选内核文件。原 dae 正常就绪，LAN 客户端的 Google、GitHub 和百度 HTTPS 检查通过。
+- ARM64 APK SHA-256 为 `eb63d5c4830fd692b86c8b9fa3d02634cee96b12f2d459d70a2454a7e6897d2e`，通用合集 SHA-256 为 `b8473f8404a0eb23d7848103bd58112151b0f7fb0113425d7599be712599fbe7`。
+
 ## 0.6.90 面板轻量化与升级预检
 
 - 正式包来自 `fa50656b7fec2ea023b76d2aff14332f3c2c9948`。[GitHub Actions](https://github.com/slobys/NaiLink/actions/runs/44226226162) 的 34 项任务全部成功。全部 79 个附件核对服务端摘要，其中 9 个附件重新下载后校验。
