@@ -1,5 +1,12 @@
 # NaiLink 发布验证记录
 
+## 0.6.92 菜单 1 自动补齐 dae 的 BTF
+
+- [GitHub Actions](https://github.com/slobys/NaiLink/actions/runs/45377391772) 在 `89ef652ff4698c094368afb96c811f3499710441` 上完成 33 项构建和回归。正式发行使用同一构建的附件。校验 82 份附件的发布摘要。
+- 在 NanoPi R4S 的官版 OpenWrt 25.12.6 上，用独立挂载命名空间模拟缺少 BTF。菜单 1 选中 `rockchip/armv8` 资产并通过真实 eBPF 探针。最终 ARM64 APK 在该机验证了原生安装预演、内核能力和二进制版本。实机在线的服务、BTF、配置和数据库保持原状态。
+- 用官方 OpenWrt 25.12.6 x86/64 镜像和内核启动虚拟机，扩容根分区后，最终 x86_64 APK 从没有 BTF 的状态完成菜单 1 安装。实际启动 dae，验证隔离 LAN 中指定的 TCP 流量正常放行与拦截。默认 104 MiB 根分区的初次尝试遇到空间不足。
+- IPK、APK 安装回归覆盖兼容性检查、只读模式、ABI 不符、附件摘要不符和内核探针拒绝。ARMv7、MIPS 大端和小端仍为实验构建，本版备用资产只覆盖上述两个官方目标。
+
 ## 0.6.91 通用安装包
 
 - [GitHub Actions](https://github.com/slobys/NaiLink/actions/runs/45324360828) 在 `c4b5028d81efe7e1778bacc28d379bac30bbfef1` 上完成 33 项构建和回归。同一构建产生的合集包含 x86_64、ARM64、IPK、APK 和校验过的可选内核。隔离测试覆盖三个固件标识的 IPK/APK 自动选择。

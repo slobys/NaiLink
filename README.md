@@ -16,9 +16,11 @@
 
 管理节点、订阅和群组，测试节点延迟，查看实时流量，配置 DNS 与路由。支持电脑、手机和多种主题，沿用路由器 LuCI 登录，无需另设账户。
 
-基于 [daed](https://github.com/daeuniverse/daed) 二次开发，独立维护。当前版本为 **[0.6.91 正式版](https://github.com/slobys/NaiLink/releases/tag/openwrt-v0.6.91)**，提供 IPK、APK v3 和通用安装包。
+基于 [daed](https://github.com/daeuniverse/daed) 二次开发，独立维护。当前版本为 **[0.6.92 正式版](https://github.com/slobys/NaiLink/releases/tag/openwrt-v0.6.92)**，提供 IPK、APK v3 和通用安装包。
 
-**0.6.91 通用安装包**覆盖已适配的 x86_64 和 ARM64 固件。先在电脑下载，上传并解压后在软路由运行 `sh install.sh` 打开中文菜单。安装时从本地选取适合的 IPK 或 APK，并读取可选内核。缺少系统依赖时使用当前固件自身的软件源。[通用安装包](https://github.com/slobys/NaiLink/releases/download/openwrt-v0.6.91/NaiLink-0.6.91-universal.tar.gz) · [安装说明](https://slobys.github.io/NaiLink/installation.html#portable)
+**0.6.92 修复 dae 首装缺少 BTF。** 菜单 1 在软件源无法补齐时，可读取与固件目标和内核 ABI 完全匹配的备用 BTF。当前提供官方 OpenWrt 25.12.6 的 `rockchip/armv8` 和 `x86/64` 附件。[适用范围](https://slobys.github.io/NaiLink/installation.html)
+
+**通用安装包**覆盖已适配的 x86_64 和 ARM64 固件。先在电脑下载，上传并解压后在软路由运行 `sh install.sh` 打开中文菜单。安装时从本地选取适合的 IPK 或 APK，并读取可选内核。缺少系统依赖时使用当前固件自身的软件源。[通用安装包](https://github.com/slobys/NaiLink/releases/download/openwrt-v0.6.92/NaiLink-0.6.92-universal.tar.gz) · [安装说明](https://slobys.github.io/NaiLink/installation.html#portable)
 
 **0.6.90 改善面板性能和升级体验**。修复双列键盘跨列排序，压缩 LuCI 资源，按需加载订阅节点。升级前检查暂存和回退空间，保留现有节点与配置。实机验证 dae、sing-box 和 mihomo 的五种接管模式。
 
@@ -126,7 +128,7 @@ nl=$(uclient-fetch -O- https://slobys.github.io/NaiLink/install.sh) && sh -c "${
 
 ## 源码与交流
 
-[完整源码包](https://github.com/slobys/NaiLink/releases/download/openwrt-v0.6.91/daed-openwrt-source.tar.gz) · [构建说明](openwrt/README.md#开发) · [验证记录](openwrt/VALIDATION.md) · [Logo](docs/site/assets/nailink-logo.png)
+[完整源码包](https://github.com/slobys/NaiLink/releases/download/openwrt-v0.6.92/daed-openwrt-source.tar.gz) · [构建说明](openwrt/README.md#开发) · [验证记录](openwrt/VALIDATION.md) · [Logo](docs/site/assets/nailink-logo.png)
 
 编译请使用完整源码包，或 `git clone --recurse-submodules https://github.com/slobys/NaiLink.git`。GitHub 的 Download ZIP 不包含后端子模块。
 

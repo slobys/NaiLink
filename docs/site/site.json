@@ -1,8 +1,8 @@
 {
   "title": "NaiLink · 奶油互联",
   "url": "https://slobys.github.io/NaiLink/",
-  "version": "0.6.91",
-  "release": "openwrt-v0.6.91",
+  "version": "0.6.92",
+  "release": "openwrt-v0.6.92",
   "groups": [
     {
       "title": "开始使用",
