@@ -232,6 +232,33 @@ esac''')
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
             self.assertEqual(json.loads(result.stdout)["firmware"], firmware)
 
+    def test_universal_menu_reads_local_packages_on_both_package_managers(self):
+        for firmware in ("OpenWrt", "ImmortalWrt", "iStoreOS"):
+            for fmt in ("ipk", "apk"):
+                with self.subTest(firmware=firmware, format=fmt):
+                    case = RouterTests()
+                    case.setUp()
+                    try:
+                        if fmt == "apk":
+                            case.use_apk()
+                        case.write("/etc/openwrt_release", f"DISTRIB_ID='{firmware}'\nDISTRIB_RELEASE='test'\n")
+                        case.write("/install.sh", (OPENWRT / "universal-install.sh").read_bytes())
+                        case.write("/assets/install.sh", (OPENWRT / "install.sh").read_bytes())
+                        fetcher = case.root / "bin/uclient-fetch"
+                        fetcher.rename(fetcher.with_name("readiness-fixture"))
+                        case.script("/bin/uclient-fetch", """case "$*" in
+*'/health/ready'*) exec /bin/readiness-fixture "$@" ;;
+esac
+touch /tmp/unexpected-download; exit 99""")
+                        case.script("/bin/curl", 'touch /tmp/unexpected-download; exit 99')
+                        result = case.run_router("/bin/sh", "/install.sh", input="1\n")
+                        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+                        self.assertIn(f" / {fmt} / ", result.stdout)
+                        self.assertTrue((case.root / "tmp/installed-daed-router").exists())
+                        self.assertFalse((case.root / "tmp/unexpected-download").exists())
+                    finally:
+                        case.tearDown()
+
     def test_first_optional_core_on_firmware_without_btf(self):
         for fmt, choice, engine in (("ipk", "4", "sing-box"), ("apk", "5", "mihomo")):
             with self.subTest(engine=engine):

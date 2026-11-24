@@ -1039,7 +1039,7 @@ func maintenanceCLI(command, configDir, jobID string) {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 12*time.Minute)
 		defer cancel()
-		err := manager.prepareFirstCore(ctx, engine, jobID)
+		err := manager.prepareFirstCore(ctx, engine, jobID, os.Getenv("NAILINK_FIRST_CORE_ARCHIVE"))
 		result := maintenanceStatus{Success: err == nil}
 		if err != nil {
 			result.Code = maintenanceCode(err)

@@ -76,7 +76,8 @@ def validate_assets(directory, version, sha):
     if sizes - listed:
         raise ValueError("Manifest size refers to an unlisted package")
     targets = json.loads((ROOT / "openwrt/sdk-matrix.json").read_text())
-    allowed = listed | required | {"README.md", "VALIDATION.md"} | {target["name"] + ".tsv" for target in targets}
+    allowed = listed | required | {"README.md", "VALIDATION.md", f"NaiLink-{version}-universal.tar.gz"}
+    allowed |= {target["name"] + ".tsv" for target in targets}
     if assets.keys() - allowed:
         raise ValueError("Unexpected unreviewed release assets")
     for target in targets:

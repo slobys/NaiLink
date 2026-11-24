@@ -83,6 +83,20 @@
   环境检查不安装软件包或修改软件源。若需预演下载、校验和依赖检查，可将命令末尾的 <code>--menu</code> 换成
   <code>--dry-run</code>。APK 依赖预演使用本机已有索引。
 </p>
+<h2 id="portable">用通用安装包安装</h2>
+<p>
+  从<a href="https://github.com/slobys/NaiLink/releases">发布页</a>下载名称以 <code>-universal.tar.gz</code>
+  结尾的安装包，上传到软路由并解压。在解压后的目录以 root 运行 <code>sh install.sh</code> 打开中文菜单。
+</p>
+<p>
+  安装包适用于通过兼容性检查的 x86_64 和 ARM64 OpenWrt、iStoreOS、ImmortalWrt。安装器自动选择
+  IPK 或 APK，并从本地读取 NaiLink 和选用的代理内核。缺少系统依赖时，仍从当前固件自己的软件源安装。
+  安装后可以继续在 LuCI 在线更新。
+</p>
+<p>
+  从其他版本升级时，将原版本的 <code>manifest.tsv</code> 和本机对应的运行包、LuCI 包放进解压目录的
+  <code>assets/rollback</code>。安装器在停服前验证回退包和备份空间，保留现有节点和配置。
+</p>
 <h2 id="packages">手动下载与源码</h2>
 <p>
   <a href="https://github.com/slobys/NaiLink/releases/tag/$release">当前正式版发布页</a>提供 IPK / APK

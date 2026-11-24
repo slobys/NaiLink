@@ -170,7 +170,7 @@ func (m *maintenanceManager) maintainCore(ctx context.Context, job *maintenanceJ
 		return m.installExtra(ctx, job)
 	}
 	if job.Action == "core_install_mihomo" {
-		return m.installOptionalCore(ctx, job, "mihomo")
+		return m.installOptionalCore(ctx, job, "mihomo", "")
 	}
 	if job.Action == "core_install_singbox" {
 		return m.installSingBox(ctx, job)
@@ -302,12 +302,12 @@ func (m *maintenanceManager) mihomoPath() string {
 	return routercore.MihomoBinaryPath
 }
 func (m *maintenanceManager) installSingBox(ctx context.Context, job *maintenanceJob) error {
-	return m.installOptionalCore(ctx, job, "sing-box")
+	return m.installOptionalCore(ctx, job, "sing-box", "")
 }
 
 // Only the first-install script creates this marker, while holding installLock
 // and before starting the management process. Existing databases are excluded.
-func (m *maintenanceManager) prepareFirstCore(ctx context.Context, engine, mode string) error {
+func (m *maintenanceManager) prepareFirstCore(ctx context.Context, engine, mode, archive string) error {
 	if (engine != "sing-box" && engine != "mihomo") || (mode != "tun" && mode != "tproxy") {
 		return errors.New("invalid_action")
 	}
@@ -342,7 +342,7 @@ func (m *maintenanceManager) prepareFirstCore(ctx context.Context, engine, mode 
 			return errors.New("state_failed")
 		}
 		job := &maintenanceJob{ID: hex.EncodeToString(random[:]), Action: "first_install_core"}
-		if err := m.installOptionalCore(ctx, job, engine); err != nil {
+		if err := m.installOptionalCore(ctx, job, engine, archive); err != nil {
 			return err
 		}
 	} else {
@@ -360,7 +360,7 @@ func (m *maintenanceManager) prepareFirstCore(ctx context.Context, engine, mode 
 	return nil
 }
 
-func (m *maintenanceManager) installOptionalCore(ctx context.Context, job *maintenanceJob, engine string) error {
+func (m *maintenanceManager) installOptionalCore(ctx context.Context, job *maintenanceJob, engine, archive string) error {
 	binary, version, releaseTag := m.corePath(), routercore.SingBoxVersion, routercore.SingBoxRelease
 	releases := routercore.Releases
 	versionArgs := []string{"version"}
@@ -392,20 +392,27 @@ func (m *maintenanceManager) installOptionalCore(ctx context.Context, job *maint
 	if err = syscall.Statfs(filepath.Dir(binary), &stat); err != nil || uint64(stat.Bavail)*uint64(stat.Bsize) < 180<<20 {
 		return errors.New("no_space")
 	}
-	directory, err := os.MkdirTemp(m.stateDir, "core-download-")
-	if err != nil {
-		return errors.New("state_failed")
-	}
-	defer os.RemoveAll(directory)
-	archive := filepath.Join(directory, engine+".tar.gz")
 	if job.Action != "first_install_core" {
 		if err = m.save(job, "downloading"); err != nil {
 			return err
 		}
 	}
-	address := "https://github.com/slobys/NaiLink/releases/download/" + releaseTag + "/" + release.Archive
-	if err = m.fetch(ctx, address, archive, 128<<20); err != nil {
-		return errors.New(downloadFailureCode(err))
+	if archive == "" {
+		directory, err := os.MkdirTemp(m.stateDir, "core-download-")
+		if err != nil {
+			return errors.New("state_failed")
+		}
+		defer os.RemoveAll(directory)
+		archive = filepath.Join(directory, engine+".tar.gz")
+		address := "https://github.com/slobys/NaiLink/releases/download/" + releaseTag + "/" + release.Archive
+		if err = m.fetch(ctx, address, archive, 128<<20); err != nil {
+			return errors.New(downloadFailureCode(err))
+		}
+	} else {
+		info, err := os.Lstat(archive)
+		if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > 128<<20 {
+			return errors.New("invalid_release")
+		}
 	}
 	if job.Action != "first_install_core" {
 		if err = m.save(job, "verifying"); err != nil {

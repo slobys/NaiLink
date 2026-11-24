@@ -7,7 +7,7 @@ on:
     inputs:
       version:
         description: 'Package version (X.Y.Z), must match source'
-        default: '0.6.90'
+        default: '0.6.91'
         required: true
       publish:
         description: 'After all checks, upload to a release draft (main only)'
@@ -47,7 +47,7 @@ jobs:
           python3 -m unittest discover -s tests/repository -v
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends shellcheck
-          shellcheck -s sh -e SC1091 openwrt/install.sh openwrt/files/nailink openwrt/files/daed-check openwrt/files/rpcd-daed openwrt/files/subscription-proxy openwrt/subscription-check.sh openwrt/network-check.sh
+          shellcheck -s sh -e SC1091 openwrt/install.sh openwrt/universal-install.sh openwrt/files/nailink openwrt/files/daed-check openwrt/files/rpcd-daed openwrt/files/subscription-proxy openwrt/subscription-check.sh openwrt/network-check.sh
           shellcheck -s sh -e SC1091,SC2034,SC3043 openwrt/files/daed.init openwrt/files/maintenance.init
           node --test tests/openwrt/ui.test.cjs
           curl -fL --proto '=https' -o /tmp/daed-rootfs.tar.gz https://downloads.openwrt.org/releases/24.10.4/targets/x86/64/openwrt-24.10.4-x86-64-rootfs.tar.gz
@@ -469,6 +469,13 @@ jobs:
           cp .build/source/daed-openwrt-source.tar.gz .build/source/SOURCE_*.txt .build/release/
           cp openwrt/README.md openwrt/VALIDATION.md .build/release/
           python3 openwrt/manifest.py .build/release --version "$VERSION"
+          (
+            bundle="NaiLink-${VERSION}-universal.tar.gz"
+            python3 openwrt/build-universal.py .build/release --version "$VERSION" \
+              --download-reviewed-cores --output ".build/release/$bundle"
+            cd .build/release
+            sha256sum "$bundle" >> SHA256SUMS
+          )
       - uses: actions/upload-artifact@v7
         with:
           name: daed-openwrt-${{ inputs.version }}

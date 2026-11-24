@@ -7,8 +7,10 @@ set -eu
 umask 077
 
 REPOSITORY=slobys/NaiLink
-release=openwrt-v0.6.90
+release=openwrt-v0.6.91
 asset_dir=''
+local_cores=0
+local_core_archive=''
 mode=install
 action=install
 stage=''
@@ -55,6 +57,7 @@ Usage: sh install.sh [--install | --uninstall | --reinstall] [--latest | --relea
   --dry-run     Verify assets; APK also simulates dependencies using cached feeds.
   --asset-dir   Use downloaded release assets (dependencies still use firmware feeds).
                 For upgrades place the installed release assets in DIRECTORY/rollback.
+  --local-cores Use only bundled optional-core archives. Requires --asset-dir.
   --staging-dir DIRECTORY  Stage downloads on an existing writable filesystem.
 With no action flag, a terminal opens the menu; non-interactive callers retain
 the direct install behavior. Menu install/update fetches the latest installer
@@ -329,6 +332,7 @@ while [ "$#" -gt 0 ]; do
 	case "$1" in
 	--release) [ "$#" -ge 2 ] || fail 'Missing release tag.'; release=$2; explicit_release=1; shift 2 ;;
 	--asset-dir) [ "$#" -ge 2 ] || fail 'Missing asset directory.'; asset_dir=$2; shift 2 ;;
+	--local-cores) local_cores=1; shift ;;
 	--staging-dir)
 		[ "$#" -ge 2 ] || fail 'Missing staging directory.'
 		case "$2" in /*) stage_parent=$2 ;; *) fail 'Staging directory must be an absolute path.' ;; esac
@@ -699,6 +703,7 @@ if [ -n "$asset_dir" ]; then
 	[ -d "$asset_dir" ] || fail 'Asset directory does not exist.'
 	asset_dir=$(cd "$asset_dir" && pwd -P)
 fi
+[ "$local_cores" = 0 ] || [ -n "$asset_dir" ] || fail '--local-cores requires --asset-dir.'
 
 fetch() {
 	name=$1
@@ -781,13 +786,18 @@ prepare_rollback_manifest() {
 	previous_version=$(cat /usr/share/daed-router/version)
 	printf '%s\n' "$previous_version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-[0-9]+$' || fail 'Cannot prepare rollback: installed version is unknown.'
 	rollback_release="openwrt-v${previous_version%-*}"
+	rollback_assets=''
+	if [ -n "$asset_dir" ]; then
+		rollback_assets="$asset_dir/rollback"
+		if [ "$previous_version" = "$version-1" ]; then rollback_assets=$asset_dir; fi
+	fi
 	rollback_dir="$stage/rollback"
 	mkdir "$rollback_dir"
 	# Fetch in a subshell so the current manifest/release/filenames do not change.
 	(
 		stage=$rollback_dir
 		release=$rollback_release
-		if [ -n "$asset_dir" ]; then asset_dir="$asset_dir/rollback"; fi
+		asset_dir=$rollback_assets
 		fetch manifest.tsv
 		[ "$(head -n 1 "$stage/manifest.tsv")" = '# daed-openwrt-manifest-v1' ] || fail 'Invalid rollback manifest.'
 	) || fail 'Cannot prepare verified rollback packages. Existing service/data were not changed.'
@@ -802,7 +812,7 @@ prepare_rollback() {
 	(
 		stage=$rollback_dir
 		release=$rollback_release
-		if [ -n "$asset_dir" ]; then asset_dir="$asset_dir/rollback"; fi
+		asset_dir=$rollback_assets
 		verify_record "$rollback_runtime_row"
 		verify_record "$rollback_plugin_row"
 	) || fail 'Cannot prepare verified rollback packages. Existing service/data were not changed.'
@@ -934,12 +944,26 @@ old_runtime_bytes=0
 old_plugin_bytes=0
 if [ "$managed" = 1 ] && [ "$mode" != dry-run ]; then
 	prepare_rollback_manifest
-	rollback_assets=''
-	[ -z "$asset_dir" ] || rollback_assets="$asset_dir/rollback"
 	old_runtime_bytes=$(record_size "$rollback_runtime_row" "$rollback_dir" "$rollback_assets") || fail 'Invalid rollback runtime download size.'
 	old_plugin_bytes=$(record_size "$rollback_plugin_row" "$rollback_dir" "$rollback_assets") || fail 'Invalid rollback LuCI download size.'
 fi
-check_staging_space "$((new_runtime_bytes + new_plugin_bytes + old_runtime_bytes + old_plugin_bytes))"
+core_bytes=0
+if [ "$local_cores" = 1 ] && [ -n "$first_core" ]; then
+	core_name="$first_core-$probe_cpu.tar.gz"
+	core_dir="$asset_dir/cores"
+	[ -f "$core_dir/$core_name" ] && [ ! -L "$core_dir/$core_name" ] || fail 'Missing bundled optional core.'
+	core_bytes=$(wc -c < "$core_dir/$core_name")
+	[ "$core_bytes" -gt 0 ] && [ "$core_bytes" -le 134217728 ] || fail 'Invalid bundled optional core size.'
+fi
+check_staging_space "$((new_runtime_bytes + new_plugin_bytes + old_runtime_bytes + old_plugin_bytes + core_bytes))"
+if [ "$core_bytes" -gt 0 ]; then
+	core_hash=$(awk -v file="$core_name" '$2 == file {hash=$1; count++} END {if (count!=1) exit 1; print hash}' "$core_dir/SHA256SUMS") ||
+		fail 'Missing bundled optional core checksum.'
+	printf '%s\n' "$core_hash" | grep -Eq '^[a-f0-9]{64}$' || fail 'Invalid bundled optional core checksum.'
+	local_core_archive="$stage/$core_name"
+	cp "$core_dir/$core_name" "$local_core_archive" || fail 'Cannot stage bundled optional core.'
+	(cd "$stage" && printf '%s  %s\n' "$core_hash" "$core_name" | sha256sum -c - >/dev/null) || fail 'Bundled optional core checksum mismatch.'
+fi
 verify_record "$runtime"
 verify_record "$plugin"
 printf 'NaiLink: %s / %s / %s, release %s\n' "$machine" "$format" "$selected_arch" "$version"
@@ -1029,7 +1053,7 @@ if [ -n "$first_core" ]; then
 		printf '%s\n' "$first_core" > "$first_core_marker"
 	fi
 	case "$first_core" in sing-box) first_core_action=first_install_singbox ;; mihomo) first_core_action=first_install_mihomo ;; esac
-	result=$(/usr/libexec/daed/luci-proxy --maintenance "$first_core_action" --maintenance-job "$first_core_mode") ||
+	result=$(NAILINK_FIRST_CORE_ARCHIVE="$local_core_archive" /usr/libexec/daed/luci-proxy --maintenance "$first_core_action" --maintenance-job "$first_core_mode") ||
 		fail 'Cannot start first-install core preparation.'
 	if [ "$(printf '%s' "$result" | jsonfilter -e '@.success')" != true ]; then
 		code=$(printf '%s' "$result" | jsonfilter -e '@.code') || code=unknown

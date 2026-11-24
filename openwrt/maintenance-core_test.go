@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -185,12 +186,9 @@ func TestPrepareFirstCoreUsesReviewedArchiveAndPreservesExistingDatabase(t *test
 			if err := os.WriteFile(filepath.Join(m.configDir, ".pending-first-core"), []byte(item.engine+"\n"), 0600); err != nil {
 				t.Fatal(err)
 			}
-			m.fetch = func(_ context.Context, _, dest string, _ int64) error {
-				data, err := os.ReadFile(archive)
-				if err != nil {
-					return err
-				}
-				return os.WriteFile(dest, data, 0600)
+			m.fetch = func(context.Context, string, string, int64) error {
+				t.Error("local first install attempted a download")
+				return errors.New("unexpected download")
 			}
 			m.run = func(ctx context.Context, args ...string) ([]byte, error) {
 				if args[0] == "/usr/libexec/daed/check" {
@@ -201,20 +199,20 @@ func TestPrepareFirstCoreUsesReviewedArchiveAndPreservesExistingDatabase(t *test
 				}
 				return maintenanceCommand(ctx, args...)
 			}
-			if err := m.prepareFirstCore(t.Context(), item.engine, "tproxy"); err != nil {
+			if err := m.prepareFirstCore(t.Context(), item.engine, "tproxy", archive); err != nil {
 				t.Fatal(err)
 			}
 			state, err := routercore.ReadState(m.configDir)
 			if err != nil || state.Current != item.engine || state.Mode != "tproxy" || state.Running {
 				t.Fatal(state, err)
 			}
-			if err := m.prepareFirstCore(t.Context(), item.engine, "tproxy"); err != nil {
+			if err := m.prepareFirstCore(t.Context(), item.engine, "tproxy", archive); err != nil {
 				t.Fatal("resuming an interrupted bootstrap should be safe", err)
 			}
 			if err := os.WriteFile(filepath.Join(m.configDir, "wing.db"), []byte("fixture nodes"), 0600); err != nil {
 				t.Fatal(err)
 			}
-			if err := m.prepareFirstCore(t.Context(), item.engine, "tproxy"); err == nil || err.Error() != "unsafe_state" {
+			if err := m.prepareFirstCore(t.Context(), item.engine, "tproxy", archive); err == nil || err.Error() != "unsafe_state" {
 				t.Fatal("first install accepted an existing database", err)
 			}
 		})
