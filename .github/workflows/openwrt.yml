@@ -13,6 +13,10 @@ on:
         description: 'After all checks, upload to a release draft (main only)'
         type: boolean
         default: false
+      verified_run:
+        description: 'Reuse artifacts from a successful run of this exact main commit'
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -23,6 +27,7 @@ concurrency:
 
 jobs:
   test:
+    if: inputs.verified_run == ''
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -476,25 +481,57 @@ jobs:
             cd .build/release
             sha256sum "$bundle" >> SHA256SUMS
           )
+      - name: Extract the ARM64 APK installation path from the assembled bundle
+        run: |
+          bundle="NaiLink-${VERSION}-universal.tar.gz"
+          root="NaiLink-${VERSION}"
+          assets="$root/assets"
+          mkdir -p .build/router-verification/
+          tar -xzf ".build/release/$bundle" -C .build/router-verification/ \
+            "$root/install.sh" "$assets/install.sh" "$assets/manifest.tsv" \
+            "$assets/daed-check" "$assets/btf-probe-arm64" \
+            "$assets/daed-router-$VERSION-aarch64_generic.apk" \
+            "$assets/luci-app-daed-router-$VERSION.apk"
+          cp .build/release/SHA256SUMS .build/release/SOURCE_COMMIT.txt .build/router-verification/
+      - uses: actions/upload-artifact@v7
+        with:
+          name: naiLink-router-verification-${{ inputs.version }}
+          path: .build/router-verification/
       - uses: actions/upload-artifact@v7
         with:
           name: daed-openwrt-${{ inputs.version }}
           path: .build/release/
 
   publish:
-    if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/main'
+    if: >-
+      !cancelled() && github.event_name == 'workflow_dispatch' && inputs.publish &&
+      github.ref == 'refs/heads/main' &&
+      (needs.assemble.result == 'success' || (needs.assemble.result == 'skipped' && inputs.verified_run != ''))
     needs: assemble
     runs-on: ubuntu-24.04
     permissions:
+      actions: read
       contents: write
     env:
       VERSION: ${{ inputs.version }}
       GH_TOKEN: ${{ github.token }}
+      VERIFIED_RUN: ${{ inputs.verified_run }}
     steps:
       - uses: actions/checkout@v7
+      - name: Check that the prior build tested this exact source
+        if: inputs.verified_run != ''
+        run: |
+          [[ "$VERIFIED_RUN" =~ ^[0-9]+$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$VERIFIED_RUN" |
+            jq -e --arg sha "$GITHUB_SHA" --arg repo "$GITHUB_REPOSITORY" '
+              .path == ".github/workflows/openwrt.yml" and .repository.full_name == $repo and
+              .head_sha == $sha and .event == "workflow_dispatch" and .conclusion == "success"
+            '
       - uses: actions/download-artifact@v8
         with:
           name: daed-openwrt-${{ inputs.version }}
           path: .build/release/
+          run-id: ${{ inputs.verified_run || github.run_id }}
+          github-token: ${{ github.token }}
       - name: Verify checksums, matching source and immutable release before upload
         run: python3 scripts/publish-openwrt.py publish .build/release --version "$VERSION" --sha "$GITHUB_SHA" --repository "$GITHUB_REPOSITORY"
