@@ -366,6 +366,68 @@ fi
         self.assertNotIn("install vmlinux-btf", (self.root / "tmp/pm-calls").read_text())
         self.assertFalse((self.root / "tmp/installed-daed-router").exists())
 
+    def add_release_btf(self, fmt="ipk", kernel_record="6.6.73-1-exact-abi"):
+        (self.root / "sys/kernel/btf/vmlinux").unlink()
+        version, revision = "25.12.6", "r33311-fixture"
+        arch = (self.root / "tmp/arch").read_text().strip()
+        target, cpu = ("rockchip/armv8", "arm64") if arch.startswith("aarch64") else ("x86/64", "x86_64")
+        self.write("/etc/openwrt_release", f"DISTRIB_ID='OpenWrt'\nDISTRIB_RELEASE='{version}'\n"
+                   f"DISTRIB_REVISION='{revision}'\nDISTRIB_TARGET='{target}'\nDISTRIB_ARCH='{arch}'\n"
+                   "DISTRIB_TAINTS=''\n")
+        pm = self.root / ("bin/apk" if fmt == "apk" else "bin/opkg")
+        stub = (f"echo 'kernel-{kernel_record} {arch} [installed]'" if fmt == "apk" else
+                f"printf 'Package: kernel\\nVersion: {kernel_record}\\nStatus: install ok installed\\n'")
+        command = "list --installed kernel" if fmt == "apk" else "status kernel"
+        self.write(str(pm.relative_to(self.root)), pm.read_text().replace(
+            "#!/bin/sh\n", f'#!/bin/sh\nif [ "$*" = "{command}" ]; then {stub}; exit 0; fi\n', 1), True)
+        identity = ("OpenWrt", version, revision, target, arch, fmt, "6.6.73", "6.6.73-1-exact-abi")
+        key = hashlib.sha256(("\n".join(identity) + "\n").encode()).hexdigest()
+        btf = self.write("/assets/nailink-btf-fixture.btf", b"fixture BTF")
+        with (self.root / "assets/manifest.tsv").open("a") as manifest:
+            manifest.write(f"# kernel-btf\t{key}\t{cpu}\t{btf.name}\t"
+                           f"{hashlib.sha256(btf.read_bytes()).hexdigest()}\t0.1.0\n")
+        return btf
+
+    def test_release_btf_exact_match_on_apk_and_ipk(self):
+        for fmt in ("ipk", "apk"):
+            with self.subTest(format=fmt):
+                case = RouterTests()
+                case.setUp()
+                self.addCleanup(case.tearDown)
+                if fmt == "apk":
+                    case.use_apk()
+                asset = case.add_release_btf(fmt)
+                destination = case.root / "usr/lib/debug/boot/vmlinux-6.6.73"
+                for flag in ("--check", "--dry-run"):
+                    self.assertNotEqual(case.install(flag).returncode, 0)
+                    self.assertFalse(destination.exists())
+                result = case.run_router("/bin/sh", "/installer/install.sh", "--menu",
+                                         "--asset-dir", "/assets", input="1\n")
+                self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+                self.assertEqual(destination.read_bytes(), asset.read_bytes())
+                self.assertIn("匹配的 BTF", result.stdout)
+                self.assertTrue((case.root / "tmp/installed-daed-router").exists())
+
+    def test_release_btf_refuses_wrong_abi_or_failed_probe(self):
+        for failure in ("wrong-abi", "wrong-firmware", "corrupt-asset", "rejected-ebpf"):
+            with self.subTest(failure=failure):
+                case = RouterTests()
+                case.setUp()
+                self.addCleanup(case.tearDown)
+                asset = case.add_release_btf(kernel_record=(
+                    "6.6.73-1-other-abi" if failure == "wrong-abi" else "6.6.73-1-exact-abi"))
+                if failure == "wrong-firmware":
+                    release = case.root / "etc/openwrt_release"
+                    release.write_text(release.read_text().replace("OpenWrt", "iStoreOS"))
+                if failure == "corrupt-asset":
+                    asset.write_bytes(b"modified BTF")
+                if failure == "rejected-ebpf":
+                    case.write("/tmp/kernel-bad", "1")
+                result = case.install()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse((case.root / "usr/lib/debug/boot/vmlinux-6.6.73").exists())
+                self.assertFalse((case.root / "tmp/installed-daed-router").exists())
+
     def test_missing_kernel_config_is_an_explicit_warning(self):
         (self.root / "proc/config.gz").unlink()
         data = json.loads(self.check().stdout)

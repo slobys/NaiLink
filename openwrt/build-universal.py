@@ -50,13 +50,19 @@ def release_files(directory, version):
     rows = []
     seen = set()
     for line in lines[1:]:
-        if not line or line.startswith("#"):
+        if not line or (line.startswith("#") and not line.startswith("# kernel-btf\t")):
             continue
         fmt, arch, package, name, checksum, release_version = line.split("\t")
         key = (fmt, arch, package)
-        if key not in expected:
+        if fmt == "# kernel-btf":
+            if package not in CPUS:
+                continue
+            if (not re.fullmatch(r"[a-f0-9]{64}", arch)
+                    or not re.fullmatch(r"nailink-btf-[A-Za-z0-9._-]+\.btf", name)):
+                raise ValueError("Invalid fallback kernel BTF entry")
+        elif key not in expected:
             continue
-        if key in seen or release_version != version or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", name):
+        if key in seen or name in assets or release_version != version or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", name):
             raise ValueError("Unexpected release manifest entry")
         asset = directory / name
         if asset.is_symlink() or sha256(asset) != checksum:
@@ -64,7 +70,7 @@ def release_files(directory, version):
         seen.add(key)
         rows.append(line)
         assets[name] = asset
-    if expected != seen:
+    if not expected <= seen:
         raise ValueError(f"Missing runtime targets {sorted(expected - seen)}")
     installer = directory / "install.sh"
     if f"\nrelease=openwrt-v{version}\n" not in installer.read_text(encoding="utf-8"):

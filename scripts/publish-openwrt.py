@@ -68,6 +68,10 @@ def validate_assets(directory, version, sha):
             continue
         if len(row) != 6 or row[5] != version or assets.get(row[3]) != row[4]:
             raise ValueError("Manifest differs from release assets")
+        if row[0] == "# kernel-btf" and (
+                not re.fullmatch(r"[a-f0-9]{64}", row[1])
+                or not re.fullmatch(r"nailink-btf-[A-Za-z0-9._-]+\.btf", row[3])):
+            raise ValueError("Invalid fallback kernel BTF entry")
         key = tuple(row[:3])
         if key in seen:
             raise ValueError("Duplicate manifest target")

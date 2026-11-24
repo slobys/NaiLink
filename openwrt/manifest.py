@@ -10,6 +10,38 @@ import shutil
 HERE = Path(__file__).resolve().parent
 
 
+def kernel_btf_records(directory, version, targets):
+    """Bind each fallback to one firmware, target and installed kernel ABI."""
+    source = HERE / "kernel-btf"
+    identities = set()
+    filenames = set()
+    supported = {
+        (target["format"], arch): target["cpu"]
+        for target in targets for arch in target["architectures"]
+    }
+    fields = ("firmware", "release", "revision", "target", "architecture",
+              "package_format", "kernel", "kernel_package_version")
+    for entry in json.loads((source / "index.json").read_text(encoding="utf-8")):
+        identity = [entry[key] for key in fields]
+        if any(not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9./_+~-]*", value) for value in identity):
+            raise ValueError("Invalid firmware identity for kernel BTF")
+        cpu = supported.get((entry["package_format"], entry["architecture"]))
+        if cpu is None:
+            raise ValueError("Kernel BTF does not match a supported package ABI")
+        key = hashlib.sha256(("\n".join(identity) + "\n").encode("ascii")).hexdigest()
+        name, checksum = entry["file"], entry["sha256"]
+        if (key in identities or name in filenames
+                or not re.fullmatch(r"nailink-btf-[A-Za-z0-9._-]+\.btf", name)):
+            raise ValueError("Invalid or duplicate kernel BTF entry")
+        file = source / name
+        if file.is_symlink() or hashlib.sha256(file.read_bytes()).hexdigest() != checksum:
+            raise ValueError("Kernel BTF checksum mismatch: " + name)
+        shutil.copyfile(file, directory / name)
+        identities.add(key)
+        filenames.add(name)
+        yield ["# kernel-btf", key, cpu, name, checksum, version]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory", type=Path)
@@ -40,7 +72,8 @@ def main():
             if hashlib.sha256((args.directory / name).read_bytes()).hexdigest() != digest:
                 raise ValueError("Package checksum mismatch")
             rows.append(row)
-    for target in json.loads((HERE / "sdk-matrix.json").read_text()):
+    targets = json.loads((HERE / "sdk-matrix.json").read_text())
+    for target in targets:
         expected = [(arch, "daed-router") for arch in target["architectures"]]
         expected.append(("all", "luci-app-daed-router"))
         for arch, package in expected:
@@ -49,9 +82,10 @@ def main():
     checker = args.directory / "daed-check"
     shutil.copyfile(HERE / "files" / "daed-check", checker)
     rows.append(["support", "all", "check", checker.name, hashlib.sha256(checker.read_bytes()).hexdigest(), args.version])
-    for cpu in sorted({target["cpu"] for target in json.loads((HERE / "sdk-matrix.json").read_text())}):
+    for cpu in sorted({target["cpu"] for target in targets}):
         probe = args.directory / ("btf-probe-" + cpu)
         rows.append(["support", cpu, "btf-probe", probe.name, hashlib.sha256(probe.read_bytes()).hexdigest(), args.version])
+    rows.extend(kernel_btf_records(args.directory, args.version, targets))
     installer = (HERE / "install.sh").read_text(encoding="utf-8")
     installer, replacements = re.subn(r"^release=openwrt-v\d+\.\d+\.\d+$", "release=openwrt-v" + args.version, installer, flags=re.MULTILINE)
     if replacements != 1:

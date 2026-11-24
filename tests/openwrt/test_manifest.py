@@ -58,6 +58,10 @@ class ManifestTests(unittest.TestCase):
         for row in self.rows:
             name = row[3]
             self.assertIn(f"# size\t{name}\t{(self.directory / name).stat().st_size}\n", manifest)
+        for entry in json.loads((OPENWRT / "kernel-btf/index.json").read_text()):
+            self.assertIn(f"\t{entry['file']}\t{entry['sha256']}\t0.1.0", manifest)
+            self.assertEqual(hashlib.sha256((self.directory / entry["file"]).read_bytes()).hexdigest(),
+                             entry["sha256"])
 
     def test_missing_architecture_is_not_silently_published(self):
         self.rows.pop()

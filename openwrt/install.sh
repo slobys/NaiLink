@@ -7,7 +7,7 @@ set -eu
 umask 077
 
 REPOSITORY=slobys/NaiLink
-release=openwrt-v0.6.91
+release=openwrt-v0.6.92
 asset_dir=''
 local_cores=0
 local_core_archive=''
@@ -850,19 +850,18 @@ probe_record=$(record support "$probe_cpu" btf-probe) || fail 'Manifest has no u
 verify_record "$probe_record"
 chmod 700 "$stage/btf-probe-$probe_cpu"
 run_compatibility_check() {
-	DAED_BTF_PROBE="$stage/btf-probe-$probe_cpu" check_environment "$stage/daed-check"
+	DAED_BTF_PROBE="$stage/btf-probe-$probe_cpu" DAED_BTF_CANDIDATE="${1:-}" check_environment "$stage/daed-check"
 }
 btf_package() {
 	if command -v timeout >/dev/null 2>&1; then timeout 90 "$@"; else "$@"; fi
 }
-repair_missing_btf() {
-	# Only a real install may add a dependency. Read-only checks and dry runs
-	# never refresh feeds or install anything. Other kernel errors stay fatal.
+only_missing_btf() {
 	[ "$mode" = install ] || return 1
 	[ "$(jsonfilter -i "$stage/compatibility.json" -e '@.core')" = dae ] || return 1
 	[ "$(jsonfilter -i "$stage/compatibility.json" -e '@.checks[*].status' | grep -c '^error$')" = 1 ] || return 1
-	jsonfilter -i "$stage/compatibility.json" -e '@.checks[*].code' | grep -qx btf_missing || return 1
-	btf_kernel=$(uname -r)
+	jsonfilter -i "$stage/compatibility.json" -e '@.checks[*].code' | grep -qx btf_missing
+}
+repair_btf_from_feed() {
 	printf 'NaiLink: 检查本固件软件源中是否有内核 %s 对应的 vmlinux-btf…\n' "$btf_kernel"
 	# Keep native signatures, architecture and dependency checks. Do not add
 	# external feeds, replace the kernel, or force an incompatible package.
@@ -886,11 +885,72 @@ repair_missing_btf() {
 	printf 'NaiLink: 已补齐匹配的 BTF，重新验证解析和内核能力…\n'
 	run_compatibility_check
 }
+firmware_value() {
+	# These fields are single-quoted in stock OpenWrt. Parse them as data.
+	awk -F "'" -v key="$1" '
+		$1==key"=" && NF==3 && $3=="" {value=$2; count++}
+		END {if (count!=1) exit 1; print value}
+	' /etc/openwrt_release
+}
+installed_kernel_version() {
+	if [ "$format" = apk ]; then
+		kernel_metadata=$(apk list --installed kernel) || return 1
+		printf '%s\n' "$kernel_metadata" | awk '
+			$1~/^kernel-[0-9]/ {version=substr($1,8); count++}
+			END {if (count!=1) exit 1; print version}
+		'
+	else
+		kernel_metadata=$(opkg status kernel) || return 1
+		printf '%s\n' "$kernel_metadata" | awk '
+			$1=="Package:" && $2=="kernel" {package=1}
+			$1=="Status:" && $NF=="installed" {installed=1}
+			$1=="Version:" {version=$2; count++}
+			END {if (!package || !installed || count!=1) exit 1; print version}
+		'
+	fi
+}
+repair_btf_from_release() {
+	btf_firmware=$(firmware_value DISTRIB_ID) || return 1
+	btf_release=$(firmware_value DISTRIB_RELEASE) || return 1
+	btf_revision_id=$(firmware_value DISTRIB_REVISION) || return 1
+	btf_target=$(firmware_value DISTRIB_TARGET) || return 1
+	btf_arch=$(firmware_value DISTRIB_ARCH) || return 1
+	btf_taints=$(firmware_value DISTRIB_TAINTS) || return 1
+	[ -z "$btf_taints" ] && [ "$btf_arch" = "$selected_arch" ] || return 1
+	btf_kernel_package=$(installed_kernel_version) || return 1
+	btf_identity=$(printf '%s\n' "$btf_firmware" "$btf_release" "$btf_revision_id" \
+		"$btf_target" "$btf_arch" "$format" "$btf_kernel" "$btf_kernel_package" | sha256sum)
+	btf_record=$(record '# kernel-btf' "${btf_identity%% *}" "$probe_cpu") || return 1
+	btf_asset=$(printf '%s\n' "$btf_record" | cut -f4)
+	case "$btf_asset" in nailink-btf-*.btf) ;; *) fail 'Unexpected matching kernel BTF filename.' ;; esac
+	[ "$(printf '%s\n' "$btf_record" | cut -f6)" = "$(printf '%s\n' "$support" | cut -f6)" ] ||
+		fail 'Kernel BTF and compatibility checker versions do not match.'
+	verify_record "$btf_record"
+	printf 'NaiLink: 找到与 %s %s / %s / %s 完全匹配的 BTF，正在验证 dae 内核能力…\n' \
+		"$btf_firmware" "$btf_release" "$btf_target" "$btf_kernel"
+	run_compatibility_check "$stage/$btf_asset" || return 1
+	if ! (
+		btf_destination="/usr/lib/debug/boot/vmlinux-$btf_kernel"
+		mkdir -p "${btf_destination%/*}" || exit 1
+		btf_temporary=$(mktemp "${btf_destination%/*}/.nailink-btf.XXXXXX") || exit 1
+		trap 'rm -f "$btf_temporary"' EXIT
+		cp "$stage/$btf_asset" "$btf_temporary" && chmod 644 "$btf_temporary" &&
+			ln -T "$btf_temporary" "$btf_destination"
+	); then
+		fail 'Cannot install the verified kernel BTF without replacing an existing file.'
+	fi
+	run_compatibility_check
+}
+repair_missing_btf() {
+	only_missing_btf || return 1
+	btf_kernel=$(uname -r)
+	repair_btf_from_feed || { only_missing_btf && repair_btf_from_release; }
+}
 if ! run_compatibility_check; then
 	if ! repair_missing_btf; then
 		cat "$stage/compatibility.json"
 		if jsonfilter -i "$stage/compatibility.json" -e '@.checks[*].code' | grep -qx btf_missing; then
-			fail "内核 $(uname -r) 缺少可用 BTF。请安装本固件、当前内核对应的 vmlinux-btf。x86_64 和 ARM64 首装也可在菜单选择 sing-box 或 mihomo。未安装/替换 NaiLink，也未改动节点和代理配置。"
+			fail "内核 $(uname -r) 缺少可用 BTF，软件源和 NaiLink 发布包中均未取得匹配文件。请使用提供 BTF 的同目标固件，或安装与当前固件构建匹配的 vmlinux-btf。未安装或替换 NaiLink。"
 		fi
 		fail 'Compatibility check failed. No NaiLink packages or network settings were changed.'
 	fi

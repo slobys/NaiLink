@@ -117,9 +117,14 @@ for candidate in /sys/kernel/btf/vmlinux \
 	"/usr/lib/debug/lib/modules/$kernel/vmlinux"; do
 	if [ -e "$candidate" ]; then btf_path=$candidate; break; fi
 done
+# The installer tests a verified release asset before writing it to the system.
+# An existing file always takes precedence, matching the runtime's search order.
+if [ -z "$btf_path" ] && [ -n "${DAED_BTF_CANDIDATE:-}" ]; then
+	btf_path=$DAED_BTF_CANDIDATE
+fi
 probe=${DAED_BTF_PROBE:-/usr/libexec/daed/btf-probe}
 if [ -z "$btf_path" ]; then
-	add_check btf error "当前内核 $kernel 缺少 BTF，dae 暂时无法运行。安装时会尝试从本固件软件源补齐同版本 vmlinux-btf；源中没有匹配包时需使用提供 BTF 的固件。不会下载其他固件的 BTF 或跳过内核检查。" btf_missing
+	add_check btf error "当前内核 $kernel 缺少 BTF。安装时会在固件软件源及 NaiLink 发布包中查找匹配文件，再检查 dae 所需的内核能力。" btf_missing
 elif [ -x "$probe" ]; then
 	if probe_result=$("$probe" --file "$btf_path" 2>&1); then
 		add_check btf ok "BTF parsed: $btf_path. Required network types exist."

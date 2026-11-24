@@ -1,0 +1,26 @@
+[
+  {
+    "firmware": "OpenWrt",
+    "release": "25.12.6",
+    "revision": "r33311-981c978eff",
+    "target": "rockchip/armv8",
+    "architecture": "aarch64_generic",
+    "package_format": "apk",
+    "kernel": "6.12.112",
+    "kernel_package_version": "6.12.112~5eacf764ba9415e5d7ff4aecb2e45c4d-r1",
+    "file": "nailink-btf-openwrt-25.12.6-rockchip-armv8.btf",
+    "sha256": "c101048fd3294c88f4a3259a4e1c9594334e7f2789878708cbc03c0e45b60f4d"
+  },
+  {
+    "firmware": "OpenWrt",
+    "release": "25.12.6",
+    "revision": "r33311-981c978eff",
+    "target": "x86/64",
+    "architecture": "x86_64",
+    "package_format": "apk",
+    "kernel": "6.12.112",
+    "kernel_package_version": "6.12.112~b4125196ecec75391093e1e2edeba490-r1",
+    "file": "nailink-btf-openwrt-25.12.6-x86-64.btf",
+    "sha256": "a08d2ee4e097193b01e267615035468dfbe87818c887e30670b9aa5d9e0a8c2c"
+  }
+]

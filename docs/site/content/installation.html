@@ -63,7 +63,8 @@
 <ol>
   <li>
     等待环境检查、依赖安装与包校验完成。不要同时执行第二次安装。仅缺少 BTF
-    时，安装器会尝试从当前固件软件源安装同内核版本的 <code>vmlinux-btf</code>，重新通过解析及内核探针后才继续。
+    时，安装器先查当前固件的软件源。若没有匹配的 <code>vmlinux-btf</code>，也可以从 NaiLink 发布包读取与当前固件构建完全匹配的 BTF。
+    OpenWrt 25.12.6 的 <code>rockchip/armv8</code> 和 <code>x86/64</code> 已提供对应附件。BTF 解析及 eBPF 探针通过后才继续安装 dae。
   </li>
   <li>安装成功后刷新路由器后台，进入 <strong>服务 → NaiLink</strong>。</li>
   <li>继续阅读<a href="quick-start.html">首次设置</a>，导入节点并应用配置。</li>
