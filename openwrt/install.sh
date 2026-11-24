@@ -951,9 +951,13 @@ core_bytes=0
 if [ "$local_cores" = 1 ] && [ -n "$first_core" ]; then
 	core_name="$first_core-$probe_cpu.tar.gz"
 	core_dir="$asset_dir/cores"
-	[ -f "$core_dir/$core_name" ] && [ ! -L "$core_dir/$core_name" ] || fail 'Missing bundled optional core.'
+	if [ ! -f "$core_dir/$core_name" ] || [ -L "$core_dir/$core_name" ]; then
+		fail 'Missing bundled optional core.'
+	fi
 	core_bytes=$(wc -c < "$core_dir/$core_name")
-	[ "$core_bytes" -gt 0 ] && [ "$core_bytes" -le 134217728 ] || fail 'Invalid bundled optional core size.'
+	if [ "$core_bytes" -le 0 ] || [ "$core_bytes" -gt 134217728 ]; then
+		fail 'Invalid bundled optional core size.'
+	fi
 fi
 check_staging_space "$((new_runtime_bytes + new_plugin_bytes + old_runtime_bytes + old_plugin_bytes + core_bytes))"
 if [ "$core_bytes" -gt 0 ]; then
