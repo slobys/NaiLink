@@ -789,7 +789,9 @@ prepare_rollback_manifest() {
 	rollback_assets=''
 	if [ -n "$asset_dir" ]; then
 		rollback_assets="$asset_dir/rollback"
-		if [ "$previous_version" = "$version-1" ]; then rollback_assets=$asset_dir; fi
+		if [ "$previous_version" = "$version-1" ] && [ ! -e "$rollback_assets" ] && [ ! -L "$rollback_assets" ]; then
+			rollback_assets=$asset_dir
+		fi
 	fi
 	rollback_dir="$stage/rollback"
 	mkdir "$rollback_dir"
