@@ -248,6 +248,7 @@ esac''')
                         fetcher.rename(fetcher.with_name("readiness-fixture"))
                         case.script("/bin/uclient-fetch", """case "$*" in
 *'/health/ready'*) exec /bin/readiness-fixture "$@" ;;
+*'http://127.0.0.1:'*) exit 0 ;;
 esac
 touch /tmp/unexpected-download; exit 99""")
                         case.script("/bin/curl", 'touch /tmp/unexpected-download; exit 99')
